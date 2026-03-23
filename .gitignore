@@ -1,0 +1,15 @@
+node_modules
+.turbo
+.next
+dist
+coverage
+.env
+.env.local
+.env.*.local
+apps/web/node_modules
+apps/api/node_modules
+apps/web/.next
+apps/api/dist
+prisma/dev.db
+storage/
+*.log

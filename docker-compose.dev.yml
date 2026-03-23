@@ -1,0 +1,12 @@
+services:
+  postgres:
+    extends:
+      file: docker-compose.yml
+      service: postgres
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+
+  minio:
+    extends:
+      file: docker-compose.yml
+      service: minio

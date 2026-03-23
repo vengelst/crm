@@ -1,0 +1,12 @@
+node_modules
+.turbo
+.next
+dist
+coverage
+storage
+.git
+.cursor
+apps/web/.next
+apps/api/dist
+apps/web/node_modules
+apps/api/node_modules
