@@ -2862,9 +2862,14 @@ function DocumentPanel({
       return;
     }
 
+    type ThumbnailResult =
+      | { kind: "error"; id: string; error: string }
+      | { kind: "url"; id: string; url: string }
+      | { kind: "ok"; id: string };
+
     async function loadThumbnails() {
-      const results = await Promise.all(
-        documents.map(async (document) => {
+      const results: ThumbnailResult[] = await Promise.all(
+        documents.map(async (document): Promise<ThumbnailResult> => {
           const isPreviewable =
             document.mimeType.startsWith("image/") || document.mimeType === "application/pdf";
           try {
@@ -2882,19 +2887,19 @@ function DocumentPanel({
               } catch {
                 // not JSON
               }
-              return { id: document.id, error: errorMessage } as const;
+              return { kind: "error", id: document.id, error: errorMessage };
             }
 
             if (!isPreviewable) {
-              return { id: document.id, ok: true } as const;
+              return { kind: "ok", id: document.id };
             }
 
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             createdUrls.push(url);
-            return { id: document.id, url } as const;
+            return { kind: "url", id: document.id, url };
           } catch {
-            return { id: document.id, error: "Datei nicht verfuegbar" } as const;
+            return { kind: "error", id: document.id, error: "Datei nicht verfuegbar" };
           }
         }),
       );
@@ -2907,9 +2912,9 @@ function DocumentPanel({
       const nextUrls: Record<string, string> = {};
       const nextErrors: Record<string, string> = {};
       for (const result of results) {
-        if ("error" in result) {
+        if (result.kind === "error") {
           nextErrors[result.id] = result.error;
-        } else if ("url" in result) {
+        } else if (result.kind === "url") {
           nextUrls[result.id] = result.url;
         }
       }

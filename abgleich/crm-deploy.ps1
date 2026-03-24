@@ -148,9 +148,67 @@ function Run-Restore {
 
 function Run-Deploy {
     if ($Env -ne "test") {
-        Info "Menuepunkt 8 verwendet immer die TEST-Umgebung. Aktueller Env-Wert: $Env"
+        Info "Dieser Menuepunkt verwendet immer die TEST-Umgebung."
     }
 
+    Set-Location $repoRoot
+
+    # ── 1. Git-Status pruefen ──────────────────────────────────
+    Write-Host ""
+    Info "Pruefe Git-Status ..."
+    $statusOutput = git status --porcelain
+    $hasChanges = -not [string]::IsNullOrWhiteSpace($statusOutput)
+
+    if ($hasChanges) {
+        Warn "Es gibt lokale Aenderungen:"
+        Write-Host ""
+        git status --short
+        Write-Host ""
+
+        $confirm = Read-Host "Alle aktuellen Aenderungen jetzt adden, committen und pushen? [y/N]"
+        if ($confirm -ne "y") {
+            Err "Deploy abgebrochen. Kein Deploy ohne bestaetigten Git-Schritt."
+            Pause
+            return
+        }
+
+        # ── 2. Add ─────────────────────────────────────────────
+        git add .
+        if ($LASTEXITCODE -ne 0) {
+            Err "git add fehlgeschlagen. Deploy abgebrochen."
+            Pause
+            return
+        }
+
+        # ── 3. Commit ──────────────────────────────────────────
+        $msg = Read-Host "Commit-Message"
+        if ([string]::IsNullOrWhiteSpace($msg)) {
+            Err "Keine Commit-Message angegeben. Deploy abgebrochen."
+            Pause
+            return
+        }
+
+        git commit -m "$msg"
+        if ($LASTEXITCODE -ne 0) {
+            Err "git commit fehlgeschlagen. Deploy abgebrochen."
+            Pause
+            return
+        }
+        Ok "Commit erstellt."
+
+        # ── 4. Push ────────────────────────────────────────────
+        git push
+        if ($LASTEXITCODE -ne 0) {
+            Err "git push fehlgeschlagen. Deploy abgebrochen."
+            Pause
+            return
+        }
+        Ok "Push erfolgreich."
+    } else {
+        Ok "Arbeitsverzeichnis sauber, keine Aenderungen. Fahre mit Deploy fort."
+    }
+
+    # ── 5. Deploy-Modus waehlen und starten ────────────────────
     Write-Host ""
     Write-Host "Deploy mode:"
     Write-Host "1  FULL snapshot                - Code + DB + Storage auf TEST spiegeln"
