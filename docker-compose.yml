@@ -62,13 +62,15 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     container_name: crm-web
     restart: unless-stopped
     depends_on:
       api:
         condition: service_started
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:3801
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     ports:
       - "3800:3800"
 
