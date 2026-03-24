@@ -86,6 +86,7 @@ export class WorkersService {
         city: dto.city,
         country: dto.country,
         active: dto.active ?? true,
+        internalHourlyRate: dto.internalHourlyRate,
         languageCode: dto.languageCode,
         notes: dto.notes,
         pins: {
@@ -124,6 +125,7 @@ export class WorkersService {
         city: dto.city,
         country: dto.country,
         active: dto.active,
+        internalHourlyRate: dto.internalHourlyRate,
         languageCode: dto.languageCode,
         notes: dto.notes,
       },

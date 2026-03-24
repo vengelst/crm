@@ -37,6 +37,11 @@ export class CustomersController {
     return this.customersService.update(id, dto);
   }
 
+  @Get(':id/financials')
+  getFinancials(@Param('id') id: string) {
+    return this.customersService.getFinancials(id);
+  }
+
   @Delete(':id')
   archive(@Param('id') id: string) {
     return this.customersService.archive(id);

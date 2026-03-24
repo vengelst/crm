@@ -2,6 +2,7 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
 } from 'class-validator';
@@ -63,6 +64,22 @@ export class SaveProjectDto {
   @IsOptional()
   @IsString()
   accommodationAddress?: string;
+
+  @IsOptional()
+  @IsNumber()
+  weeklyFlatRate?: number;
+
+  @IsOptional()
+  @IsNumber()
+  includedHoursPerWeek?: number;
+
+  @IsOptional()
+  @IsNumber()
+  hourlyRateUpTo40h?: number;
+
+  @IsOptional()
+  @IsNumber()
+  overtimeRate?: number;
 
   @IsOptional()
   @IsDateString()

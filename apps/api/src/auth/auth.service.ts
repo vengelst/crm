@@ -89,6 +89,42 @@ export class AuthService {
       throw new UnauthorizedException('PIN-Anmeldung fehlgeschlagen.');
     }
 
+    // Nur Zuordnungen beruecksichtigen, die aktuell laufen oder in der Zukunft liegen
+    const now = new Date();
+    const relevantAssignments = worker.assignments.filter((a) => {
+      // endDate == null  → laufend (offen)
+      // endDate >= heute → noch nicht abgelaufen
+      return !a.endDate || a.endDate >= now;
+    });
+
+    if (relevantAssignments.length === 0) {
+      throw new UnauthorizedException(
+        'Keine aktuelle oder zukuenftige Projektzuordnung vorhanden. Login nicht moeglich.',
+      );
+    }
+
+    const currentProjects = relevantAssignments
+      .filter((a) => a.startDate <= now)
+      .map((a) => ({
+        id: a.project.id,
+        projectNumber: a.project.projectNumber,
+        title: a.project.title,
+        status: a.project.status,
+        startDate: a.startDate.toISOString(),
+        endDate: a.endDate?.toISOString() ?? null,
+      }));
+
+    const futureProjects = relevantAssignments
+      .filter((a) => a.startDate > now)
+      .map((a) => ({
+        id: a.project.id,
+        projectNumber: a.project.projectNumber,
+        title: a.project.title,
+        status: a.project.status,
+        startDate: a.startDate.toISOString(),
+        endDate: a.endDate?.toISOString() ?? null,
+      }));
+
     const accessToken = await this.jwtService.signAsync({
       sub: worker.id,
       workerId: worker.id,
@@ -103,12 +139,8 @@ export class AuthService {
         workerNumber: worker.workerNumber,
         name: `${worker.firstName} ${worker.lastName}`,
       },
-      projects: worker.assignments.map((assignment) => ({
-        id: assignment.project.id,
-        projectNumber: assignment.project.projectNumber,
-        title: assignment.project.title,
-        status: assignment.project.status,
-      })),
+      currentProjects,
+      futureProjects,
     };
   }
 }

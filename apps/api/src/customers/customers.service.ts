@@ -244,6 +244,149 @@ export class CustomersService {
     });
   }
 
+  async getFinancials(id: string) {
+    await this.getById(id);
+
+    const projects = await this.prisma.project.findMany({
+      where: { customerId: id, deletedAt: null },
+      include: {
+        assignments: { include: { worker: true } },
+        timeEntries: { orderBy: { occurredAtClient: 'asc' } },
+      },
+    });
+
+    let totalHours = 0;
+    let totalOvertimeHours = 0;
+    let totalBaseRevenue = 0;
+    let totalOvertimeRevenue = 0;
+    let totalCosts = 0;
+
+    const projectSummaries: {
+      projectId: string;
+      projectNumber: string;
+      title: string;
+      hours: number;
+      overtimeHours: number;
+      revenue: number;
+      costs: number;
+      margin: number;
+    }[] = [];
+
+    for (const project of projects) {
+      // Stunden berechnen (CLOCK_IN/OUT-Paare)
+      const workerHoursMap = new Map<string, number>();
+      const weeklyHoursMap = new Map<string, number>();
+
+      const entriesByWorker = new Map<
+        string,
+        typeof project.timeEntries
+      >();
+      for (const entry of project.timeEntries) {
+        const list = entriesByWorker.get(entry.workerId) ?? [];
+        list.push(entry);
+        entriesByWorker.set(entry.workerId, list);
+      }
+
+      for (const [workerId, entries] of entriesByWorker) {
+        let pendingClockIn: Date | null = null;
+        for (const entry of entries) {
+          if (entry.entryType === 'CLOCK_IN') {
+            pendingClockIn = entry.occurredAtClient;
+          } else if (entry.entryType === 'CLOCK_OUT' && pendingClockIn) {
+            const hours =
+              (entry.occurredAtClient.getTime() - pendingClockIn.getTime()) /
+              3_600_000;
+            if (hours > 0 && hours < 24) {
+              workerHoursMap.set(
+                workerId,
+                (workerHoursMap.get(workerId) ?? 0) + hours,
+              );
+              const weekKey = isoWeekKey(pendingClockIn);
+              weeklyHoursMap.set(
+                weekKey,
+                (weeklyHoursMap.get(weekKey) ?? 0) + hours,
+              );
+            }
+            pendingClockIn = null;
+          }
+        }
+      }
+
+      const projHours = [...workerHoursMap.values()].reduce(
+        (s, h) => s + h,
+        0,
+      );
+
+      // Umsatz wochenweise
+      const weeklyFlatRate = project.weeklyFlatRate ?? null;
+      const includedHours = project.includedHoursPerWeek ?? 40;
+      const hourlyRate = project.hourlyRateUpTo40h ?? 0;
+      const overtimeRate = project.overtimeRate ?? 0;
+
+      let projBaseRevenue = 0;
+      let projOvertimeRevenue = 0;
+      let projOvertimeHours = 0;
+
+      for (const [, weekHours] of weeklyHoursMap) {
+        if (weeklyFlatRate !== null) {
+          projBaseRevenue += weeklyFlatRate;
+          const oh = Math.max(0, weekHours - includedHours);
+          projOvertimeHours += oh;
+          projOvertimeRevenue += oh * overtimeRate;
+        } else {
+          const reg = Math.min(weekHours, 40);
+          const oh = Math.max(0, weekHours - 40);
+          projOvertimeHours += oh;
+          projBaseRevenue += reg * hourlyRate;
+          projOvertimeRevenue += oh * overtimeRate;
+        }
+      }
+
+      // Monteurkosten
+      let projCosts = 0;
+      for (const assignment of project.assignments) {
+        const w = assignment.worker;
+        const h = workerHoursMap.get(w.id) ?? 0;
+        if (w.internalHourlyRate != null) {
+          projCosts += h * w.internalHourlyRate;
+        }
+      }
+
+      const projRevenue = projBaseRevenue + projOvertimeRevenue;
+
+      totalHours += projHours;
+      totalOvertimeHours += projOvertimeHours;
+      totalBaseRevenue += projBaseRevenue;
+      totalOvertimeRevenue += projOvertimeRevenue;
+      totalCosts += projCosts;
+
+      projectSummaries.push({
+        projectId: project.id,
+        projectNumber: project.projectNumber,
+        title: project.title,
+        hours: Math.round(projHours * 100) / 100,
+        overtimeHours: Math.round(projOvertimeHours * 100) / 100,
+        revenue: Math.round(projRevenue * 100) / 100,
+        costs: Math.round(projCosts * 100) / 100,
+        margin: Math.round((projRevenue - projCosts) * 100) / 100,
+      });
+    }
+
+    const totalRevenue = totalBaseRevenue + totalOvertimeRevenue;
+
+    return {
+      customerId: id,
+      totalHours: Math.round(totalHours * 100) / 100,
+      overtimeHours: Math.round(totalOvertimeHours * 100) / 100,
+      baseRevenue: Math.round(totalBaseRevenue * 100) / 100,
+      overtimeRevenue: Math.round(totalOvertimeRevenue * 100) / 100,
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      totalCosts: Math.round(totalCosts * 100) / 100,
+      margin: Math.round((totalRevenue - totalCosts) * 100) / 100,
+      projects: projectSummaries,
+    };
+  }
+
   async archive(id: string) {
     await this.getById(id);
 
@@ -255,4 +398,16 @@ export class CustomersService {
       },
     });
   }
+}
+
+function isoWeekKey(date: Date): string {
+  const d = new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+  );
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(
+    ((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7,
+  );
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }

@@ -1,4 +1,10 @@
-import { IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class SaveWorkerDto {
   @IsOptional()
@@ -52,6 +58,10 @@ export class SaveWorkerDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  internalHourlyRate?: number;
 
   @IsOptional()
   @IsString()

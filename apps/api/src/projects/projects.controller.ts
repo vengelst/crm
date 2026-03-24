@@ -38,6 +38,11 @@ export class ProjectsController {
     return this.projectsService.update(id, dto);
   }
 
+  @Get(':id/financials')
+  getFinancials(@Param('id') id: string) {
+    return this.projectsService.getFinancials(id);
+  }
+
   @Post(':id/assignments')
   assignWorker(@Param('id') id: string, @Body() dto: AssignWorkerDto) {
     return this.projectsService.assignWorker(id, dto);

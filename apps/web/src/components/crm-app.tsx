@@ -9,6 +9,7 @@ import {
   type Dispatch,
   type ReactNode,
   type SetStateAction,
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -104,6 +105,7 @@ type ProjectAssignment = {
     workerNumber: string;
     firstName: string;
     lastName: string;
+    internalHourlyRate?: number | null;
   };
 };
 
@@ -122,6 +124,10 @@ type Project = {
   siteCity?: string | null;
   siteCountry?: string | null;
   accommodationAddress?: string | null;
+  weeklyFlatRate?: number | null;
+  includedHoursPerWeek?: number | null;
+  hourlyRateUpTo40h?: number | null;
+  overtimeRate?: number | null;
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   notes?: string | null;
@@ -153,8 +159,11 @@ type Worker = {
   languageCode?: string | null;
   notes?: string | null;
   active?: boolean;
+  internalHourlyRate?: number | null;
   assignments?: {
     id: string;
+    startDate: string;
+    endDate?: string | null;
     project: {
       id: string;
       title: string;
@@ -190,6 +199,53 @@ type UserItem = {
   isActive: boolean;
   roles: {
     role: RoleItem;
+  }[];
+};
+
+type ProjectFinancials = {
+  projectId: string;
+  totalHours: number;
+  overtimeHours: number;
+  baseRevenue: number;
+  overtimeRevenue: number;
+  totalRevenue: number;
+  workerCosts: {
+    workerId: string;
+    name: string;
+    hours: number;
+    rate: number | null;
+    cost: number;
+  }[];
+  totalCosts: number;
+  margin: number;
+  weeklyBreakdown: {
+    week: string;
+    hours: number;
+    overtimeHours: number;
+    baseRevenue: number;
+    overtimeRevenue: number;
+  }[];
+  pricingModel: string;
+};
+
+type CustomerFinancials = {
+  customerId: string;
+  totalHours: number;
+  overtimeHours: number;
+  baseRevenue: number;
+  overtimeRevenue: number;
+  totalRevenue: number;
+  totalCosts: number;
+  margin: number;
+  projects: {
+    projectId: string;
+    projectNumber: string;
+    title: string;
+    hours: number;
+    overtimeHours: number;
+    revenue: number;
+    costs: number;
+    margin: number;
   }[];
 };
 
@@ -236,6 +292,10 @@ type ProjectFormState = {
   siteCity: string;
   siteCountry: string;
   accommodationAddress: string;
+  weeklyFlatRate: string;
+  includedHoursPerWeek: string;
+  hourlyRateUpTo40h: string;
+  overtimeRate: string;
   plannedStartDate: string;
   plannedEndDate: string;
   notes: string;
@@ -257,6 +317,7 @@ type WorkerFormState = {
   languageCode: string;
   notes: string;
   active: boolean;
+  internalHourlyRate: string;
   pin: string;
 };
 
@@ -326,6 +387,10 @@ const emptyProjectForm = (): ProjectFormState => ({
   siteCity: "",
   siteCountry: "DE",
   accommodationAddress: "",
+  weeklyFlatRate: "",
+  includedHoursPerWeek: "",
+  hourlyRateUpTo40h: "",
+  overtimeRate: "",
   plannedStartDate: "",
   plannedEndDate: "",
   notes: "",
@@ -346,6 +411,7 @@ const emptyWorkerForm = (): WorkerFormState => ({
   languageCode: "de",
   notes: "",
   active: true,
+  internalHourlyRate: "",
   pin: "",
 });
 
@@ -420,6 +486,8 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   });
   const [documentForm, setDocumentForm] = useState<DocumentFormState>(emptyDocumentForm);
   const [documentPreview, setDocumentPreview] = useState<DocumentPreviewState | null>(null);
+  const [projectFinancials, setProjectFinancials] = useState<ProjectFinancials | null>(null);
+  const [customerFinancials, setCustomerFinancials] = useState<CustomerFinancials | null>(null);
 
   const canManageSettings = hasRole(auth, ["SUPERADMIN", "OFFICE"]);
   const canManageUsers = hasRole(auth, ["SUPERADMIN"]);
@@ -561,19 +629,23 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     if (selectedCustomer) {
       setCustomerForm(mapCustomerToForm(selectedCustomer));
       setDocumentForm(emptyDocumentForm());
+      void apiFetch<CustomerFinancials>(`/customers/${selectedCustomer.id}/financials`).then(setCustomerFinancials).catch(() => setCustomerFinancials(null));
     } else if (section === "customers") {
       setCustomerForm(emptyCustomerForm());
+      setCustomerFinancials(null);
     }
-  }, [section, selectedCustomer]);
+  }, [section, selectedCustomer, apiFetch]);
 
   useEffect(() => {
     if (selectedProject) {
       setProjectForm(mapProjectToForm(selectedProject));
       setDocumentForm(emptyDocumentForm());
+      void apiFetch<ProjectFinancials>(`/projects/${selectedProject.id}/financials`).then(setProjectFinancials).catch(() => setProjectFinancials(null));
     } else if (section === "projects") {
       setProjectForm(emptyProjectForm());
+      setProjectFinancials(null);
     }
-  }, [section, selectedProject]);
+  }, [section, selectedProject, apiFetch]);
 
   useEffect(() => {
     if (selectedWorker) {
@@ -680,6 +752,10 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         ...formWithoutId,
         priority: Number(projectForm.priority) || 0,
         branchId: projectForm.branchId || undefined,
+        weeklyFlatRate: projectForm.weeklyFlatRate ? Number(projectForm.weeklyFlatRate) : undefined,
+        includedHoursPerWeek: projectForm.includedHoursPerWeek ? Number(projectForm.includedHoursPerWeek) : undefined,
+        hourlyRateUpTo40h: projectForm.hourlyRateUpTo40h ? Number(projectForm.hourlyRateUpTo40h) : undefined,
+        overtimeRate: projectForm.overtimeRate ? Number(projectForm.overtimeRate) : undefined,
         plannedStartDate: projectForm.plannedStartDate || undefined,
         plannedEndDate: projectForm.plannedEndDate || undefined,
       });
@@ -709,6 +785,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       const payload = sanitizeForApi({
         ...formWithoutId,
         phone: workerForm.phoneMobile || undefined,
+        internalHourlyRate: workerForm.internalHourlyRate ? Number(workerForm.internalHourlyRate) : undefined,
         pin: workerForm.pin || undefined,
       });
 
@@ -1033,6 +1110,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 <CustomerDetailCard
                   customer={selectedCustomer}
                   customerProjects={projects.filter((p) => p.customerId === selectedCustomer.id)}
+                  financials={customerFinancials}
                   documents={filterDocuments(documents, "CUSTOMER", selectedCustomer.id)}
                   onOpenDocument={handleOpenDocument}
                   onPrintDocument={handlePrintDocument}
@@ -1444,6 +1522,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               {selectedProject ? (
                 <ProjectDetailCard
                   project={selectedProject}
+                  financials={projectFinancials}
                   documents={filterDocuments(documents, "PROJECT", selectedProject.id)}
                   onOpenDocument={handleOpenDocument}
                   onPrintDocument={handlePrintDocument}
@@ -1630,6 +1709,55 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     }
                   />
                 </FormRow>
+                <div className="rounded-2xl border border-black/10 bg-slate-50/50 p-4 dark:border-white/10 dark:bg-slate-950/30">
+                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">Projektpreise</h4>
+                  <div className="grid gap-4">
+                    <FormRow>
+                      <Field
+                        label="Wochenpauschale (EUR)"
+                        value={projectForm.weeklyFlatRate}
+                        onChange={(event) =>
+                          setProjectForm((current) => ({
+                            ...current,
+                            weeklyFlatRate: event.target.value,
+                          }))
+                        }
+                      />
+                      <Field
+                        label="Inklusivstunden pro Woche"
+                        value={projectForm.includedHoursPerWeek}
+                        onChange={(event) =>
+                          setProjectForm((current) => ({
+                            ...current,
+                            includedHoursPerWeek: event.target.value,
+                          }))
+                        }
+                      />
+                    </FormRow>
+                    <FormRow>
+                      <Field
+                        label="Stundensatz bis 40h (EUR)"
+                        value={projectForm.hourlyRateUpTo40h}
+                        onChange={(event) =>
+                          setProjectForm((current) => ({
+                            ...current,
+                            hourlyRateUpTo40h: event.target.value,
+                          }))
+                        }
+                      />
+                      <Field
+                        label="Ueberstundensatz (EUR)"
+                        value={projectForm.overtimeRate}
+                        onChange={(event) =>
+                          setProjectForm((current) => ({
+                            ...current,
+                            overtimeRate: event.target.value,
+                          }))
+                        }
+                      />
+                    </FormRow>
+                  </div>
+                </div>
                 <TextArea
                   label="Beschreibung"
                   value={projectForm.description}
@@ -1823,6 +1951,16 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     }
                   />
                 </FormRow>
+                <Field
+                  label="Interner Stundensatz (EUR)"
+                  value={workerForm.internalHourlyRate}
+                  onChange={(event) =>
+                    setWorkerForm((current) => ({
+                      ...current,
+                      internalHourlyRate: event.target.value,
+                    }))
+                  }
+                />
                 <TextArea
                   label="Notizen"
                   value={workerForm.notes}
@@ -2133,6 +2271,10 @@ function mapProjectToForm(project: Project): ProjectFormState {
     siteCity: project.siteCity ?? "",
     siteCountry: project.siteCountry ?? "DE",
     accommodationAddress: project.accommodationAddress ?? "",
+    weeklyFlatRate: project.weeklyFlatRate != null ? String(project.weeklyFlatRate) : "",
+    includedHoursPerWeek: project.includedHoursPerWeek != null ? String(project.includedHoursPerWeek) : "",
+    hourlyRateUpTo40h: project.hourlyRateUpTo40h != null ? String(project.hourlyRateUpTo40h) : "",
+    overtimeRate: project.overtimeRate != null ? String(project.overtimeRate) : "",
     plannedStartDate: toDateInput(project.plannedStartDate),
     plannedEndDate: toDateInput(project.plannedEndDate),
     notes: project.notes ?? "",
@@ -2156,6 +2298,7 @@ function mapWorkerToForm(worker: Worker): WorkerFormState {
     languageCode: worker.languageCode ?? "de",
     notes: worker.notes ?? "",
     active: worker.active ?? true,
+    internalHourlyRate: worker.internalHourlyRate != null ? String(worker.internalHourlyRate) : "",
     pin: "",
   };
 }
@@ -2482,6 +2625,7 @@ function EntityList<T extends { id: string }>({
 function CustomerDetailCard({
   customer,
   customerProjects,
+  financials,
   documents,
   onOpenDocument,
   onPrintDocument,
@@ -2494,6 +2638,7 @@ function CustomerDetailCard({
 }: {
   customer: Customer;
   customerProjects: Project[];
+  financials: CustomerFinancials | null;
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
   onPrintDocument: (document: DocumentItem) => void;
@@ -2636,7 +2781,9 @@ function CustomerDetailCard({
                 <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
                   <th className="pb-2 pr-3">Nr.</th>
                   <th className="pb-2 pr-3">Titel</th>
-                  <th className="pb-2">Status</th>
+                  <th className="pb-2 pr-3">Status</th>
+                  <th className="pb-2 pr-3 text-right">Wochenpauschale</th>
+                  <th className="pb-2 text-right">Stundensatz</th>
                 </tr>
               </thead>
               <tbody>
@@ -2648,10 +2795,16 @@ function CustomerDetailCard({
                         {project.title}
                       </Link>
                     </td>
-                    <td className="py-2">
+                    <td className="py-2 pr-3">
                       <span className={cx("inline-block rounded-full px-2 py-0.5 text-xs font-medium", statusColor(project.status))}>
                         {statusLabel(project.status)}
                       </span>
+                    </td>
+                    <td className="py-2 pr-3 text-right font-mono text-xs">
+                      {project.weeklyFlatRate != null ? `${project.weeklyFlatRate.toFixed(2)} EUR` : "-"}
+                    </td>
+                    <td className="py-2 text-right font-mono text-xs">
+                      {project.hourlyRateUpTo40h != null ? `${project.hourlyRateUpTo40h.toFixed(2)} EUR` : "-"}
                     </td>
                   </tr>
                 ))}
@@ -2660,6 +2813,69 @@ function CustomerDetailCard({
           </div>
         )}
       </div>
+
+      {/* ── Kunden-Auswertung ──────────────────────────────────── */}
+      {financials ? (
+        <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+          <h4 className="mb-3 text-base font-semibold">Auswertung gesamt</h4>
+          <div className="grid gap-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <FinancialKpi label="Stunden gesamt" value={`${financials.totalHours} h`} />
+              <FinancialKpi label="davon Ueberstunden" value={`${financials.overtimeHours} h`} />
+              <FinancialKpi label="Umsatz gesamt" value={`${financials.totalRevenue.toFixed(2)} EUR`} highlight />
+              <FinancialKpi label="Monteurkosten" value={`${financials.totalCosts.toFixed(2)} EUR`} />
+              <FinancialKpi label="Deckungsbeitrag" value={`${financials.margin.toFixed(2)} EUR`} highlight={financials.margin >= 0} warn={financials.margin < 0} />
+            </div>
+
+            <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
+              <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Aufschluesselung</h5>
+              <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+                <span className="text-slate-500">Grundumsatz</span>
+                <span className="text-right font-mono">{financials.baseRevenue.toFixed(2)} EUR</span>
+                <span className="text-slate-500">Ueberstundenumsatz</span>
+                <span className="text-right font-mono">{financials.overtimeRevenue.toFixed(2)} EUR</span>
+                <span className="text-slate-500">Monteurkosten</span>
+                <span className="text-right font-mono">-{financials.totalCosts.toFixed(2)} EUR</span>
+                <span className="font-medium">Deckungsbeitrag</span>
+                <span className={cx("text-right font-mono font-medium", financials.margin >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{financials.margin.toFixed(2)} EUR</span>
+              </div>
+            </div>
+
+            {financials.projects.length > 0 ? (
+              <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
+                <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Pro Projekt</h5>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="text-xs text-slate-500">
+                        <th className="pb-1 pr-3">Projekt</th>
+                        <th className="pb-1 pr-3 text-right">Stunden</th>
+                        <th className="pb-1 pr-3 text-right">Umsatz</th>
+                        <th className="pb-1 pr-3 text-right">Kosten</th>
+                        <th className="pb-1 text-right">Marge</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {financials.projects.map((p) => (
+                        <tr key={p.projectId} className="border-t border-black/5 dark:border-white/5">
+                          <td className="py-1 pr-3">
+                            <Link href={`/projects/${p.projectId}`} className="hover:underline">{p.projectNumber}</Link>
+                            <span className="ml-1 text-slate-400">{p.title}</span>
+                          </td>
+                          <td className="py-1 pr-3 text-right font-mono">{p.hours}</td>
+                          <td className="py-1 pr-3 text-right font-mono">{p.revenue.toFixed(2)}</td>
+                          <td className="py-1 pr-3 text-right font-mono">{p.costs.toFixed(2)}</td>
+                          <td className={cx("py-1 text-right font-mono", p.margin >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{p.margin.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {/* ── Dokumente und Bilder ───────────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
@@ -2681,6 +2897,7 @@ function CustomerDetailCard({
 
 function ProjectDetailCard({
   project,
+  financials,
   documents,
   onOpenDocument,
   onPrintDocument,
@@ -2692,6 +2909,7 @@ function ProjectDetailCard({
   onUpload,
 }: {
   project: Project;
+  financials: ProjectFinancials | null;
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
   onPrintDocument: (document: DocumentItem) => void;
@@ -2710,47 +2928,193 @@ function ProjectDetailCard({
     project.siteCountry,
   ]);
 
+  const hasPricing = project.weeklyFlatRate != null || project.hourlyRateUpTo40h != null || project.includedHoursPerWeek != null || project.overtimeRate != null;
+
+  const fmt = (value?: number | null) => value != null ? `${value.toFixed(2)} EUR` : "-";
+
   return (
-    <div className="grid gap-4 rounded-2xl border border-black/10 p-4 dark:border-white/10">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-semibold">{project.title}</h3>
-          <p className="text-sm text-slate-500">
-            {project.projectNumber} · {project.customer?.companyName ?? "Kein Kunde"}
-          </p>
+    <div className="grid gap-5">
+      {/* ── Stammdaten ──────────────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">{project.title}</h3>
+            <p className="text-sm text-slate-500">
+              {project.projectNumber} · {project.customer?.companyName ?? "Kein Kunde"}
+            </p>
+          </div>
+          {projectMapsUrl ? <MapLinkButton href={projectMapsUrl}>Google Maps</MapLinkButton> : null}
         </div>
-        {projectMapsUrl ? <MapLinkButton href={projectMapsUrl}>Google Maps</MapLinkButton> : null}
-      </div>
-      <div className="grid gap-1 text-sm text-slate-500">
-        <div>{project.status ?? "Kein Status"}</div>
-        <div>
-          {formatAddress([
-            project.siteAddressLine1,
-            project.sitePostalCode,
-            project.siteCity,
-            project.siteCountry,
-          ]) || "Keine Projektadresse hinterlegt."}
+        <div className="mt-2 grid gap-1 text-sm text-slate-500">
+          <div>{project.status ?? "Kein Status"}</div>
+          <div>
+            {formatAddress([
+              project.siteAddressLine1,
+              project.sitePostalCode,
+              project.siteCity,
+              project.siteCountry,
+            ]) || "Keine Projektadresse hinterlegt."}
+          </div>
         </div>
       </div>
-      <LinkedItemList
-        title="Eingeteilte Monteure"
-        items={(project.assignments ?? []).map((assignment) => ({
-          href: `/workers/${assignment.worker.id}`,
-          label: `${assignment.worker.firstName} ${assignment.worker.lastName}`,
-          meta: assignment.worker.workerNumber,
-        }))}
-      />
-      <DocumentPanel
-        documents={documents}
-        onOpenDocument={onOpenDocument}
-        onPrintDocument={onPrintDocument}
-        onDownload={onDownload}
-        onDeleteDocument={onDeleteDocument}
-        documentForm={documentForm}
-        setDocumentForm={setDocumentForm}
-        authToken={authToken}
-        onUpload={onUpload}
-      />
+
+      {/* ── Projektpreise ───────────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h4 className="mb-3 text-base font-semibold">Projektpreise</h4>
+        {hasPricing ? (
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div className="text-slate-500">Wochenpauschale</div>
+            <div className="font-mono">{fmt(project.weeklyFlatRate)}</div>
+            <div className="text-slate-500">Inklusivstunden / Woche</div>
+            <div className="font-mono">{project.includedHoursPerWeek != null ? `${project.includedHoursPerWeek} h` : "-"}</div>
+            <div className="text-slate-500">Stundensatz bis 40h</div>
+            <div className="font-mono">{fmt(project.hourlyRateUpTo40h)}</div>
+            <div className="text-slate-500">Ueberstundensatz</div>
+            <div className="font-mono">{fmt(project.overtimeRate)}</div>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">Noch keine Preise hinterlegt.</p>
+        )}
+      </div>
+
+      {/* ── Eingeteilte Monteure mit Stundensatz ────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h4 className="mb-3 text-base font-semibold">Eingeteilte Monteure</h4>
+        {(project.assignments ?? []).length === 0 ? (
+          <p className="text-sm text-slate-500">Keine Monteure zugeordnet.</p>
+        ) : (
+          <div className="grid gap-2">
+            {(project.assignments ?? []).map((assignment) => (
+              <Link
+                key={assignment.id}
+                href={`/workers/${assignment.worker.id}`}
+                className="flex items-center justify-between rounded-xl border border-black/10 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
+              >
+                <div>
+                  <div className="font-medium">{assignment.worker.firstName} {assignment.worker.lastName}</div>
+                  <div className="text-slate-500">{assignment.worker.workerNumber}</div>
+                </div>
+                <div className="text-right font-mono text-xs text-slate-500">
+                  {assignment.worker.internalHourlyRate != null
+                    ? `${assignment.worker.internalHourlyRate.toFixed(2)} EUR/h intern`
+                    : "kein Stundensatz"}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Auswertung ──────────────────────────────────── */}
+      {financials ? (
+        <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+          <h4 className="mb-3 text-base font-semibold">Auswertung</h4>
+          <div className="grid gap-4">
+            {/* Kennzahlen */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <FinancialKpi label="Stunden gesamt" value={`${financials.totalHours} h`} />
+              <FinancialKpi label="davon Ueberstunden" value={`${financials.overtimeHours} h`} />
+              <FinancialKpi label="Umsatz gesamt" value={`${financials.totalRevenue.toFixed(2)} EUR`} highlight />
+              <FinancialKpi label="Monteurkosten" value={`${financials.totalCosts.toFixed(2)} EUR`} />
+              <FinancialKpi label="Deckungsbeitrag" value={`${financials.margin.toFixed(2)} EUR`} highlight={financials.margin >= 0} warn={financials.margin < 0} />
+            </div>
+
+            {/* Aufschluesselung */}
+            <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
+              <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Umsatzaufschluesselung</h5>
+              <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+                <span className="text-slate-500">{financials.pricingModel === "WEEKLY_FLAT_RATE" ? "Wochenpauschale(n)" : "Grundstunden"}</span>
+                <span className="text-right font-mono">{financials.baseRevenue.toFixed(2)} EUR</span>
+                <span className="text-slate-500">Ueberstundenumsatz</span>
+                <span className="text-right font-mono">{financials.overtimeRevenue.toFixed(2)} EUR</span>
+                <span className="font-medium">Umsatz gesamt</span>
+                <span className="text-right font-mono font-medium">{financials.totalRevenue.toFixed(2)} EUR</span>
+              </div>
+            </div>
+
+            {/* Monteurkosten Detail */}
+            {financials.workerCosts.length > 0 ? (
+              <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
+                <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Monteurkosten</h5>
+                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 gap-y-1 text-sm">
+                  {financials.workerCosts.map((wc) => (
+                    <Fragment key={wc.workerId}>
+                      <span className="text-slate-500">{wc.name}</span>
+                      <span className="text-right font-mono text-slate-400">{wc.hours} h</span>
+                      <span className="text-right font-mono text-slate-400">{wc.rate != null ? `${wc.rate.toFixed(2)} EUR/h` : "-"}</span>
+                      <span className="text-right font-mono">{wc.cost.toFixed(2)} EUR</span>
+                    </Fragment>
+                  ))}
+                  <span className="font-medium">Kosten gesamt</span>
+                  <span />
+                  <span />
+                  <span className="text-right font-mono font-medium">{financials.totalCosts.toFixed(2)} EUR</span>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Wochen-Detail */}
+            {financials.weeklyBreakdown.length > 0 ? (
+              <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
+                <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Wochendetail</h5>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="text-xs text-slate-500">
+                        <th className="pb-1 pr-3">KW</th>
+                        <th className="pb-1 pr-3 text-right">Stunden</th>
+                        <th className="pb-1 pr-3 text-right">Ueberst.</th>
+                        <th className="pb-1 pr-3 text-right">Grundumsatz</th>
+                        <th className="pb-1 text-right">Ueberst.-Umsatz</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {financials.weeklyBreakdown.map((w) => (
+                        <tr key={w.week} className="border-t border-black/5 dark:border-white/5">
+                          <td className="py-1 pr-3 font-mono text-xs">{w.week}</td>
+                          <td className="py-1 pr-3 text-right font-mono">{w.hours}</td>
+                          <td className="py-1 pr-3 text-right font-mono">{w.overtimeHours}</td>
+                          <td className="py-1 pr-3 text-right font-mono">{w.baseRevenue.toFixed(2)}</td>
+                          <td className="py-1 text-right font-mono">{w.overtimeRevenue.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── Dokumente ───────────────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <DocumentPanel
+          documents={documents}
+          onOpenDocument={onOpenDocument}
+          onPrintDocument={onPrintDocument}
+          onDownload={onDownload}
+          onDeleteDocument={onDeleteDocument}
+          documentForm={documentForm}
+          setDocumentForm={setDocumentForm}
+          authToken={authToken}
+          onUpload={onUpload}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FinancialKpi({ label, value, highlight, warn }: { label: string; value: string; highlight?: boolean; warn?: boolean }) {
+  return (
+    <div className={cx(
+      "rounded-xl border p-3",
+      warn ? "border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10" :
+      highlight ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10" :
+      "border-black/10 bg-slate-50 dark:border-white/10 dark:bg-slate-950"
+    )}>
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className={cx("text-lg font-semibold font-mono", warn ? "text-red-600 dark:text-red-400" : highlight ? "text-emerald-700 dark:text-emerald-300" : "")}>{value}</div>
     </div>
   );
 }
@@ -2787,43 +3151,138 @@ function WorkerDetailCard({
     worker.country,
   ]);
 
+  const now = new Date();
+  const allAssignments = worker.assignments ?? [];
+
+  const currentAssignments = allAssignments.filter((a) => {
+    const start = new Date(a.startDate);
+    const end = a.endDate ? new Date(a.endDate) : null;
+    return start <= now && (!end || end >= now);
+  });
+
+  const futureAssignments = allAssignments.filter((a) => {
+    const start = new Date(a.startDate);
+    return start > now;
+  });
+
+  const pastAssignments = allAssignments.filter((a) => {
+    const end = a.endDate ? new Date(a.endDate) : null;
+    return end !== null && end < now;
+  });
+
+  const hasOnlyFuture = currentAssignments.length === 0 && futureAssignments.length > 0;
+
+  const formatDateRange = (a: { startDate: string; endDate?: string | null }) => {
+    const s = a.startDate.slice(0, 10);
+    const e = a.endDate ? a.endDate.slice(0, 10) : "offen";
+    return `${s} bis ${e}`;
+  };
+
   return (
-    <div className="grid gap-4 rounded-2xl border border-black/10 p-4 dark:border-white/10">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-semibold">
-            {worker.firstName} {worker.lastName}
-          </h3>
-          <p className="text-sm text-slate-500">{worker.workerNumber}</p>
+    <div className="grid gap-5">
+      {/* ── Stammdaten ──────────────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">
+              {worker.firstName} {worker.lastName}
+            </h3>
+            <p className="text-sm text-slate-500">{worker.workerNumber}</p>
+          </div>
+          {workerMapsUrl ? <MapLinkButton href={workerMapsUrl}>Google Maps</MapLinkButton> : null}
         </div>
-        {workerMapsUrl ? <MapLinkButton href={workerMapsUrl}>Google Maps</MapLinkButton> : null}
-      </div>
-      <div className="grid gap-1 text-sm text-slate-500">
-        <div>{formatAddress([worker.addressLine1, worker.addressLine2, worker.postalCode, worker.city, worker.country]) || "Keine Adresse hinterlegt."}</div>
-        <div>
-          {worker.email ?? "Keine E-Mail"} · Mobil: {worker.phoneMobile ?? worker.phone ?? "-"} ·
-          Buero: {worker.phoneOffice ?? "-"}
+        <div className="mt-2 grid gap-1 text-sm text-slate-500">
+          <div>{formatAddress([worker.addressLine1, worker.addressLine2, worker.postalCode, worker.city, worker.country]) || "Keine Adresse hinterlegt."}</div>
+          <div>
+            {worker.email ?? "Keine E-Mail"} · Mobil: {worker.phoneMobile ?? worker.phone ?? "-"} ·
+            Buero: {worker.phoneOffice ?? "-"}
+          </div>
         </div>
       </div>
-      <LinkedItemList
-        title="Geplante Projekte"
-        items={(worker.assignments ?? []).map((assignment) => ({
-          href: `/projects/${assignment.project.id}`,
-          label: assignment.project.title,
-          meta: assignment.project.projectNumber,
-        }))}
-      />
-      <DocumentPanel
-        documents={documents}
-        onOpenDocument={onOpenDocument}
-        onPrintDocument={onPrintDocument}
-        onDownload={onDownload}
-        onDeleteDocument={onDeleteDocument}
-        documentForm={documentForm}
-        setDocumentForm={setDocumentForm}
-        authToken={authToken}
-        onUpload={onUpload}
-      />
+
+      {/* ── Hinweis: nur zukuenftige Projekte ───────────── */}
+      {hasOnlyFuture ? (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50/60 p-4 dark:border-amber-500/40 dark:bg-amber-500/5">
+          <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+            Dieser Monteur hat derzeit kein aktives Projekt. Die Zuordnung beginnt erst in der Zukunft.
+            Ein Login per PIN ist trotzdem moeglich.
+          </p>
+        </div>
+      ) : null}
+
+      {/* ── Aktuelle Projekte ───────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h4 className="mb-3 text-base font-semibold">Aktuelle Projekte</h4>
+        {currentAssignments.length === 0 ? (
+          <p className="text-sm text-slate-500">Keine laufenden Projekte.</p>
+        ) : (
+          <div className="grid gap-2">
+            {currentAssignments.map((a) => (
+              <Link
+                key={a.id}
+                href={`/projects/${a.project.id}`}
+                className="rounded-xl border border-black/10 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
+              >
+                <div className="font-medium">{a.project.title}</div>
+                <div className="text-slate-500">{a.project.projectNumber} · {formatDateRange(a)}</div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Zukuenftige Projekte ────────────────────────── */}
+      {futureAssignments.length > 0 ? (
+        <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+          <h4 className="mb-3 text-base font-semibold">Zukuenftige Projekte</h4>
+          <div className="grid gap-2">
+            {futureAssignments.map((a) => (
+              <Link
+                key={a.id}
+                href={`/projects/${a.project.id}`}
+                className="rounded-xl border border-black/10 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
+              >
+                <div className="font-medium">{a.project.title}</div>
+                <div className="text-slate-500">{a.project.projectNumber} · ab {a.startDate.slice(0, 10)}</div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── Vergangene Projekte ─────────────────────────── */}
+      {pastAssignments.length > 0 ? (
+        <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+          <h4 className="mb-3 text-base font-semibold text-slate-400">Vergangene Projekte</h4>
+          <div className="grid gap-2">
+            {pastAssignments.map((a) => (
+              <Link
+                key={a.id}
+                href={`/projects/${a.project.id}`}
+                className="rounded-xl border border-black/5 px-3 py-2 text-sm text-slate-400 transition hover:bg-slate-50 dark:border-white/5 dark:hover:bg-slate-800"
+              >
+                <div className="font-medium">{a.project.title}</div>
+                <div>{a.project.projectNumber} · {formatDateRange(a)}</div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── Dokumente ───────────────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <DocumentPanel
+          documents={documents}
+          onOpenDocument={onOpenDocument}
+          onPrintDocument={onPrintDocument}
+          onDownload={onDownload}
+          onDeleteDocument={onDeleteDocument}
+          documentForm={documentForm}
+          setDocumentForm={setDocumentForm}
+          authToken={authToken}
+          onUpload={onUpload}
+        />
+      </div>
     </div>
   );
 }

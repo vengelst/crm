@@ -90,3 +90,97 @@
 - Ergebnis / Entscheidung:
 - Offene Punkte:
 ```
+## 2026-03-24
+
+### Projektpreise und Monteurkosten
+
+- Ausgangslage:
+  - Projektpreise und Monteurkosten sollten im CRM als Grundlage fuer Umsatz-, Kosten- und Margenlogik erfasst werden.
+  - Preise sollen projektbezogen gespeichert werden, Monteurkosten direkt am Monteur.
+
+- Geplante Aufgabe:
+  - Projekt um Preisfelder erweitern.
+  - Monteur um internen Stundensatz erweitern.
+  - Erste Anzeige der Werte in Projekt- und Kundenansicht schaffen.
+
+- Umsetzung durch Claude:
+  - Im `Project`-Modell vier neue Preisfelder ergaenzt:
+    - `weeklyFlatRate`
+    - `includedHoursPerWeek`
+    - `hourlyRateUpTo40h`
+    - `overtimeRate`
+  - Im `Worker`-Modell `internalHourlyRate` ergaenzt.
+  - Projektformular um eigenen Block `Projektpreise` erweitert.
+  - Projekt-Detail um Preistabelle erweitert.
+  - Monteur-Formular um Feld `Interner Stundensatz (EUR)` erweitert.
+  - Projekt-Detail zeigt Monteure mit internem Stundensatz.
+  - Kunden-Detail zeigt in der Projekttabelle auch Preisbasiswerte.
+
+- Pruefung durch Codex:
+  - `pnpm --filter web build` gruen.
+  - Dev-Docker-Stack laeuft sauber.
+  - Schema, DTOs und UI-Felder fuer Projektpreise und `internalHourlyRate` bestaetigt.
+  - API-Speicherpfade mit echten Testdaten verifiziert:
+    - Projekt mit Preisfeldern anlegen, laden und loeschen erfolgreich
+    - Monteur mit internem Stundensatz anlegen, laden und loeschen erfolgreich
+  - Projekt-Detail zeigt Preisblock und Monteur-Stundensaetze.
+  - Kunden-Detail zeigt Preisbasis in der Projekttabelle.
+
+- Ergebnis / Entscheidung:
+  - Codex-Abnahme fuer Projektpreise und Monteurkosten: **Gruen**.
+  - Die Datenbasis fuer projektbezogene Preislogik und Monteurkosten ist vorhanden und lauffaehig.
+  - Damit sind die Voraussetzungen fuer Umsatz-, Kosten- und Margenberechnung geschaffen.
+
+- Offene Punkte:
+  - Danach Paket 3: Berechnungslogik und Auswertung
+
+## 2026-03-24
+
+### Berechnungslogik und Auswertung
+
+- Ausgangslage:
+  - Auf Basis der Projektpreise und Monteur-Stundensaetze sollte eine erste Umsatz-, Kosten- und Margenlogik fuer Projekte und Kunden entstehen.
+
+- Geplante Aufgabe:
+  - Wochenweise Umsatzlogik fuer Projekte.
+  - Kostenlogik aus `internalHourlyRate`.
+  - Projekt-Auswertung und Kunden-Auswertung im UI.
+
+- Umsetzung durch Claude:
+  - `GET /projects/:id/financials` und `GET /customers/:id/financials` umgesetzt.
+  - Zwei Preismodelle beruecksichtigt:
+    - Wochenpauschale
+    - Stundensatz mit Ueberstunden
+  - `CLOCK_IN`/`CLOCK_OUT`-Paare werden in Stunden umgerechnet und nach ISO-Kalenderwochen gruppiert.
+  - Projekt-Detail zeigt:
+    - Kennzahlen
+    - Umsatzaufschluesselung
+    - Monteurkosten
+    - Wochendetail
+  - Kunden-Detail zeigt:
+    - aggregierte Kennzahlen
+    - Aufschluesselung
+    - Projekt-Tabelle mit Stunden, Umsatz, Kosten und Marge
+
+- Pruefung durch Codex:
+  - `pnpm --filter web build` gruen.
+  - Endpunkte fuer Projekt- und Kunden-Financials vorhanden und erreichbar.
+  - Kontrollierter Laufzeittest mit echten Testdaten erfolgreich:
+    - Testprojekt mit `weeklyFlatRate = 2500`
+    - Testmonteur mit `internalHourlyRate = 35`
+    - 3 Arbeitstage à 9h = `27h`
+  - Verifiziertes Projektergebnis:
+    - `totalHours = 27`
+    - `overtimeHours = 0`
+    - `totalRevenue = 2500`
+    - `totalCosts = 945`
+    - `margin = 1555`
+    - `pricingModel = WEEKLY_FLAT_RATE`
+  - Kunden-Financials liefern die aggregierten Werte korrekt und enthalten die Projektaufschluesselung.
+
+- Ergebnis / Entscheidung:
+  - Codex-Abnahme fuer Berechnungslogik und Auswertung: **Gruen**.
+  - Die erste Umsatz-, Kosten- und Margenlogik ist technisch bestaetigt.
+
+- Offene Punkte:
+  - Spaetere Erweiterungen wie Zuschlaege, Reisekosten oder komplexere Wochenmodelle sind noch offen.

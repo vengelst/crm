@@ -190,6 +190,10 @@ model Project {
   siteCity                     String?
   siteCountry                  String?
   accommodationAddress         String?
+  weeklyFlatRate               Float?
+  includedHoursPerWeek         Float?
+  hourlyRateUpTo40h            Float?
+  overtimeRate                 Float?
   plannedStartDate             DateTime?
   plannedEndDate               DateTime?
   actualStartDate              DateTime?
@@ -228,6 +232,7 @@ model Worker {
   city          String?
   country       String?
   active        Boolean                   @default(true)
+  internalHourlyRate Float?
   languageCode  String?
   notes         String?
   createdAt     DateTime                  @default(now())
