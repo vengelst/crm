@@ -108,7 +108,9 @@ export class DocumentsService {
     const absolutePath = resolve(process.cwd(), 'storage', document.storageKey);
 
     if (!existsSync(absolutePath)) {
-      throw new NotFoundException('Datei auf Storage nicht gefunden.');
+      throw new NotFoundException(
+        'Datei im Storage nicht vorhanden. In der lokalen Dev-Umgebung muss die Datei erst hochgeladen werden.',
+      );
     }
 
     return {

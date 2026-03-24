@@ -1,12 +1,43 @@
+# ============================================================
+# Docker Compose OVERRIDE fuer lokale Entwicklung
+#
+# Verwendung:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Oder kuerzer per pnpm-Skript:
+#   pnpm dev:docker
+#
+# Web und API laufen im Watch-Modus. Aenderungen an src/ werden
+# sofort sichtbar, ohne das Image neu zu bauen.
+# ============================================================
+
 services:
+  # ── Postgres: trust-Auth fuer lokale Entwicklung ──────────────
   postgres:
-    extends:
-      file: docker-compose.yml
-      service: postgres
     environment:
       POSTGRES_HOST_AUTH_METHOD: trust
 
-  minio:
-    extends:
-      file: docker-compose.yml
-      service: minio
+  # ── API (NestJS) im Watch-Modus ──────────────────────────────
+  api:
+    build:
+      dockerfile: docker/Dockerfile.dev
+    command: ["pnpm", "--filter", "api", "start:dev"]
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - ./prisma:/app/prisma
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+
+  # ── Web (Next.js) im Dev-Modus ───────────────────────────────
+  web:
+    build:
+      dockerfile: docker/Dockerfile.dev
+    command: ["pnpm", "--filter", "web", "dev"]
+    volumes:
+      - ./apps/web/src:/app/apps/web/src
+      - ./apps/web/public:/app/apps/web/public
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+      HOSTNAME: "0.0.0.0"

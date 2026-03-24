@@ -5,6 +5,9 @@
   "packageManager": "pnpm@10.32.1",
   "scripts": {
     "dev": "turbo run dev --parallel",
+    "dev:docker": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build",
+    "dev:docker:logs": "docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f",
+    "dev:docker:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml down",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",

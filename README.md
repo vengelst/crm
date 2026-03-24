@@ -1,67 +1,40 @@
 # CRM Monteur Plattform
 
-Monorepo fuer das MVP einer CRM-, Projekt-, Monteur- und Zeiterfassungs-App gemaess `crm_monteur_projekt_app_spec.md`.
+## Lokale Entwicklung (Docker)
 
-## Stack
+Der komplette Dev-Stack (Web, API, Postgres, MinIO) laeuft in Docker mit Hot-Reload.
 
-- `apps/web`: Next.js 16, React 19, Tailwind CSS
-- `apps/api`: NestJS 11, Prisma, JWT-basierte Auth
-- PostgreSQL fuer Fachdaten
-- MinIO fuer dokumentenbasierten Storage
-- Turbo + pnpm fuer das Monorepo
+### Starten und Stoppen
 
-## Schnellstart
+```powershell
+# Variante 1: pnpm
+pnpm dev:docker          # Stack im Hintergrund starten
+pnpm dev:docker:logs     # Live-Logs aller Container
+pnpm dev:docker:down     # Stack stoppen
 
-1. `.env.example` nach `.env` kopieren und Werte pruefen.
-2. `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres minio`
-3. `pnpm install`
-4. `pnpm db:generate`
-5. `pnpm db:migrate`
-6. `pnpm db:seed`
-7. `pnpm dev`
+# Variante 2: PowerShell-Skripte
+.\startapp.ps1           # Stack im Hintergrund starten
+.\stopapp.ps1            # Stack stoppen
+```
 
-## Kompletter Docker-Start
+### Zugriff
 
-Die App kann jetzt komplett als eigene Container laufen:
+| Dienst | URL |
+|--------|-----|
+| Web    | http://localhost:3800 |
+| API    | http://localhost:3801/api |
+| MinIO  | http://localhost:9001 |
 
-1. Lokale `pnpm`-Dev-Server auf `3800` und `3801` stoppen.
-2. `docker compose up -d --build`
-3. Web unter [http://localhost:3800](http://localhost:3800) aufrufen.
-4. API unter [http://localhost:3801/api](http://localhost:3801/api) pruefen.
+### Lokale Entwicklung ohne Docker
 
-Container:
+```bash
+pnpm dev                 # Web + API nativ starten (Postgres + MinIO muessen laufen)
+```
 
-- `crm-web`
-- `crm-api`
-- `crm-postgres`
-- `crm-minio`
+## Test-Server Deployment
 
-## Lokale URLs
+```powershell
+.\abgleich\crm-deploy.ps1 -Command deploy
+```
 
-- Web: [http://localhost:3800](http://localhost:3800)
-- API: [http://localhost:3801/api](http://localhost:3801/api)
-
-## Demo-Zugaenge
-
-- Admin: `admin@example.local` / `admin12345`
-- Monteur: `M-1000` / `1234`
-
-## MVP-Umfang
-
-- Admin-Login
-- Kunden, Niederlassungen, Ansprechpartner
-- Projekte, Monteure, Projektzuordnungen
-- Clock-In / Clock-Out mit GPS
-- Wochenzettel-Generierung
-- Signaturablage
-- Dokument-Upload und Download
-- PDF-Export fuer Wochenzettel
-- E-Mail-Versand mit PDF-Anhang
-
-## Hinweise
-
-- Der aktuelle Stand priorisiert echte Endpunkte und Kernflows vor UI-Feinschliff.
-- Dokumente werden im MVP lokal unter `storage/uploads` gespeichert.
-- E-Mail laeuft standardmaessig ueber `jsonTransport`, solange `SMTP_REAL_DELIVERY=true` nicht gesetzt ist.
-- Eine initiale SQL-Migration liegt unter `prisma/migrations/202603231440_init/migration.sql`.
-- Lokale Entwicklung nutzt bewusst Port `55432`, damit bereits laufende lokale Postgres-Instanzen nicht kollidieren.
+Oder ueber das interaktive Menue: `.\abgleich\crm-deploy.ps1`

@@ -36,11 +36,42 @@ function Start-DevServices {
     Pause
 }
 
+function Start-DevDocker {
+    Set-Location $repoRoot
+    Info "Starte Dev-Umgebung (Watch-Modus, detached)..."
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+    if ($LASTEXITCODE -eq 0) {
+        Ok "Dev-Stack laeuft.  Web: http://localhost:3800  API: http://localhost:3801/api"
+    } else {
+        Err "Konnte Dev-Stack nicht starten."
+    }
+    Pause
+}
+
+function Stop-DevDocker {
+    Set-Location $repoRoot
+    Info "Stoppe Dev-Docker-Stack..."
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml down
+    if ($LASTEXITCODE -eq 0) {
+        Ok "Dev-Stack gestoppt."
+    } else {
+        Err "Konnte Dev-Stack nicht stoppen."
+    }
+    Pause
+}
+
+function Show-DevLogs {
+    Set-Location $repoRoot
+    Info "Zeige Dev-Logs (Ctrl+C zum Beenden)..."
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f
+}
+
 function Start-FullStack {
     Set-Location $repoRoot
-    docker compose up -d --build
+    Info "Starte produktiven Docker-Stack (gebaut, kein Watch)..."
+    docker compose -f docker-compose.yml up -d --build
     if ($LASTEXITCODE -eq 0) {
-        Ok "Kompletter Docker-Stack laeuft."
+        Ok "Kompletter Docker-Stack laeuft (Produktion)."
     } else {
         Err "Konnte den kompletten Docker-Stack nicht starten."
     }
@@ -146,7 +177,8 @@ function Git-Workflow {
     Write-Host "2  Git Add ."
     Write-Host "3  Git Commit"
     Write-Host "4  Git Push"
-    Write-Host "5  Back"
+    Write-Host "5  Version erstellen"
+    Write-Host "6  Back"
     Write-Host ""
 
     $choice = Read-Host "Select option"
@@ -170,7 +202,17 @@ function Git-Workflow {
             git push
             Pause
         }
-        "5" { return }
+        "5" {
+            $tag = Read-Host "Versions-Tag (z. B. v0.1.0)"
+            if (-not [string]::IsNullOrWhiteSpace($tag)) {
+                git tag $tag
+                if ($LASTEXITCODE -eq 0) {
+                    git push origin $tag
+                }
+            }
+            Pause
+        }
+        "6" { return }
         default {
             Warn "Ungueltige Auswahl."
             Pause
@@ -182,6 +224,9 @@ if ($Command) {
     switch ($Command.ToLower()) {
         "env-check" { Run-EnvCheck; exit 0 }
         "dev-services" { Start-DevServices; exit 0 }
+        "dev-docker" { Start-DevDocker; exit 0 }
+        "dev-docker-stop" { Stop-DevDocker; exit 0 }
+        "dev-docker-logs" { Show-DevLogs; exit 0 }
         "docker-full" { Start-FullStack; exit 0 }
         "migrate" { Run-Migrate; exit 0 }
         "seed" { Run-Seed; exit 0 }
@@ -205,15 +250,18 @@ while ($true) {
     Write-Host ("Aktuelle Umgebung: {0}" -f $Env)
     Write-Host ""
     Write-Host "1  Environment Check            - Docker, pnpm, API, Web, Container"
-    Write-Host "2  Start Dev Services           - Startet Postgres + MinIO"
-    Write-Host "3  Start Full Docker Stack      - Startet Web + API + Postgres + MinIO"
-    Write-Host "4  Run DB Migration             - pnpm db:migrate"
-    Write-Host "5  Run DB Seed                  - pnpm db:seed"
-    Write-Host "6  Create DB Dump               - SQL-Dump aus crm-postgres"
-    Write-Host "7  Restore DB Dump              - Dump in crm_monteur einspielen"
-    Write-Host "8  Deploy to TEST Server        - Deploy nach crm.vivahome.de"
-    Write-Host "9  Live Status Dashboard        - Laufende Statusansicht"
-    Write-Host "10 Git Workflow                 - Status/Add/Commit/Push"
+    Write-Host "2  Start Dev Services           - Nur Postgres + MinIO (nativer Dev)"
+    Write-Host "3  Start Dev Docker Stack       - Komplett in Docker mit Hot-Reload"
+    Write-Host "4  Stop Dev Docker Stack        - Dev-Stack stoppen"
+    Write-Host "5  Dev Docker Logs              - Live-Logs aller Dev-Container"
+    Write-Host "6  Start Prod Docker Stack      - Produktiv-Build (Test-Server)"
+    Write-Host "7  Run DB Migration             - pnpm db:migrate"
+    Write-Host "8  Run DB Seed                  - pnpm db:seed"
+    Write-Host "9  Create DB Dump               - SQL-Dump aus crm-postgres"
+    Write-Host "10 Restore DB Dump              - Dump in crm_monteur einspielen"
+    Write-Host "11 Deploy to TEST Server        - Deploy nach crm.vivahome.de"
+    Write-Host "12 Live Status Dashboard        - Laufende Statusansicht"
+    Write-Host "13 Git Workflow                 - Status/Add/Commit/Push"
     Write-Host "20 Exit"
     Write-Host ""
 
@@ -221,14 +269,17 @@ while ($true) {
     switch ($choice) {
         "1" { Run-EnvCheck }
         "2" { Start-DevServices }
-        "3" { Start-FullStack }
-        "4" { Run-Migrate }
-        "5" { Run-Seed }
-        "6" { Run-Dump }
-        "7" { Run-Restore }
-        "8" { Run-Deploy }
-        "9" { Show-Status }
-        "10" { Git-Workflow }
+        "3" { Start-DevDocker }
+        "4" { Stop-DevDocker }
+        "5" { Show-DevLogs }
+        "6" { Start-FullStack }
+        "7" { Run-Migrate }
+        "8" { Run-Seed }
+        "9" { Run-Dump }
+        "10" { Run-Restore }
+        "11" { Run-Deploy }
+        "12" { Show-Status }
+        "13" { Git-Workflow }
         "20" { exit 0 }
         default {
             Warn "Ungueltige Auswahl."

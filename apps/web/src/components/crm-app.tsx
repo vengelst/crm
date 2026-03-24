@@ -278,6 +278,7 @@ type DocumentFormState = {
 };
 
 type DocumentPreviewState = {
+  documentId: string;
   url: string;
   mimeType: string;
   title: string;
@@ -458,15 +459,17 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
       if (!response.ok) {
         const fallback = `API-Fehler ${response.status}`;
+        let message = fallback;
         try {
           const body = (await response.json()) as { message?: string | string[] };
-          const message = Array.isArray(body.message)
+          const parsed = Array.isArray(body.message)
             ? body.message.join(", ")
             : body.message;
-          throw new Error(message || fallback);
+          if (parsed) message = parsed;
         } catch {
-          throw new Error(fallback);
+          // response not JSON – keep fallback
         }
+        throw new Error(message);
       }
 
       if (response.status === 204) {
@@ -641,12 +644,14 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   async function handleCustomerSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await runMutation(async () => {
+      const { id: _id, ...formWithoutId } = customerForm;
       const payload = sanitizeForApi({
-        ...customerForm,
-        branches: customerForm.branches.map((branch) => ({
+        ...formWithoutId,
+        branches: customerForm.branches.map(({ id: _branchId, ...branch }) => ({
           ...branch,
           active: branch.active ?? true,
         })),
+        contacts: customerForm.contacts.map(({ id: _contactId, ...contact }) => contact),
       });
 
       if (customerForm.id) {
@@ -670,8 +675,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   async function handleProjectSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await runMutation(async () => {
+      const { id: _id, ...formWithoutId } = projectForm;
       const payload = sanitizeForApi({
-        ...projectForm,
+        ...formWithoutId,
         priority: Number(projectForm.priority) || 0,
         branchId: projectForm.branchId || undefined,
         plannedStartDate: projectForm.plannedStartDate || undefined,
@@ -699,8 +705,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   async function handleWorkerSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await runMutation(async () => {
+      const { id: _id, ...formWithoutId } = workerForm;
       const payload = sanitizeForApi({
-        ...workerForm,
+        ...formWithoutId,
         phone: workerForm.phoneMobile || undefined,
         pin: workerForm.pin || undefined,
       });
@@ -804,19 +811,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
   async function handleDownloadDocument(documentId: string, filename: string) {
     try {
-      const response = await fetch(`${API_ROOT}/api/documents/${documentId}/download`, {
-        headers: auth?.accessToken
-          ? {
-              Authorization: `Bearer ${auth.accessToken}`,
-            }
-          : undefined,
-      });
-
-      if (!response.ok) {
-        throw new Error("Download fehlgeschlagen.");
-      }
-
-      const blob = await response.blob();
+      const blob = await fetchDocumentBlob(documentId);
       const url = window.URL.createObjectURL(blob);
       const link = window.document.createElement("a");
       link.href = url;
@@ -830,19 +825,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
   async function handleOpenDocument(document: DocumentItem) {
     try {
-      const response = await fetch(`${API_ROOT}/api/documents/${document.id}/download`, {
-        headers: auth?.accessToken
-          ? {
-              Authorization: `Bearer ${auth.accessToken}`,
-            }
-          : undefined,
-      });
-
-      if (!response.ok) {
-        throw new Error("Dokument konnte nicht geladen werden.");
-      }
-
-      const blob = await response.blob();
+      const blob = await fetchDocumentBlob(document.id);
       const url = window.URL.createObjectURL(blob);
 
       setDocumentPreview((current) => {
@@ -851,6 +834,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         }
 
         return {
+          documentId: document.id,
           url,
           mimeType: document.mimeType,
           title: document.title || document.originalFilename,
@@ -863,6 +847,60 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
           : "Dokument konnte nicht geladen werden.",
       );
     }
+  }
+
+  async function handlePrintDocument(document: DocumentItem) {
+    await handlePrintDocumentById(document.id);
+  }
+
+  async function handlePrintDocumentById(documentId: string) {
+    try {
+      const blob = await fetchDocumentBlob(documentId);
+      const url = window.URL.createObjectURL(blob);
+      const iframe = window.document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      iframe.src = url;
+      iframe.onload = () => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        window.setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          iframe.remove();
+        }, 2000);
+      };
+      window.document.body.appendChild(iframe);
+    } catch (printError) {
+      setError(printError instanceof Error ? printError.message : "Druck fehlgeschlagen.");
+    }
+  }
+
+  async function fetchDocumentBlob(documentId: string) {
+    const response = await fetch(`${API_ROOT}/api/documents/${documentId}/download`, {
+      headers: auth?.accessToken
+        ? {
+            Authorization: `Bearer ${auth.accessToken}`,
+          }
+        : undefined,
+    });
+
+    if (!response.ok) {
+      let message = "Dokument konnte nicht geladen werden.";
+      try {
+        const body = (await response.json()) as { message?: string | string[] };
+        const parsed = Array.isArray(body.message) ? body.message.join(", ") : body.message;
+        if (parsed) message = parsed;
+      } catch {
+        // response not JSON – keep default
+      }
+      throw new Error(message);
+    }
+
+    return response.blob();
   }
 
   async function runMutation(work: () => Promise<void>) {
@@ -983,371 +1021,417 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         {section === "customers" ? (
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             <SectionCard
-              title={selectedCustomer ? "Kunde geoeffnet" : "Kundenliste"}
-              subtitle="Klick auf den Kundentitel oeffnet die Kundenseite."
+              title={selectedCustomer ? "Kunde Detail" : "Kundenliste"}
+              subtitle={
+                selectedCustomer
+                  ? "Details, Dokumente und Ansprechpartner des gewaehlten Kunden."
+                  : "Klick auf den Kundentitel oeffnet die Kundenseite."
+              }
+              bordered={false}
             >
               {selectedCustomer ? (
                 <CustomerDetailCard
                   customer={selectedCustomer}
+                  customerProjects={projects.filter((p) => p.customerId === selectedCustomer.id)}
                   documents={filterDocuments(documents, "CUSTOMER", selectedCustomer.id)}
                   onOpenDocument={handleOpenDocument}
+                  onPrintDocument={handlePrintDocument}
                   onDownload={handleDownloadDocument}
                   onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, "Dokument")}
                   documentForm={documentForm}
                   setDocumentForm={setDocumentForm}
+                  authToken={auth.accessToken}
                   onUpload={() => void handleDocumentUpload("CUSTOMER", selectedCustomer.id)}
                 />
               ) : null}
-              <EntityList
-                items={customers}
-                title={(item) => item.companyName}
-                subtitle={(item) => item.customerNumber}
-                href={(item) => `/customers/${item.id}`}
-                editLabel="Bearbeiten"
-                deleteLabel="Loeschen"
-                onEdit={(item) => setCustomerForm(mapCustomerToForm(item))}
-                onDelete={(item) => void handleDelete(`/customers/${item.id}`, "Kunde")}
-              />
+              {selectedCustomer ? null : (
+                <EntityList
+                  items={customers}
+                  title={(item) => item.companyName}
+                  subtitle={(item) => item.customerNumber}
+                  href={(item) => `/customers/${item.id}`}
+                  editLabel="Bearbeiten"
+                  deleteLabel="Loeschen"
+                  onEdit={(item) => setCustomerForm(mapCustomerToForm(item))}
+                  onDelete={(item) => void handleDelete(`/customers/${item.id}`, "Kunde")}
+                />
+              )}
             </SectionCard>
 
-            <SectionCard
-              title={customerForm.id ? "Kunde bearbeiten" : "Neuen Kunden anlegen"}
-              subtitle="Niederlassungen und Ansprechpartner werden direkt mit dem Kunden gepflegt."
-            >
-              <form className="grid gap-4" onSubmit={handleCustomerSubmit}>
-                <FormRow>
-                  <Field
-                    label="Kundennummer"
-                    value={customerForm.customerNumber}
+            <form className="grid gap-5" onSubmit={handleCustomerSubmit}>
+              {/* ── Stammdaten-Karte ─────────────────────────── */}
+              <section className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
+                <div className="mb-4">
+                  <h2 className="text-xl font-semibold">
+                    {customerForm.id ? "Kunde bearbeiten" : "Neuen Kunden anlegen"}
+                  </h2>
+                  <p className="text-sm text-slate-500">Stammdaten und Adresse</p>
+                </div>
+                <div className="grid gap-4">
+                  <FormRow>
+                    <Field
+                      label="Kundennummer"
+                      value={customerForm.customerNumber}
+                      onChange={(event) =>
+                        setCustomerForm((current) => ({
+                          ...current,
+                          customerNumber: event.target.value,
+                        }))
+                      }
+                    />
+                    <Field
+                      label="Firmenname"
+                      value={customerForm.companyName}
+                      onChange={(event) =>
+                        setCustomerForm((current) => ({
+                          ...current,
+                          companyName: event.target.value,
+                        }))
+                      }
+                    />
+                  </FormRow>
+                  <FormRow>
+                    <Field
+                      label="E-Mail"
+                      value={customerForm.email}
+                      onChange={(event) =>
+                        setCustomerForm((current) => ({
+                          ...current,
+                          email: event.target.value,
+                        }))
+                      }
+                    />
+                    <Field
+                      label="Telefon"
+                      value={customerForm.phone}
+                      onChange={(event) =>
+                        setCustomerForm((current) => ({
+                          ...current,
+                          phone: event.target.value,
+                        }))
+                      }
+                    />
+                  </FormRow>
+                  <FormRow>
+                    <Field
+                      label="Strasse und Hausnummer"
+                      value={customerForm.addressLine1}
+                      onChange={(event) =>
+                        setCustomerForm((current) => ({
+                          ...current,
+                          addressLine1: event.target.value,
+                        }))
+                      }
+                    />
+                    <Field
+                      label="Adresszusatz"
+                      value={customerForm.addressLine2}
+                      onChange={(event) =>
+                        setCustomerForm((current) => ({
+                          ...current,
+                          addressLine2: event.target.value,
+                        }))
+                      }
+                    />
+                  </FormRow>
+                  <FormRow>
+                    <Field
+                      label="PLZ"
+                      value={customerForm.postalCode}
+                      onChange={(event) =>
+                        setCustomerForm((current) => ({
+                          ...current,
+                          postalCode: event.target.value,
+                        }))
+                      }
+                    />
+                    <Field
+                      label="Ort"
+                      value={customerForm.city}
+                      onChange={(event) =>
+                        setCustomerForm((current) => ({
+                          ...current,
+                          city: event.target.value,
+                        }))
+                      }
+                    />
+                  </FormRow>
+                  <FormRow>
+                    <Field
+                      label="Land"
+                      value={customerForm.country}
+                      onChange={(event) =>
+                        setCustomerForm((current) => ({
+                          ...current,
+                          country: event.target.value,
+                        }))
+                      }
+                    />
+                    <SelectField
+                      label="Status"
+                      value={customerForm.status}
+                      onChange={(event) =>
+                        setCustomerForm((current) => ({
+                          ...current,
+                          status: event.target.value,
+                        }))
+                      }
+                      options={[
+                        { value: "ACTIVE", label: "Aktiv" },
+                        { value: "INACTIVE", label: "Inaktiv" },
+                      ]}
+                    />
+                  </FormRow>
+                  <TextArea
+                    label="Notizen"
+                    value={customerForm.notes}
                     onChange={(event) =>
                       setCustomerForm((current) => ({
                         ...current,
-                        customerNumber: event.target.value,
+                        notes: event.target.value,
                       }))
                     }
                   />
-                  <Field
-                    label="Firmenname"
-                    value={customerForm.companyName}
-                    onChange={(event) =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        companyName: event.target.value,
-                      }))
-                    }
-                  />
-                </FormRow>
-                <FormRow>
-                  <Field
-                    label="E-Mail"
-                    value={customerForm.email}
-                    onChange={(event) =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        email: event.target.value,
-                      }))
-                    }
-                  />
-                  <Field
-                    label="Telefon"
-                    value={customerForm.phone}
-                    onChange={(event) =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        phone: event.target.value,
-                      }))
-                    }
-                  />
-                </FormRow>
-                <FormRow>
-                  <Field
-                    label="Strasse und Hausnummer"
-                    value={customerForm.addressLine1}
-                    onChange={(event) =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        addressLine1: event.target.value,
-                      }))
-                    }
-                  />
-                  <Field
-                    label="Adresszusatz"
-                    value={customerForm.addressLine2}
-                    onChange={(event) =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        addressLine2: event.target.value,
-                      }))
-                    }
-                  />
-                </FormRow>
-                <FormRow>
-                  <Field
-                    label="PLZ"
-                    value={customerForm.postalCode}
-                    onChange={(event) =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        postalCode: event.target.value,
-                      }))
-                    }
-                  />
-                  <Field
-                    label="Ort"
-                    value={customerForm.city}
-                    onChange={(event) =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        city: event.target.value,
-                      }))
-                    }
-                  />
-                </FormRow>
-                <FormRow>
-                  <Field
-                    label="Land"
-                    value={customerForm.country}
-                    onChange={(event) =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        country: event.target.value,
-                      }))
-                    }
-                  />
-                  <SelectField
-                    label="Status"
-                    value={customerForm.status}
-                    onChange={(event) =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        status: event.target.value,
-                      }))
-                    }
-                    options={[
-                      { value: "ACTIVE", label: "Aktiv" },
-                      { value: "INACTIVE", label: "Inaktiv" },
-                    ]}
-                  />
-                </FormRow>
-                <TextArea
-                  label="Notizen"
-                  value={customerForm.notes}
-                  onChange={(event) =>
-                    setCustomerForm((current) => ({
-                      ...current,
-                      notes: event.target.value,
-                    }))
-                  }
-                />
+                </div>
+              </section>
 
-                <NestedBlock
-                  title="Niederlassungen"
-                  onAdd={() =>
-                    setCustomerForm((current) => ({
-                      ...current,
-                      branches: [
-                        ...current.branches,
-                        { name: "", city: "", country: "DE", active: true },
-                      ],
-                    }))
-                  }
-                >
-                  {customerForm.branches.map((branch, index) => (
-                    <div
-                      key={`${branch.id ?? "new"}-${index}`}
-                      className="grid gap-3 rounded-2xl border border-black/10 p-3 dark:border-white/10"
-                    >
-                      <FormRow>
-                        <Field
-                          label="Name"
-                          value={branch.name}
-                          onChange={(event) =>
-                            updateBranch(index, { name: event.target.value })
-                          }
-                        />
-                        <Field
-                          label="Ort"
-                          value={branch.city ?? ""}
-                          onChange={(event) =>
-                            updateBranch(index, { city: event.target.value })
-                          }
-                        />
-                      </FormRow>
-                      <FormRow>
-                        <Field
-                          label="Strasse und Hausnummer"
-                          value={branch.addressLine1 ?? ""}
-                          onChange={(event) =>
-                            updateBranch(index, { addressLine1: event.target.value })
-                          }
-                        />
-                        <Field
-                          label="Adresszusatz"
-                          value={branch.addressLine2 ?? ""}
-                          onChange={(event) =>
-                            updateBranch(index, { addressLine2: event.target.value })
-                          }
-                        />
-                      </FormRow>
-                      <FormRow>
-                        <Field
-                          label="PLZ"
-                          value={branch.postalCode ?? ""}
-                          onChange={(event) =>
-                            updateBranch(index, { postalCode: event.target.value })
-                          }
-                        />
-                        <Field
-                          label="Land"
-                          value={branch.country ?? ""}
-                          onChange={(event) =>
-                            updateBranch(index, { country: event.target.value })
-                          }
-                        />
-                      </FormRow>
-                      <FormRow>
-                        <Field
-                          label="Telefon"
-                          value={branch.phone ?? ""}
-                          onChange={(event) =>
-                            updateBranch(index, { phone: event.target.value })
-                          }
-                        />
-                        <Field
-                          label="E-Mail"
-                          value={branch.email ?? ""}
-                          onChange={(event) =>
-                            updateBranch(index, { email: event.target.value })
-                          }
-                        />
-                      </FormRow>
-                      <div className="flex justify-end">
-                        <SecondaryButton onClick={() => removeBranch(index)}>
-                          Entfernen
-                        </SecondaryButton>
-                      </div>
-                    </div>
-                  ))}
-                </NestedBlock>
-
-                <NestedBlock
-                  title="Ansprechpartner"
-                  onAdd={() =>
-                    setCustomerForm((current) => ({
-                      ...current,
-                      contacts: [
-                        ...current.contacts,
-                        { firstName: "", lastName: "", branchId: "", branchName: "" },
-                      ],
-                    }))
-                  }
-                >
-                  {customerForm.contacts.map((contact, index) => (
-                    <div
-                      key={`${contact.id ?? "new"}-${index}`}
-                      className="grid gap-3 rounded-2xl border border-black/10 p-3 dark:border-white/10"
-                    >
-                      <FormRow>
-                        <Field
-                          label="Vorname"
-                          value={contact.firstName}
-                          onChange={(event) =>
-                            updateContact(index, { firstName: event.target.value })
-                          }
-                        />
-                        <Field
-                          label="Nachname"
-                          value={contact.lastName}
-                          onChange={(event) =>
-                            updateContact(index, { lastName: event.target.value })
-                          }
-                        />
-                      </FormRow>
-                      <FormRow>
-                        <Field
-                          label="E-Mail"
-                          value={contact.email ?? ""}
-                          onChange={(event) =>
-                            updateContact(index, { email: event.target.value })
-                          }
-                        />
-                        <SelectField
-                          label="Niederlassung"
-                          value={
-                            contact.branchId
-                              ? `id:${contact.branchId}`
-                              : contact.branchName
-                                ? `name:${contact.branchName}`
-                                : ""
-                          }
-                          onChange={(event) => {
-                            const value = event.target.value;
-
-                            if (!value) {
-                              updateContact(index, {
-                                branchId: undefined,
-                                branchName: undefined,
-                              });
-                              return;
-                            }
-
-                            if (value.startsWith("id:")) {
-                              updateContact(index, {
-                                branchId: value.slice(3),
-                                branchName: undefined,
-                              });
-                              return;
-                            }
-
-                            updateContact(index, {
-                              branchId: undefined,
-                              branchName: value.slice(5),
-                            });
-                          }}
-                          options={[
-                            { value: "", label: "Hauptfirma" },
-                            ...customerForm.branches.map((branch) => ({
-                              value: branch.id ? `id:${branch.id}` : `name:${branch.name}`,
-                              label: branch.name,
-                            })),
-                          ]}
-                        />
-                      </FormRow>
-                      <FormRow>
-                        <Field
-                          label="Mobil"
-                          value={contact.phoneMobile ?? ""}
-                          onChange={(event) =>
-                            updateContact(index, { phoneMobile: event.target.value })
-                          }
-                        />
-                        <Field
-                          label="Buero"
-                          value={contact.phoneLandline ?? ""}
-                          onChange={(event) =>
-                            updateContact(index, { phoneLandline: event.target.value })
-                          }
-                        />
-                      </FormRow>
-                      <div className="flex justify-end">
-                        <SecondaryButton onClick={() => removeContact(index)}>
-                          Entfernen
-                        </SecondaryButton>
-                      </div>
-                    </div>
-                  ))}
-                </NestedBlock>
-
-                <div className="flex gap-3">
-                  <PrimaryButton disabled={submitting}>
-                    {submitting ? "Speichert ..." : "Kunde speichern"}
-                  </PrimaryButton>
-                  <SecondaryButton onClick={() => setCustomerForm(emptyCustomerForm())}>
-                    Zuruecksetzen
+              {/* ── Niederlassungen-Karte ────────────────────── */}
+              <section className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold">Niederlassungen</h2>
+                    <p className="text-sm text-slate-500">Standorte und Filialen des Kunden</p>
+                  </div>
+                  <SecondaryButton
+                    onClick={() =>
+                      setCustomerForm((current) => ({
+                        ...current,
+                        branches: [
+                          ...current.branches,
+                          { name: "", city: "", country: "DE", active: true },
+                        ],
+                      }))
+                    }
+                  >
+                    Hinzufuegen
                   </SecondaryButton>
                 </div>
-              </form>
-            </SectionCard>
+                <div className="grid gap-3">
+                  {customerForm.branches.length === 0 ? (
+                    <p className="text-sm text-slate-500">Noch keine Niederlassungen angelegt.</p>
+                  ) : (
+                    customerForm.branches.map((branch, index) => (
+                      <div
+                        key={`${branch.id ?? "new"}-${index}`}
+                        className="grid gap-3 rounded-2xl bg-slate-50/70 p-4 dark:bg-slate-950/40"
+                      >
+                        <FormRow>
+                          <Field
+                            label="Name"
+                            value={branch.name}
+                            onChange={(event) =>
+                              updateBranch(index, { name: event.target.value })
+                            }
+                          />
+                          <Field
+                            label="Ort"
+                            value={branch.city ?? ""}
+                            onChange={(event) =>
+                              updateBranch(index, { city: event.target.value })
+                            }
+                          />
+                        </FormRow>
+                        <FormRow>
+                          <Field
+                            label="Strasse und Hausnummer"
+                            value={branch.addressLine1 ?? ""}
+                            onChange={(event) =>
+                              updateBranch(index, { addressLine1: event.target.value })
+                            }
+                          />
+                          <Field
+                            label="Adresszusatz"
+                            value={branch.addressLine2 ?? ""}
+                            onChange={(event) =>
+                              updateBranch(index, { addressLine2: event.target.value })
+                            }
+                          />
+                        </FormRow>
+                        <FormRow>
+                          <Field
+                            label="PLZ"
+                            value={branch.postalCode ?? ""}
+                            onChange={(event) =>
+                              updateBranch(index, { postalCode: event.target.value })
+                            }
+                          />
+                          <Field
+                            label="Land"
+                            value={branch.country ?? ""}
+                            onChange={(event) =>
+                              updateBranch(index, { country: event.target.value })
+                            }
+                          />
+                        </FormRow>
+                        <FormRow>
+                          <Field
+                            label="Telefon"
+                            value={branch.phone ?? ""}
+                            onChange={(event) =>
+                              updateBranch(index, { phone: event.target.value })
+                            }
+                          />
+                          <Field
+                            label="E-Mail"
+                            value={branch.email ?? ""}
+                            onChange={(event) =>
+                              updateBranch(index, { email: event.target.value })
+                            }
+                          />
+                        </FormRow>
+                        <div className="flex justify-end">
+                          <SecondaryButton onClick={() => removeBranch(index)}>
+                            Entfernen
+                          </SecondaryButton>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              {/* ── Ansprechpartner-Karte ────────────────────── */}
+              <section className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold">Ansprechpartner</h2>
+                    <p className="text-sm text-slate-500">Kontaktpersonen des Kunden</p>
+                  </div>
+                  <SecondaryButton
+                    onClick={() =>
+                      setCustomerForm((current) => ({
+                        ...current,
+                        contacts: [
+                          ...current.contacts,
+                          { firstName: "", lastName: "", branchId: "", branchName: "" },
+                        ],
+                      }))
+                    }
+                  >
+                    Hinzufuegen
+                  </SecondaryButton>
+                </div>
+                <div className="grid gap-3">
+                  {customerForm.contacts.length === 0 ? (
+                    <p className="text-sm text-slate-500">Noch keine Ansprechpartner angelegt.</p>
+                  ) : (
+                    customerForm.contacts.map((contact, index) => (
+                      <div
+                        key={`${contact.id ?? "new"}-${index}`}
+                        className="grid gap-3 rounded-2xl bg-slate-50/70 p-4 dark:bg-slate-950/40"
+                      >
+                        <FormRow>
+                          <Field
+                            label="Vorname"
+                            value={contact.firstName}
+                            onChange={(event) =>
+                              updateContact(index, { firstName: event.target.value })
+                            }
+                          />
+                          <Field
+                            label="Nachname"
+                            value={contact.lastName}
+                            onChange={(event) =>
+                              updateContact(index, { lastName: event.target.value })
+                            }
+                          />
+                        </FormRow>
+                        <FormRow>
+                          <Field
+                            label="E-Mail"
+                            value={contact.email ?? ""}
+                            onChange={(event) =>
+                              updateContact(index, { email: event.target.value })
+                            }
+                          />
+                          <SelectField
+                            label="Niederlassung"
+                            value={
+                              contact.branchId
+                                ? `id:${contact.branchId}`
+                                : contact.branchName
+                                  ? `name:${contact.branchName}`
+                                  : ""
+                            }
+                            onChange={(event) => {
+                              const value = event.target.value;
+
+                              if (!value) {
+                                updateContact(index, {
+                                  branchId: undefined,
+                                  branchName: undefined,
+                                });
+                                return;
+                              }
+
+                              if (value.startsWith("id:")) {
+                                updateContact(index, {
+                                  branchId: value.slice(3),
+                                  branchName: undefined,
+                                });
+                                return;
+                              }
+
+                              updateContact(index, {
+                                branchId: undefined,
+                                branchName: value.slice(5),
+                              });
+                            }}
+                            options={[
+                              { value: "", label: "Hauptfirma" },
+                              ...customerForm.branches.map((branch) => ({
+                                value: branch.id ? `id:${branch.id}` : `name:${branch.name}`,
+                                label: branch.name,
+                              })),
+                            ]}
+                          />
+                        </FormRow>
+                        <FormRow>
+                          <Field
+                            label="Mobil"
+                            value={contact.phoneMobile ?? ""}
+                            onChange={(event) =>
+                              updateContact(index, { phoneMobile: event.target.value })
+                            }
+                          />
+                          <Field
+                            label="Buero"
+                            value={contact.phoneLandline ?? ""}
+                            onChange={(event) =>
+                              updateContact(index, { phoneLandline: event.target.value })
+                            }
+                          />
+                        </FormRow>
+                        <div className="flex justify-end">
+                          <SecondaryButton onClick={() => removeContact(index)}>
+                            Entfernen
+                          </SecondaryButton>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              <div className="flex gap-3">
+                <PrimaryButton disabled={submitting}>
+                  {submitting ? "Speichert ..." : "Kunde speichern"}
+                </PrimaryButton>
+                <SecondaryButton onClick={() => setCustomerForm(emptyCustomerForm())}>
+                  Zuruecksetzen
+                </SecondaryButton>
+              </div>
+            </form>
           </div>
         ) : null}
 
@@ -1362,10 +1446,12 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   project={selectedProject}
                   documents={filterDocuments(documents, "PROJECT", selectedProject.id)}
                   onOpenDocument={handleOpenDocument}
+                  onPrintDocument={handlePrintDocument}
                   onDownload={handleDownloadDocument}
                   onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, "Dokument")}
                   documentForm={documentForm}
                   setDocumentForm={setDocumentForm}
+                  authToken={auth.accessToken}
                   onUpload={() => void handleDocumentUpload("PROJECT", selectedProject.id)}
                 />
               ) : null}
@@ -1578,10 +1664,12 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   worker={selectedWorker}
                   documents={filterDocuments(documents, "WORKER", selectedWorker.id)}
                   onOpenDocument={handleOpenDocument}
+                  onPrintDocument={handlePrintDocument}
                   onDownload={handleDownloadDocument}
                   onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, "Dokument")}
                   documentForm={documentForm}
                   setDocumentForm={setDocumentForm}
+                  authToken={auth.accessToken}
                   onUpload={() => void handleDocumentUpload("WORKER", selectedWorker.id)}
                 />
               ) : null}
@@ -1939,6 +2027,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       {documentPreview ? (
         <DocumentPreviewModal
           preview={documentPreview}
+          onPrint={() => void handlePrintDocumentById(documentPreview.documentId)}
           onClose={() => {
             window.URL.revokeObjectURL(documentPreview.url);
             setDocumentPreview(null);
@@ -2200,13 +2289,20 @@ function SectionCard({
   title,
   subtitle,
   children,
+  bordered = true,
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
+  bordered?: boolean;
 }) {
   return (
-    <section className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
+    <section
+      className={cx(
+        "rounded-3xl bg-white/80 p-5 shadow-sm dark:bg-slate-900/80",
+        bordered && "border border-black/10 dark:border-white/10",
+      )}
+    >
       <div className="mb-4">
         <h2 className="text-xl font-semibold">{title}</h2>
         {subtitle ? <p className="text-sm text-slate-500">{subtitle}</p> : null}
@@ -2385,21 +2481,27 @@ function EntityList<T extends { id: string }>({
 
 function CustomerDetailCard({
   customer,
+  customerProjects,
   documents,
   onOpenDocument,
+  onPrintDocument,
   onDownload,
   onDeleteDocument,
   documentForm,
   setDocumentForm,
+  authToken,
   onUpload,
 }: {
   customer: Customer;
+  customerProjects: Project[];
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
+  onPrintDocument: (document: DocumentItem) => void;
   onDownload: (documentId: string, filename: string) => void;
   onDeleteDocument: (documentId: string) => void;
   documentForm: DocumentFormState;
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
+  authToken: string;
   onUpload: () => void;
 }) {
   const customerMapsUrl = mapsUrlFromParts([
@@ -2411,92 +2513,168 @@ function CustomerDetailCard({
     customer.country,
   ]);
 
+  const statusLabel = (status?: string) => {
+    switch (status) {
+      case "DRAFT": return "Entwurf";
+      case "PLANNED": return "Geplant";
+      case "ACTIVE": return "Aktiv";
+      case "PAUSED": return "Pausiert";
+      case "COMPLETED": return "Abgeschlossen";
+      case "CANCELED": return "Storniert";
+      default: return status ?? "-";
+    }
+  };
+
+  const statusColor = (status?: string) => {
+    switch (status) {
+      case "ACTIVE": return "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300";
+      case "COMPLETED": return "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300";
+      case "PAUSED": return "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300";
+      case "CANCELED": return "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300";
+      default: return "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300";
+    }
+  };
+
   return (
-    <div className="grid gap-4 rounded-2xl border border-black/10 p-4 dark:border-white/10">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-semibold">{customer.companyName}</h3>
-          <p className="text-sm text-slate-500">{customer.customerNumber}</p>
+    <div className="grid gap-5">
+      {/* ── Stammdaten ─────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">{customer.companyName}</h3>
+            <p className="text-sm text-slate-500">{customer.customerNumber}</p>
+          </div>
+          {customerMapsUrl ? <MapLinkButton href={customerMapsUrl}>Google Maps</MapLinkButton> : null}
         </div>
-        {customerMapsUrl ? <MapLinkButton href={customerMapsUrl}>Google Maps</MapLinkButton> : null}
+        <div className="grid gap-1 text-sm text-slate-500">
+          <div>{formatAddress([customer.addressLine1, customer.addressLine2, customer.postalCode, customer.city, customer.country]) || "Keine Adresse hinterlegt."}</div>
+          <div>{customer.email ?? "Keine E-Mail"} · {customer.phone ?? "Kein Telefon"}</div>
+        </div>
       </div>
-      <div className="grid gap-1 text-sm text-slate-500">
-        <div>{formatAddress([customer.addressLine1, customer.addressLine2, customer.postalCode, customer.city, customer.country]) || "Keine Adresse hinterlegt."}</div>
-        <div>{customer.email ?? "Keine E-Mail"} · {customer.phone ?? "Kein Telefon"}</div>
-      </div>
-      <div className="grid gap-3">
-        <h4 className="font-medium">Niederlassungen</h4>
+
+      {/* ── Niederlassungen ────────────────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h4 className="mb-3 text-base font-semibold">Niederlassungen</h4>
         {customer.branches.length === 0 ? (
           <p className="text-sm text-slate-500">Keine Niederlassungen vorhanden.</p>
         ) : (
-          customer.branches.map((branch, index) => {
-            const branchMapsUrl = mapsUrlFromParts([
-              branch.name,
-              branch.addressLine1,
-              branch.addressLine2,
-              branch.postalCode,
-              branch.city,
-              branch.country,
-            ]);
+          <div className="grid gap-2">
+            {customer.branches.map((branch, index) => {
+              const branchMapsUrl = mapsUrlFromParts([
+                branch.name,
+                branch.addressLine1,
+                branch.addressLine2,
+                branch.postalCode,
+                branch.city,
+                branch.country,
+              ]);
 
-            return (
-              <div
-                key={`${branch.id ?? branch.name}-${index}`}
-                className="grid gap-2 rounded-2xl border border-black/10 p-3 dark:border-white/10"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="font-medium">{branch.name}</div>
-                  {branchMapsUrl ? (
-                    <MapLinkButton href={branchMapsUrl}>Google Maps</MapLinkButton>
-                  ) : null}
+              return (
+                <div
+                  key={`${branch.id ?? branch.name}-${index}`}
+                  className="grid gap-2 rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="font-medium">{branch.name}</div>
+                    {branchMapsUrl ? (
+                      <MapLinkButton href={branchMapsUrl}>Google Maps</MapLinkButton>
+                    ) : null}
+                  </div>
+                  <div className="text-sm text-slate-500">
+                    {formatAddress([
+                      branch.addressLine1,
+                      branch.addressLine2,
+                      branch.postalCode,
+                      branch.city,
+                      branch.country,
+                    ]) || "Keine Adresse"}
+                  </div>
+                  <div className="text-sm text-slate-500">
+                    {branch.phone || "Kein Telefon"} · {branch.email || "Keine E-Mail"}
+                  </div>
                 </div>
-                <div className="text-sm text-slate-500">
-                  {formatAddress([
-                    branch.addressLine1,
-                    branch.addressLine2,
-                    branch.postalCode,
-                    branch.city,
-                    branch.country,
-                  ]) || "Keine Adresse"}
-                </div>
-                <div className="text-sm text-slate-500">
-                  {branch.phone || "Kein Telefon"} · {branch.email || "Keine E-Mail"}
-                </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
-      <div className="grid gap-3">
-        <h4 className="font-medium">Ansprechpartner</h4>
+
+      {/* ── Ansprechpartner ────────────────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h4 className="mb-3 text-base font-semibold">Ansprechpartner</h4>
         {customer.contacts.length === 0 ? (
           <p className="text-sm text-slate-500">Keine Ansprechpartner vorhanden.</p>
         ) : (
-          customer.contacts.map((contact, index) => (
-            <div
-              key={`${contact.id ?? `${contact.firstName}-${contact.lastName}`}-${index}`}
-              className="grid gap-1 rounded-2xl border border-black/10 p-3 text-sm dark:border-white/10"
-            >
-              <div className="font-medium">
-                {contact.firstName} {contact.lastName}
+          <div className="grid gap-2">
+            {customer.contacts.map((contact, index) => (
+              <div
+                key={`${contact.id ?? `${contact.firstName}-${contact.lastName}`}-${index}`}
+                className="grid gap-1 rounded-xl bg-slate-50/70 p-3 text-sm dark:bg-slate-950/40"
+              >
+                <div className="font-medium">
+                  {contact.firstName} {contact.lastName}
+                </div>
+                <div className="text-slate-500">
+                  {contact.email || "Keine E-Mail"} · Mobil: {contact.phoneMobile || "-"} · Buero:{" "}
+                  {contact.phoneLandline || "-"}
+                </div>
               </div>
-              <div className="text-slate-500">
-                {contact.email || "Keine E-Mail"} · Mobil: {contact.phoneMobile || "-"} · Buero:{" "}
-                {contact.phoneLandline || "-"}
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
-      <DocumentPanel
-        documents={documents}
-        onOpenDocument={onOpenDocument}
-        onDownload={onDownload}
-        onDeleteDocument={onDeleteDocument}
-        documentForm={documentForm}
-        setDocumentForm={setDocumentForm}
-        onUpload={onUpload}
-      />
+
+      {/* ── Zugeordnete Projekte ───────────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h4 className="mb-3 text-base font-semibold">Zugeordnete Projekte</h4>
+        {customerProjects.length === 0 ? (
+          <p className="text-sm text-slate-500">Keine Projekte zugeordnet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
+                  <th className="pb-2 pr-3">Nr.</th>
+                  <th className="pb-2 pr-3">Titel</th>
+                  <th className="pb-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customerProjects.map((project) => (
+                  <tr key={project.id} className="border-b border-black/5 last:border-0 dark:border-white/5">
+                    <td className="py-2 pr-3 font-mono text-xs text-slate-500">{project.projectNumber}</td>
+                    <td className="py-2 pr-3">
+                      <Link href={`/projects/${project.id}`} className="font-medium hover:underline">
+                        {project.title}
+                      </Link>
+                    </td>
+                    <td className="py-2">
+                      <span className={cx("inline-block rounded-full px-2 py-0.5 text-xs font-medium", statusColor(project.status))}>
+                        {statusLabel(project.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Dokumente und Bilder ───────────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <DocumentPanel
+          documents={documents}
+          onOpenDocument={onOpenDocument}
+          onPrintDocument={onPrintDocument}
+          onDownload={onDownload}
+          onDeleteDocument={onDeleteDocument}
+          documentForm={documentForm}
+          setDocumentForm={setDocumentForm}
+          authToken={authToken}
+          onUpload={onUpload}
+        />
+      </div>
     </div>
   );
 }
@@ -2505,19 +2683,23 @@ function ProjectDetailCard({
   project,
   documents,
   onOpenDocument,
+  onPrintDocument,
   onDownload,
   onDeleteDocument,
   documentForm,
   setDocumentForm,
+  authToken,
   onUpload,
 }: {
   project: Project;
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
+  onPrintDocument: (document: DocumentItem) => void;
   onDownload: (documentId: string, filename: string) => void;
   onDeleteDocument: (documentId: string) => void;
   documentForm: DocumentFormState;
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
+  authToken: string;
   onUpload: () => void;
 }) {
   const projectMapsUrl = mapsUrlFromParts([
@@ -2561,10 +2743,12 @@ function ProjectDetailCard({
       <DocumentPanel
         documents={documents}
         onOpenDocument={onOpenDocument}
+        onPrintDocument={onPrintDocument}
         onDownload={onDownload}
         onDeleteDocument={onDeleteDocument}
         documentForm={documentForm}
         setDocumentForm={setDocumentForm}
+        authToken={authToken}
         onUpload={onUpload}
       />
     </div>
@@ -2575,19 +2759,23 @@ function WorkerDetailCard({
   worker,
   documents,
   onOpenDocument,
+  onPrintDocument,
   onDownload,
   onDeleteDocument,
   documentForm,
   setDocumentForm,
+  authToken,
   onUpload,
 }: {
   worker: Worker;
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
+  onPrintDocument: (document: DocumentItem) => void;
   onDownload: (documentId: string, filename: string) => void;
   onDeleteDocument: (documentId: string) => void;
   documentForm: DocumentFormState;
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
+  authToken: string;
   onUpload: () => void;
 }) {
   const workerMapsUrl = mapsUrlFromParts([
@@ -2628,10 +2816,12 @@ function WorkerDetailCard({
       <DocumentPanel
         documents={documents}
         onOpenDocument={onOpenDocument}
+        onPrintDocument={onPrintDocument}
         onDownload={onDownload}
         onDeleteDocument={onDeleteDocument}
         documentForm={documentForm}
         setDocumentForm={setDocumentForm}
+        authToken={authToken}
         onUpload={onUpload}
       />
     </div>
@@ -2641,60 +2831,148 @@ function WorkerDetailCard({
 function DocumentPanel({
   documents,
   onOpenDocument,
+  onPrintDocument,
   onDownload,
   onDeleteDocument,
   documentForm,
   setDocumentForm,
+  authToken,
   onUpload,
 }: {
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
+  onPrintDocument: (document: DocumentItem) => void;
   onDownload: (documentId: string, filename: string) => void;
   onDeleteDocument: (documentId: string) => void;
   documentForm: DocumentFormState;
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
+  authToken: string;
   onUpload: () => void;
 }) {
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
+  const [thumbnailErrors, setThumbnailErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const createdUrls: string[] = [];
+
+    if (documents.length === 0) {
+      setThumbnailUrls({});
+      setThumbnailErrors({});
+      return;
+    }
+
+    async function loadThumbnails() {
+      const results = await Promise.all(
+        documents.map(async (document) => {
+          const isPreviewable =
+            document.mimeType.startsWith("image/") || document.mimeType === "application/pdf";
+          try {
+            const response = await fetch(`${API_ROOT}/api/documents/${document.id}/download`, {
+              headers: authToken
+                ? { Authorization: `Bearer ${authToken}` }
+                : undefined,
+            });
+
+            if (!response.ok) {
+              let errorMessage = "Datei nicht verfuegbar";
+              try {
+                const body = (await response.json()) as { message?: string };
+                if (body.message) errorMessage = body.message;
+              } catch {
+                // not JSON
+              }
+              return { id: document.id, error: errorMessage } as const;
+            }
+
+            if (!isPreviewable) {
+              return { id: document.id, ok: true } as const;
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            createdUrls.push(url);
+            return { id: document.id, url } as const;
+          } catch {
+            return { id: document.id, error: "Datei nicht verfuegbar" } as const;
+          }
+        }),
+      );
+
+      if (cancelled) {
+        createdUrls.forEach((url) => window.URL.revokeObjectURL(url));
+        return;
+      }
+
+      const nextUrls: Record<string, string> = {};
+      const nextErrors: Record<string, string> = {};
+      for (const result of results) {
+        if ("error" in result) {
+          nextErrors[result.id] = result.error;
+        } else if ("url" in result) {
+          nextUrls[result.id] = result.url;
+        }
+      }
+      setThumbnailUrls(nextUrls);
+      setThumbnailErrors(nextErrors);
+    }
+
+    void loadThumbnails();
+
+    return () => {
+      cancelled = true;
+      createdUrls.forEach((url) => window.URL.revokeObjectURL(url));
+    };
+  }, [authToken, documents]);
+
   return (
     <div className="grid gap-4">
-      <div>
-        <h4 className="font-medium">Dokumente und Bilder</h4>
-        <div className="grid gap-2 pt-2">
-          {documents.length === 0 ? (
-            <p className="text-sm text-slate-500">Keine Dokumente vorhanden.</p>
-          ) : (
-            documents.map((document) => (
+      <h4 className="text-base font-semibold">Dokumente und Bilder</h4>
+      <div className="grid gap-2">
+        {documents.length === 0 ? (
+          <p className="text-sm text-slate-500">Keine Dokumente vorhanden.</p>
+        ) : (
+          documents.map((document) => {
+            const fileError = thumbnailErrors[document.id];
+            return (
               <div
                 key={document.id}
-                className="flex flex-col gap-2 rounded-2xl border border-black/10 p-3 dark:border-white/10 lg:flex-row lg:items-center lg:justify-between"
+                className={cx(
+                  "flex flex-col gap-2 rounded-2xl border p-3 lg:flex-row lg:items-center lg:justify-between",
+                  fileError
+                    ? "border-amber-300 bg-amber-50/50 dark:border-amber-500/40 dark:bg-amber-500/5"
+                    : "border-black/10 dark:border-white/10",
+                )}
               >
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => onOpenDocument(document)}
-                    className="text-left font-medium hover:underline"
-                  >
-                    {document.title || document.originalFilename}
-                  </button>
-                  <div className="text-sm text-slate-500">
-                    {document.documentType} · {document.mimeType}
-                  </div>
-                  {document.mimeType.startsWith("image/") ? (
-                    <div className="pt-2">
-                      <button
-                        type="button"
-                        onClick={() => onOpenDocument(document)}
-                        className="text-xs text-slate-500 hover:underline"
-                      >
-                        Bild anzeigen
-                      </button>
+                <div className="flex items-start gap-3">
+                  <DocumentThumbnail
+                    document={document}
+                    thumbnailUrl={thumbnailUrls[document.id]}
+                    hasError={Boolean(fileError)}
+                  />
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => onOpenDocument(document)}
+                      className="text-left font-medium hover:underline"
+                    >
+                      {document.title || document.originalFilename}
+                    </button>
+                    <div className="text-sm text-slate-500">
+                      {document.documentType} · {document.mimeType}
                     </div>
-                  ) : null}
+                    {fileError ? (
+                      <div className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+                        {fileError}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <SecondaryButton onClick={() => onOpenDocument(document)}>
                     Anzeigen
                   </SecondaryButton>
+                  <SecondaryButton onClick={() => onPrintDocument(document)}>Drucken</SecondaryButton>
                   <SecondaryButton
                     onClick={() => onDownload(document.id, document.originalFilename)}
                   >
@@ -2705,9 +2983,9 @@ function DocumentPanel({
                   </SecondaryButton>
                 </div>
               </div>
-            ))
-          )}
-        </div>
+            );
+          })
+        )}
       </div>
       <div className="grid gap-3 rounded-2xl border border-black/10 p-3 dark:border-white/10">
         <Field
@@ -2808,11 +3086,119 @@ function MapLinkButton({ href, children }: { href: string; children: ReactNode }
   );
 }
 
+function DocumentThumbnail({
+  document,
+  thumbnailUrl,
+  hasError,
+}: {
+  document: DocumentItem;
+  thumbnailUrl?: string;
+  hasError?: boolean;
+}) {
+  const isImage = document.mimeType.startsWith("image/");
+  const isPdf = document.mimeType === "application/pdf";
+  const isSpreadsheet = /spreadsheet|excel|\.xls/i.test(document.mimeType);
+  const isWordDoc = /word|\.doc/i.test(document.mimeType);
+
+  const ext = document.originalFilename.split(".").pop()?.toUpperCase() ?? "";
+
+  if (hasError) {
+    return (
+      <div className="flex h-20 w-16 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-950">
+        <svg className="h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span className="text-[9px] font-medium text-amber-600 dark:text-amber-400">fehlt</span>
+      </div>
+    );
+  }
+
+  if (thumbnailUrl && isImage) {
+    return (
+      <div className="flex h-20 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/10 bg-slate-50 dark:border-white/10 dark:bg-slate-950">
+        <img
+          src={thumbnailUrl}
+          alt={document.title || document.originalFilename}
+          className="h-full w-full object-cover"
+        />
+      </div>
+    );
+  }
+
+  if (thumbnailUrl && isPdf) {
+    return (
+      <div className="flex h-20 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/10 bg-slate-50 dark:border-white/10 dark:bg-slate-950">
+        <iframe
+          src={thumbnailUrl}
+          title={document.title || document.originalFilename}
+          className="pointer-events-none h-[200%] w-[200%] origin-top-left scale-50"
+        />
+      </div>
+    );
+  }
+
+  // Platzhalter fuer verschiedene Dateitypen
+  let icon: ReactNode;
+  let label: string;
+  let bgClass: string;
+
+  if (isPdf) {
+    label = "PDF";
+    bgClass = "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-500/30";
+    icon = (
+      <svg className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+      </svg>
+    );
+  } else if (isImage) {
+    label = ext || "Bild";
+    bgClass = "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-500/30";
+    icon = (
+      <svg className="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+      </svg>
+    );
+  } else if (isSpreadsheet) {
+    label = ext || "XLS";
+    bgClass = "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-500/30";
+    icon = (
+      <svg className="h-6 w-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M13.125 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M20.625 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5M12 14.625v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 14.625c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125m0 0v1.5c0 .621-.504 1.125-1.125 1.125" />
+      </svg>
+    );
+  } else if (isWordDoc) {
+    label = ext || "DOC";
+    bgClass = "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-500/30";
+    icon = (
+      <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+      </svg>
+    );
+  } else {
+    label = ext || "Datei";
+    bgClass = "bg-slate-50 dark:bg-slate-950 border-black/10 dark:border-white/10";
+    icon = (
+      <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+      </svg>
+    );
+  }
+
+  return (
+    <div className={cx("flex h-20 w-16 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border", bgClass)}>
+      {icon}
+      <span className="text-[10px] font-semibold text-slate-500">{label}</span>
+    </div>
+  );
+}
+
 function DocumentPreviewModal({
   preview,
+  onPrint,
   onClose,
 }: {
   preview: DocumentPreviewState;
+  onPrint: () => void;
   onClose: () => void;
 }) {
   const isImage = preview.mimeType.startsWith("image/");
@@ -2826,7 +3212,10 @@ function DocumentPreviewModal({
             <h3 className="truncate text-lg font-semibold">{preview.title}</h3>
             <p className="text-sm text-slate-500">{preview.mimeType}</p>
           </div>
-          <SecondaryButton onClick={onClose}>Schliessen</SecondaryButton>
+          <div className="flex gap-2">
+            <SecondaryButton onClick={onPrint}>Drucken</SecondaryButton>
+            <SecondaryButton onClick={onClose}>Schliessen</SecondaryButton>
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-black/10 bg-slate-50 p-2 dark:border-white/10 dark:bg-slate-950">
           {isImage ? (
@@ -2863,13 +3252,20 @@ function NestedBlock({
   title,
   onAdd,
   children,
+  bordered = true,
 }: {
   title: string;
   onAdd: () => void;
   children: ReactNode;
+  bordered?: boolean;
 }) {
   return (
-    <div className="grid gap-3 rounded-2xl border border-black/10 p-4 dark:border-white/10">
+    <div
+      className={cx(
+        "grid gap-3 rounded-2xl p-4",
+        bordered && "border border-black/10 dark:border-white/10",
+      )}
+    >
       <div className="flex items-center justify-between">
         <h3 className="font-medium">{title}</h3>
         <SecondaryButton onClick={onAdd}>Hinzufuegen</SecondaryButton>
