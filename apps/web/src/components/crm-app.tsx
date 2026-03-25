@@ -2446,175 +2446,22 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
         {section === "settings" ? (
           canManageSettings ? (
-            <div className="grid gap-6">
-              <SectionCard
-                title="Admin Einstellungen"
-                subtitle="Hier werden die globalen Vorgaben fuer Passwort, Kiosk-Code und Standard-Theme gepflegt."
-              >
-                <form className="grid gap-4 md:max-w-2xl" onSubmit={handleSettingsSubmit}>
-                  <FormRow>
-                    <Field
-                      label="Minimale Passwortlaenge"
-                      type="number"
-                      value={String(settingsForm.passwordMinLength)}
-                      onChange={(event) =>
-                        setSettingsForm((current) => ({
-                          ...current,
-                          passwordMinLength: Number(event.target.value || 0),
-                        }))
-                      }
-                    />
-                    <Field
-                      label="Kiosk-Code Laenge"
-                      type="number"
-                      value={String(settingsForm.kioskCodeLength)}
-                      onChange={(event) =>
-                        setSettingsForm((current) => ({
-                          ...current,
-                          kioskCodeLength: Number(event.target.value || 0),
-                        }))
-                      }
-                    />
-                  </FormRow>
-                  <SelectField
-                    label="Standard Theme"
-                    value={settingsForm.defaultTheme}
-                    onChange={(event) =>
-                      setSettingsForm((current) => ({
-                        ...current,
-                        defaultTheme: event.target.value as AppSettings["defaultTheme"],
-                      }))
-                    }
-                    options={[
-                      { value: "dark", label: "Dunkel" },
-                      { value: "light", label: "Hell" },
-                    ]}
-                  />
-                  <PrimaryButton disabled={submitting}>
-                    {submitting ? "Speichert ..." : "Einstellungen speichern"}
-                  </PrimaryButton>
-                </form>
-              </SectionCard>
-
-              {canManageUsers ? (
-                <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-                  <SectionCard
-                    title="Benutzerverwaltung"
-                    subtitle="Rollen steuern, wer welche Bereiche verwalten darf."
-                  >
-                    <EntityList
-                      items={users}
-                      title={(item) => item.displayName}
-                      subtitle={(item) =>
-                        `${item.email} · ${item.roles.map((role) => role.role.name).join(", ")}`
-                      }
-                      editLabel="Bearbeiten"
-                      deleteLabel="Deaktivieren"
-                      onEdit={(item) =>
-                        setUserForm({
-                          id: item.id,
-                          email: item.email,
-                          displayName: item.displayName,
-                          password: "",
-                          kioskCode: "",
-                          roleCodes: item.roles.map((role) => role.role.code),
-                          isActive: item.isActive,
-                        })
-                      }
-                      onDelete={(item) => void handleDelete(`/users/${item.id}`, "Benutzer")}
-                    />
-                  </SectionCard>
-
-                  <SectionCard
-                    title={userForm.id ? "Benutzer bearbeiten" : "Benutzer anlegen"}
-                    subtitle="Jeder Benutzer erhaelt Login, Passwort, Kiosk-Code und Rollen."
-                  >
-                    <form className="grid gap-4" onSubmit={handleUserSubmit}>
-                      <Field
-                        label="Anzeigename"
-                        value={userForm.displayName}
-                        onChange={(event) =>
-                          setUserForm((current) => ({
-                            ...current,
-                            displayName: event.target.value,
-                          }))
-                        }
-                      />
-                      <Field
-                        label="E-Mail"
-                        value={userForm.email}
-                        onChange={(event) =>
-                          setUserForm((current) => ({
-                            ...current,
-                            email: event.target.value,
-                          }))
-                        }
-                      />
-                      <FormRow>
-                        <Field
-                          label="Passwort"
-                          type="password"
-                          value={userForm.password}
-                          onChange={(event) =>
-                            setUserForm((current) => ({
-                              ...current,
-                              password: event.target.value,
-                            }))
-                          }
-                        />
-                        <Field
-                          label="Kiosk-Code"
-                          type="password"
-                          value={userForm.kioskCode}
-                          onChange={(event) =>
-                            setUserForm((current) => ({
-                              ...current,
-                              kioskCode: event.target.value,
-                            }))
-                          }
-                        />
-                      </FormRow>
-                      <div className="grid gap-2">
-                        <label className="text-sm font-medium">Rollen</label>
-                        <div className="flex flex-wrap gap-2">
-                          {roles.map((role) => {
-                            const checked = userForm.roleCodes.includes(role.code);
-                            return (
-                              <label
-                                key={role.id}
-                                className="inline-flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={(event) => {
-                                    setUserForm((current) => ({
-                                      ...current,
-                                      roleCodes: event.target.checked
-                                        ? [...current.roleCodes, role.code]
-                                        : current.roleCodes.filter((item) => item !== role.code),
-                                    }));
-                                  }}
-                                />
-                                {role.name}
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <div className="flex gap-3">
-                        <PrimaryButton disabled={submitting}>
-                          {submitting ? "Speichert ..." : "Benutzer speichern"}
-                        </PrimaryButton>
-                        <SecondaryButton onClick={() => setUserForm(emptyUserForm())}>
-                          Zuruecksetzen
-                        </SecondaryButton>
-                      </div>
-                    </form>
-                  </SectionCard>
-                </div>
-              ) : null}
-            </div>
+            <SettingsPanel
+              settingsForm={settingsForm}
+              setSettingsForm={setSettingsForm}
+              onSettingsSubmit={handleSettingsSubmit}
+              users={users}
+              roles={roles}
+              userForm={userForm}
+              setUserForm={setUserForm}
+              onUserSubmit={handleUserSubmit}
+              onDeleteUser={(id) => void handleDelete(`/users/${id}`, "Benutzer", true)}
+              canManageUsers={canManageUsers}
+              submitting={submitting}
+              apiFetch={apiFetch}
+              error={error}
+              success={success}
+            />
           ) : (
             <InfoCard title="Kein Zugriff">Diese Seite ist nur fuer Admin oder Buero sichtbar.</InfoCard>
           )
@@ -2666,6 +2513,225 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       contacts: current.contacts.filter((_, contactIndex) => contactIndex !== index),
     }));
   }
+}
+
+// ── Monteur Stundenzettel ────────────────────────────────────
+type TimesheetItem = {
+  id: string;
+  weekYear: number;
+  weekNumber: number;
+  status: string;
+  totalMinutesGross: number;
+  totalMinutesNet: number;
+  totalBreakMinutes: number;
+  project: { id: string; title: string; projectNumber: string };
+  signatures: { signerType: string; signerName: string; signedAt: string }[];
+};
+
+function WorkerTimesheetSection({
+  workerId,
+  projects,
+  apiFetch,
+}: {
+  workerId: string;
+  projects: { id: string; projectNumber: string; title: string }[];
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+}) {
+  const [timesheets, setTimesheets] = useState<TimesheetItem[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [signing, setSigning] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [tsError, setTsError] = useState<string | null>(null);
+  const [tsSuccess, setTsSuccess] = useState<string | null>(null);
+  const [signCanvasRef, setSignCanvasRef] = useState<HTMLCanvasElement | null>(null);
+  const [signingTsId, setSigningTsId] = useState<string | null>(null);
+  const [emailTsId, setEmailTsId] = useState<string | null>(null);
+  const [emailRecipient, setEmailRecipient] = useState("");
+
+  const loadTimesheets = useCallback(async () => {
+    try {
+      const all = await apiFetch<TimesheetItem[]>(`/timesheets/weekly?workerId=${workerId}`);
+      setTimesheets(all);
+    } catch { /* ignore */ }
+  }, [apiFetch, workerId]);
+
+  useEffect(() => { void loadTimesheets(); }, [loadTimesheets]);
+
+  const now = new Date();
+  const currentWeekYear = now.getFullYear();
+  const janFirst = new Date(currentWeekYear, 0, 1);
+  const currentWeekNumber = Math.ceil(((now.getTime() - janFirst.getTime()) / 86400000 + janFirst.getDay() + 1) / 7);
+
+  async function generateTimesheet(projectId: string) {
+    setGenerating(true); setTsError(null); setTsSuccess(null);
+    try {
+      await apiFetch("/timesheets/weekly", {
+        method: "POST",
+        body: JSON.stringify({ workerId, projectId, weekYear: currentWeekYear, weekNumber: currentWeekNumber }),
+      });
+      setTsSuccess("Stundenzettel erzeugt.");
+      await loadTimesheets();
+    } catch (e) { setTsError(e instanceof Error ? e.message : "Fehler"); }
+    finally { setGenerating(false); }
+  }
+
+  async function signTimesheet() {
+    if (!signingTsId || !signCanvasRef) return;
+    setSigning(true); setTsError(null);
+    try {
+      const signatureImagePath = signCanvasRef.toDataURL("image/png");
+      await apiFetch(`/timesheets/${signingTsId}/worker-sign`, {
+        method: "POST",
+        body: JSON.stringify({ signerName: "Monteur", signatureImagePath, deviceInfo: "web" }),
+      });
+      setTsSuccess("Unterschrieben.");
+      setSigningTsId(null);
+      await loadTimesheets();
+    } catch (e) { setTsError(e instanceof Error ? e.message : "Fehler"); }
+    finally { setSigning(false); }
+  }
+
+  async function sendTimesheetEmail() {
+    if (!emailTsId || !emailRecipient.trim()) { setTsError("Bitte Empfaenger eingeben."); return; }
+    setSending(true); setTsError(null); setTsSuccess(null);
+    try {
+      const recipients = emailRecipient.split(",").map((r) => r.trim()).filter(Boolean);
+      await apiFetch(`/timesheets/${emailTsId}/send-email`, {
+        method: "POST",
+        body: JSON.stringify({ recipients }),
+      });
+      setTsSuccess(`E-Mail gesendet an ${recipients.join(", ")}.`);
+      setEmailTsId(null);
+      setEmailRecipient("");
+    } catch (e) { setTsError(e instanceof Error ? e.message : "Versand fehlgeschlagen."); }
+    finally { setSending(false); }
+  }
+
+  async function downloadPdf(tsId: string) {
+    try {
+      const response = await fetch(`${(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "")}/api/timesheets/${tsId}/pdf`, {
+        headers: { Authorization: `Bearer ${typeof window !== "undefined" ? JSON.parse(window.localStorage.getItem("crm-admin-auth") ?? "{}").accessToken ?? "" : ""}` },
+      });
+      if (!response.ok) throw new Error("PDF konnte nicht geladen werden.");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `stundenzettel-${tsId}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { setTsError(e instanceof Error ? e.message : "PDF-Fehler"); }
+  }
+
+  function initSignCanvas(canvas: HTMLCanvasElement | null) {
+    setSignCanvasRef(canvas);
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    let drawing = false;
+    canvas.onpointerdown = (e) => { drawing = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); };
+    canvas.onpointermove = (e) => { if (!drawing) return; ctx.lineTo(e.offsetX, e.offsetY); ctx.strokeStyle = "#000"; ctx.lineWidth = 2; ctx.stroke(); };
+    canvas.onpointerup = () => { drawing = false; };
+    canvas.onpointerleave = () => { drawing = false; };
+  }
+
+  const statusLabel = (s: string) => {
+    switch (s) {
+      case "DRAFT": return "Entwurf";
+      case "WORKER_SIGNED": return "Monteur unterschrieben";
+      case "CUSTOMER_SIGNED": return "Kunde unterschrieben";
+      case "COMPLETED": return "Abgeschlossen";
+      case "LOCKED": return "Gesperrt";
+      default: return s;
+    }
+  };
+
+  return (
+    <SectionCard title="Stundenzettel" subtitle="Wochenzettel erzeugen, unterschreiben und herunterladen.">
+      <MessageBar error={tsError} success={tsSuccess} />
+
+      {/* Erzeugen */}
+      <div className="grid gap-3">
+        <div className="flex flex-wrap gap-2">
+          {projects.map((p) => (
+            <SecondaryButton key={p.id} onClick={() => void generateTimesheet(p.id)}>
+              {generating ? "Erzeugt ..." : `KW ${currentWeekNumber} · ${p.projectNumber}`}
+            </SecondaryButton>
+          ))}
+        </div>
+
+        {/* Liste */}
+        {timesheets.length > 0 ? (
+          <div className="grid gap-2">
+            {timesheets.map((ts) => (
+              <div key={ts.id} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="font-medium">KW {ts.weekNumber} / {ts.weekYear} · {ts.project.projectNumber}</div>
+                    <div className="text-xs text-slate-500">
+                      {Math.floor(ts.totalMinutesNet / 60)}h {ts.totalMinutesNet % 60}m netto · {statusLabel(ts.status)}
+                      {ts.signatures.length > 0 ? ` · ${ts.signatures.map((s) => `${s.signerType === "WORKER" ? "Monteur" : "Kunde"}: ${s.signerName}`).join(", ")}` : ""}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => void downloadPdf(ts.id)}
+                      className="rounded-lg border border-black/10 px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800">PDF</button>
+                    <button type="button" onClick={() => { setEmailTsId(ts.id); setEmailRecipient(""); }}
+                      className="rounded-lg border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-400">E-Mail</button>
+                    {ts.status === "DRAFT" ? (
+                      <button type="button" onClick={() => setSigningTsId(ts.id)}
+                        className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400">
+                        Unterschreiben
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">Noch keine Stundenzettel vorhanden.</p>
+        )}
+
+        {/* Signatur-Dialog */}
+        {signingTsId ? (
+          <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50/50 p-4 dark:border-emerald-500/30 dark:bg-emerald-500/5">
+            <h4 className="mb-2 text-sm font-semibold">Unterschrift</h4>
+            <canvas ref={initSignCanvas} width={400} height={150}
+              className="w-full rounded-lg border border-black/10 bg-white" style={{ touchAction: "none" }} />
+            <div className="mt-3 flex gap-2">
+              <button type="button" disabled={signing} onClick={() => void signTimesheet()}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60">
+                {signing ? "Unterschreibt ..." : "Bestaetigen"}
+              </button>
+              <SecondaryButton onClick={() => setSigningTsId(null)}>Abbrechen</SecondaryButton>
+            </div>
+          </div>
+        ) : null}
+
+        {/* E-Mail-Dialog */}
+        {emailTsId ? (
+          <div className="rounded-xl border-2 border-blue-300 bg-blue-50/50 p-4 dark:border-blue-500/30 dark:bg-blue-500/5">
+            <h4 className="mb-2 text-sm font-semibold">Stundenzettel per E-Mail senden</h4>
+            <div className="grid gap-3">
+              <Field
+                label="Empfaenger (E-Mail, mehrere mit Komma trennen)"
+                value={emailRecipient}
+                onChange={(e) => setEmailRecipient(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <button type="button" disabled={sending} onClick={() => void sendTimesheetEmail()}
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60">
+                  {sending ? "Sendet ..." : "Senden"}
+                </button>
+                <SecondaryButton onClick={() => setEmailTsId(null)}>Abbrechen</SecondaryButton>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </SectionCard>
+  );
 }
 
 // ── Monteur Zeiterfassungs-View ──────────────────────────────
@@ -3020,6 +3086,11 @@ function WorkerTimeView({
           <div className="text-center text-sm text-slate-500">Lade Status ...</div>
         ) : null}
 
+        {/* ── Stundenzettel ──────────────────────────── */}
+        {currentProjects.length > 0 && status !== null ? (
+          <WorkerTimesheetSection workerId={workerId} projects={currentProjects} apiFetch={apiFetch} />
+        ) : null}
+
         {/* ── Zukuenftige Projekte ─────────────────────── */}
         {futureProjects.length > 0 ? (
           <SectionCard title="Zukuenftige Projekte">
@@ -3046,6 +3117,215 @@ function WorkerTimeView({
           </SectionCard>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+type PermissionItem = { id: string; code: string; name: string; category: string };
+type SmtpFormState = { host: string; port: string; user: string; password: string; fromEmail: string; secure: boolean };
+
+function SettingsPanel({
+  settingsForm, setSettingsForm, onSettingsSubmit,
+  users, roles, userForm, setUserForm, onUserSubmit, onDeleteUser,
+  canManageUsers, submitting, apiFetch, error, success,
+}: {
+  settingsForm: AppSettings;
+  setSettingsForm: Dispatch<SetStateAction<AppSettings>>;
+  onSettingsSubmit: (e: FormEvent<HTMLFormElement>) => void;
+  users: UserItem[];
+  roles: RoleItem[];
+  userForm: UserFormState;
+  setUserForm: Dispatch<SetStateAction<UserFormState>>;
+  onUserSubmit: (e: FormEvent<HTMLFormElement>) => void;
+  onDeleteUser: (id: string) => void;
+  canManageUsers: boolean;
+  submitting: boolean;
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  error: string | null;
+  success: string | null;
+}) {
+  const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "smtp" | "backup">("general");
+  const [permissions, setPermissions] = useState<PermissionItem[]>([]);
+  const [selectedRoleId, setSelectedRoleId] = useState("");
+  const [rolePermissionIds, setRolePermissionIds] = useState<string[]>([]);
+  const [smtpForm, setSmtpForm] = useState<SmtpFormState>({ host: "", port: "587", user: "", password: "", fromEmail: "", secure: false });
+  const [panelSuccess, setPanelSuccess] = useState<string | null>(null);
+  const [panelError, setPanelError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void apiFetch<PermissionItem[]>("/settings/permissions").then(setPermissions).catch(() => {});
+    void apiFetch<SmtpFormState>("/settings/smtp").then((s) => setSmtpForm({ ...s, port: String(s.port) })).catch(() => {});
+  }, [apiFetch]);
+
+  useEffect(() => {
+    if (!selectedRoleId) { setRolePermissionIds([]); return; }
+    void apiFetch<PermissionItem[]>(`/settings/roles/${selectedRoleId}/permissions`).then((perms) => setRolePermissionIds(perms.map((p) => p.id))).catch(() => {});
+  }, [apiFetch, selectedRoleId]);
+
+  async function saveRolePermissions() {
+    setPanelError(null); setPanelSuccess(null);
+    try {
+      await apiFetch(`/settings/roles/${selectedRoleId}/permissions`, { method: "PUT", body: JSON.stringify({ permissionIds: rolePermissionIds }) });
+      setPanelSuccess("Rechte gespeichert.");
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+  }
+
+  async function saveSmtp(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setPanelError(null); setPanelSuccess(null);
+    try {
+      await apiFetch("/settings/smtp", { method: "PUT", body: JSON.stringify({ ...smtpForm, port: Number(smtpForm.port) }) });
+      setPanelSuccess("SMTP gespeichert.");
+    } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler"); }
+  }
+
+  const tabs: { key: typeof settingsTab; label: string }[] = [
+    { key: "general", label: "Allgemein" },
+    ...(canManageUsers ? [{ key: "users" as const, label: "Benutzer" }] : []),
+    ...(canManageUsers ? [{ key: "roles" as const, label: "Rollen & Rechte" }] : []),
+    { key: "smtp", label: "E-Mail / SMTP" },
+    { key: "backup", label: "Backup" },
+  ];
+
+  const permissionsByCategory = permissions.reduce<Record<string, PermissionItem[]>>((acc, p) => {
+    (acc[p.category] ??= []).push(p);
+    return acc;
+  }, {});
+
+  return (
+    <div className="grid gap-6">
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((t) => (
+          <button key={t.key} type="button" onClick={() => { setSettingsTab(t.key); setPanelSuccess(null); setPanelError(null); }}
+            className={cx("rounded-xl border px-3 py-2 text-sm font-medium transition",
+              settingsTab === t.key
+                ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+            )}>{t.label}</button>
+        ))}
+      </div>
+
+      <MessageBar error={panelError ?? error} success={panelSuccess ?? success} />
+
+      {settingsTab === "general" ? (
+        <SectionCard title="Allgemeine Einstellungen" subtitle="Passwort, Kiosk-Code, Theme">
+          <form className="grid gap-4 md:max-w-2xl" onSubmit={onSettingsSubmit}>
+            <FormRow>
+              <Field label="Minimale Passwortlaenge" type="number" value={String(settingsForm.passwordMinLength)} onChange={(e) => setSettingsForm((c) => ({ ...c, passwordMinLength: Number(e.target.value || 0) }))} />
+              <Field label="Kiosk-Code Laenge" type="number" value={String(settingsForm.kioskCodeLength)} onChange={(e) => setSettingsForm((c) => ({ ...c, kioskCodeLength: Number(e.target.value || 0) }))} />
+            </FormRow>
+            <SelectField label="Standard Theme" value={settingsForm.defaultTheme} onChange={(e) => setSettingsForm((c) => ({ ...c, defaultTheme: e.target.value as AppSettings["defaultTheme"] }))} options={[{ value: "dark", label: "Dunkel" }, { value: "light", label: "Hell" }]} />
+            <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "Einstellungen speichern"}</PrimaryButton>
+          </form>
+        </SectionCard>
+      ) : null}
+
+      {settingsTab === "users" && canManageUsers ? (
+        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <SectionCard title="Benutzer" subtitle="Benutzer verwalten, Rollen zuweisen.">
+            <EntityList items={users} title={(i) => i.displayName}
+              subtitle={(i) => `${i.email} · ${i.roles.map((r) => r.role.name).join(", ")}${i.isActive ? "" : " (inaktiv)"}`}
+              editLabel="Bearbeiten" deleteLabel="Loeschen"
+              onEdit={(i) => setUserForm({ id: i.id, email: i.email, displayName: i.displayName, password: "", kioskCode: "", roleCodes: i.roles.map((r) => r.role.code), isActive: i.isActive })}
+              onDelete={(i) => onDeleteUser(i.id)} />
+          </SectionCard>
+          <SectionCard title={userForm.id ? "Benutzer bearbeiten" : "Benutzer anlegen"} subtitle="Login, Passwort, Kiosk-Code und Rollen.">
+            <form className="grid gap-4" onSubmit={onUserSubmit}>
+              <Field label="Anzeigename" value={userForm.displayName} onChange={(e) => setUserForm((c) => ({ ...c, displayName: e.target.value }))} />
+              <Field label="E-Mail" value={userForm.email} onChange={(e) => setUserForm((c) => ({ ...c, email: e.target.value }))} />
+              <FormRow>
+                <Field label="Passwort" type="password" value={userForm.password} onChange={(e) => setUserForm((c) => ({ ...c, password: e.target.value }))} />
+                <Field label="Kiosk-Code" type="password" value={userForm.kioskCode} onChange={(e) => setUserForm((c) => ({ ...c, kioskCode: e.target.value }))} />
+              </FormRow>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Rollen</label>
+                <div className="flex flex-wrap gap-2">
+                  {roles.map((role) => (
+                    <label key={role.id} className="inline-flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
+                      <input type="checkbox" checked={userForm.roleCodes.includes(role.code)}
+                        onChange={(e) => setUserForm((c) => ({ ...c, roleCodes: e.target.checked ? [...c.roleCodes, role.code] : c.roleCodes.filter((r) => r !== role.code) }))} />
+                      {role.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "Benutzer speichern"}</PrimaryButton>
+                <SecondaryButton onClick={() => setUserForm({ id: undefined, email: "", displayName: "", password: "", kioskCode: "", roleCodes: [], isActive: true })}>Zuruecksetzen</SecondaryButton>
+              </div>
+            </form>
+          </SectionCard>
+        </div>
+      ) : null}
+
+      {settingsTab === "roles" && canManageUsers ? (
+        <SectionCard title="Rollen & Rechte" subtitle="Rechte pro Rolle konfigurieren.">
+          <div className="grid gap-4">
+            <SelectField label="Rolle waehlen" value={selectedRoleId}
+              onChange={(e) => setSelectedRoleId(e.target.value)}
+              options={roles.map((r) => ({ value: r.id, label: r.name }))} />
+            {selectedRoleId ? (
+              <div className="grid gap-4">
+                {Object.entries(permissionsByCategory).map(([cat, perms]) => (
+                  <div key={cat} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+                    <h4 className="mb-2 text-sm font-semibold text-slate-500">{cat}</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {perms.map((p) => (
+                        <label key={p.id} className="inline-flex items-center gap-2 rounded-lg border border-black/5 px-2 py-1 text-xs dark:border-white/5">
+                          <input type="checkbox" checked={rolePermissionIds.includes(p.id)}
+                            onChange={(e) => setRolePermissionIds((c) => e.target.checked ? [...c, p.id] : c.filter((x) => x !== p.id))} />
+                          {p.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <SecondaryButton onClick={() => void saveRolePermissions()}>Rechte speichern</SecondaryButton>
+              </div>
+            ) : null}
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {settingsTab === "smtp" ? (
+        <SectionCard title="E-Mail / SMTP" subtitle="Mailserver fuer Stundenzettel-Versand konfigurieren.">
+          <form className="grid gap-4 md:max-w-2xl" onSubmit={(e) => void saveSmtp(e)}>
+            <FormRow>
+              <Field label="SMTP Host" value={smtpForm.host} onChange={(e) => setSmtpForm((c) => ({ ...c, host: e.target.value }))} />
+              <Field label="SMTP Port" value={smtpForm.port} onChange={(e) => setSmtpForm((c) => ({ ...c, port: e.target.value }))} />
+            </FormRow>
+            <FormRow>
+              <Field label="SMTP Benutzer" value={smtpForm.user} onChange={(e) => setSmtpForm((c) => ({ ...c, user: e.target.value }))} />
+              <Field label="SMTP Passwort" type="password" value={smtpForm.password} onChange={(e) => setSmtpForm((c) => ({ ...c, password: e.target.value }))} />
+            </FormRow>
+            <Field label="Absenderadresse" value={smtpForm.fromEmail} onChange={(e) => setSmtpForm((c) => ({ ...c, fromEmail: e.target.value }))} />
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={smtpForm.secure} onChange={(e) => setSmtpForm((c) => ({ ...c, secure: e.target.checked }))} />
+              TLS / SSL verwenden
+            </label>
+            <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "SMTP speichern"}</PrimaryButton>
+          </form>
+        </SectionCard>
+      ) : null}
+
+      {settingsTab === "backup" ? (
+        <SectionCard title="Backup" subtitle="Datensicherung und Wiederherstellung.">
+          <div className="grid gap-4">
+            <div className="rounded-xl border border-black/10 bg-slate-50/50 p-4 dark:border-white/10 dark:bg-slate-950/30">
+              <h4 className="mb-2 text-sm font-semibold">Manuelles Backup</h4>
+              <p className="mb-3 text-sm text-slate-500">Erstellt ein vollstaendiges Backup der Datenbank und des Storages.</p>
+              <SecondaryButton onClick={() => setPanelSuccess("Backup-Funktion wird in einem spaeteren Update vollstaendig aktiviert.")}>Backup jetzt erstellen</SecondaryButton>
+            </div>
+            <div className="rounded-xl border border-black/10 bg-slate-50/50 p-4 dark:border-white/10 dark:bg-slate-950/30">
+              <h4 className="mb-2 text-sm font-semibold">Automatische Backups</h4>
+              <p className="text-sm text-slate-500">Konfiguration fuer zeitgesteuerte Backups. Wird in einem spaeteren Update aktiviert.</p>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-500/30 dark:bg-amber-500/5">
+              <h4 className="mb-2 text-sm font-semibold text-amber-700 dark:text-amber-400">Wiederherstellung</h4>
+              <p className="text-sm text-amber-600 dark:text-amber-400">Backup-Wiederherstellung mit selektiver Auswahl (Datenbank, Dokumente, Einstellungen) wird in einem spaeteren Update aktiviert.</p>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Put } from '@nestjs/common';
 import { RoleCode } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
@@ -17,5 +17,43 @@ export class SettingsController {
   @Patch()
   updateSettings(@Body() dto: UpdateSettingsDto) {
     return this.settingsService.updateSettings(dto);
+  }
+
+  @Get('smtp')
+  getSmtp() {
+    return this.settingsService.getSmtpConfig();
+  }
+
+  @Put('smtp')
+  updateSmtp(
+    @Body()
+    dto: {
+      host: string;
+      port: number;
+      user?: string;
+      password?: string;
+      fromEmail: string;
+      secure: boolean;
+    },
+  ) {
+    return this.settingsService.updateSmtpConfig(dto);
+  }
+
+  @Get('permissions')
+  getPermissions() {
+    return this.settingsService.getPermissions();
+  }
+
+  @Get('roles/:roleId/permissions')
+  getRolePermissions(@Param('roleId') roleId: string) {
+    return this.settingsService.getRolePermissions(roleId);
+  }
+
+  @Put('roles/:roleId/permissions')
+  setRolePermissions(
+    @Param('roleId') roleId: string,
+    @Body() body: { permissionIds: string[] },
+  ) {
+    return this.settingsService.setRolePermissions(roleId, body.permissionIds);
   }
 }

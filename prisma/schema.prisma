@@ -86,8 +86,9 @@ model Role {
   id        String     @id @default(cuid())
   code      RoleCode   @unique
   name      String
-  createdAt DateTime   @default(now())
-  users     UserRole[]
+  createdAt   DateTime         @default(now())
+  users       UserRole[]
+  permissions RolePermission[]
 }
 
 model UserRole {
@@ -99,6 +100,35 @@ model UserRole {
   createdAt DateTime @default(now())
 
   @@unique([userId, roleId])
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  name        String
+  category    String
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model SmtpConfig {
+  id        String   @id @default(cuid())
+  host      String
+  port      Int      @default(587)
+  user      String?
+  password  String?
+  fromEmail String
+  secure    Boolean  @default(false)
+  updatedAt DateTime @updatedAt
 }
 
 model Session {

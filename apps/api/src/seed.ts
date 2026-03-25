@@ -282,6 +282,80 @@ async function main() {
     });
   }
 
+  // ── Permissions ──────────────────────────────────────
+  const permissions = [
+    { code: 'customers.view', name: 'Kunden ansehen', category: 'Kunden' },
+    { code: 'customers.create', name: 'Kunden anlegen', category: 'Kunden' },
+    { code: 'customers.edit', name: 'Kunden bearbeiten', category: 'Kunden' },
+    { code: 'customers.delete', name: 'Kunden loeschen', category: 'Kunden' },
+    { code: 'projects.view', name: 'Projekte ansehen', category: 'Projekte' },
+    { code: 'projects.create', name: 'Projekte anlegen', category: 'Projekte' },
+    { code: 'projects.edit', name: 'Projekte bearbeiten', category: 'Projekte' },
+    { code: 'projects.delete', name: 'Projekte loeschen', category: 'Projekte' },
+    { code: 'workers.view', name: 'Monteure ansehen', category: 'Monteure' },
+    { code: 'workers.create', name: 'Monteure anlegen', category: 'Monteure' },
+    { code: 'workers.edit', name: 'Monteure bearbeiten', category: 'Monteure' },
+    { code: 'workers.delete', name: 'Monteure loeschen', category: 'Monteure' },
+    { code: 'documents.view', name: 'Dokumente ansehen', category: 'Dokumente' },
+    { code: 'documents.upload', name: 'Dokumente hochladen', category: 'Dokumente' },
+    { code: 'documents.delete', name: 'Dokumente loeschen', category: 'Dokumente' },
+    { code: 'time.view', name: 'Zeiten ansehen', category: 'Zeiten' },
+    { code: 'time.edit', name: 'Zeiten bearbeiten', category: 'Zeiten' },
+    { code: 'timesheets.create', name: 'Stundenzettel erzeugen', category: 'Zeiten' },
+    { code: 'timesheets.sign', name: 'Stundenzettel signieren', category: 'Zeiten' },
+    { code: 'timesheets.send', name: 'Stundenzettel versenden', category: 'Zeiten' },
+    { code: 'settings.view', name: 'Einstellungen ansehen', category: 'Einstellungen' },
+    { code: 'settings.smtp', name: 'SMTP bearbeiten', category: 'Einstellungen' },
+    { code: 'settings.backup', name: 'Backup konfigurieren', category: 'Einstellungen' },
+    { code: 'settings.restore', name: 'Backup wiederherstellen', category: 'Einstellungen' },
+    { code: 'users.manage', name: 'Benutzer verwalten', category: 'Einstellungen' },
+    { code: 'roles.manage', name: 'Rollen/Rechte verwalten', category: 'Einstellungen' },
+  ];
+
+  for (const perm of permissions) {
+    await prisma.permission.upsert({
+      where: { code: perm.code },
+      update: { name: perm.name, category: perm.category },
+      create: perm,
+    });
+  }
+
+  // Superadmin bekommt alle Rechte
+  const allPermissions = await prisma.permission.findMany();
+  const superadminRole = await prisma.role.findUniqueOrThrow({
+    where: { code: RoleCode.SUPERADMIN },
+  });
+  for (const perm of allPermissions) {
+    await prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId: superadminRole.id, permissionId: perm.id } },
+      update: {},
+      create: { roleId: superadminRole.id, permissionId: perm.id },
+    });
+  }
+
+  // Office bekommt Basis-Rechte
+  const officeRole = await prisma.role.findUniqueOrThrow({
+    where: { code: RoleCode.OFFICE },
+  });
+  const officeCodes = [
+    'customers.view', 'customers.create', 'customers.edit',
+    'projects.view', 'projects.create', 'projects.edit',
+    'workers.view', 'workers.create', 'workers.edit',
+    'documents.view', 'documents.upload',
+    'time.view', 'time.edit', 'timesheets.create', 'timesheets.send',
+    'settings.view',
+  ];
+  for (const code of officeCodes) {
+    const perm = allPermissions.find((p) => p.code === code);
+    if (perm) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: officeRole.id, permissionId: perm.id } },
+        update: {},
+        create: { roleId: officeRole.id, permissionId: perm.id },
+      });
+    }
+  }
+
   console.log('Seed erfolgreich ausgefuehrt.');
   console.log('Admin Login: admin@example.local / admin12345');
   console.log('Monteur PIN: M-1000 / 1234');

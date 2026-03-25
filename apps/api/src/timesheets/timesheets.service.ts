@@ -332,26 +332,47 @@ export class TimesheetsService {
       dto.message ??
       `Im Anhang befindet sich der Wochenzettel fuer ${sheet.worker.firstName} ${sheet.worker.lastName}.`;
 
-    const transport =
-      process.env.SMTP_REAL_DELIVERY === 'true' && process.env.SMTP_HOST
-        ? createTransport({
-            host: process.env.SMTP_HOST,
-            port: Number(process.env.SMTP_PORT ?? 25),
-            secure: Number(process.env.SMTP_PORT ?? 25) === 465,
-            auth:
-              process.env.SMTP_USER && process.env.SMTP_PASS
-                ? {
-                    user: process.env.SMTP_USER,
-                    pass: process.env.SMTP_PASS,
-                  }
-                : undefined,
-          })
-        : createTransport({
-            jsonTransport: true,
-          });
+    // SMTP-Konfiguration aus der Datenbank laden
+    const smtpConfig = await this.prisma.smtpConfig.findFirst();
+
+    let transport;
+    let transportType: string;
+
+    if (smtpConfig && smtpConfig.host) {
+      // Gespeicherte SMTP-Konfiguration verwenden
+      transport = createTransport({
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        secure: smtpConfig.secure,
+        auth:
+          smtpConfig.user && smtpConfig.password
+            ? { user: smtpConfig.user, pass: smtpConfig.password }
+            : undefined,
+      });
+      transportType = 'smtp';
+    } else if (process.env.SMTP_HOST) {
+      // Fallback: Env-Variablen
+      transport = createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT ?? 25),
+        secure: Number(process.env.SMTP_PORT ?? 25) === 465,
+        auth:
+          process.env.SMTP_USER && process.env.SMTP_PASS
+            ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+            : undefined,
+      });
+      transportType = 'smtp-env';
+    } else {
+      // Kein SMTP konfiguriert → JSON-Transport (Logging)
+      transport = createTransport({ jsonTransport: true });
+      transportType = 'json';
+    }
+
+    const fromEmail =
+      smtpConfig?.fromEmail || process.env.SMTP_FROM || 'crm@example.local';
 
     const result = await transport.sendMail({
-      from: process.env.SMTP_FROM ?? 'crm@example.local',
+      from: fromEmail,
       to: dto.recipients.join(', '),
       subject,
       text,
@@ -365,8 +386,7 @@ export class TimesheetsService {
     });
 
     return {
-      transport:
-        process.env.SMTP_REAL_DELIVERY === 'true' ? 'smtp' : 'jsonTransport',
+      transport: transportType,
       recipients: dto.recipients,
       subject,
       messageId: result.messageId,

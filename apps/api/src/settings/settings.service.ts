@@ -89,4 +89,63 @@ export class SettingsService {
   private readTheme(value: unknown, fallback: AppSettings['defaultTheme']) {
     return value === 'light' || value === 'dark' ? value : fallback;
   }
+
+  async getSmtpConfig() {
+    const config = await this.prisma.smtpConfig.findFirst();
+    if (!config) {
+      return { host: '', port: 587, user: '', password: '', fromEmail: '', secure: false };
+    }
+    return {
+      host: config.host,
+      port: config.port,
+      user: config.user ?? '',
+      password: config.password ?? '',
+      fromEmail: config.fromEmail,
+      secure: config.secure,
+    };
+  }
+
+  async updateSmtpConfig(data: {
+    host: string;
+    port: number;
+    user?: string;
+    password?: string;
+    fromEmail: string;
+    secure: boolean;
+  }) {
+    const existing = await this.prisma.smtpConfig.findFirst();
+    if (existing) {
+      return this.prisma.smtpConfig.update({
+        where: { id: existing.id },
+        data,
+      });
+    }
+    return this.prisma.smtpConfig.create({ data });
+  }
+
+  async getPermissions() {
+    return this.prisma.permission.findMany({
+      orderBy: [{ category: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  async getRolePermissions(roleId: string) {
+    const rps = await this.prisma.rolePermission.findMany({
+      where: { roleId },
+      include: { permission: true },
+    });
+    return rps.map((rp) => rp.permission);
+  }
+
+  async setRolePermissions(roleId: string, permissionIds: string[]) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.rolePermission.deleteMany({ where: { roleId } });
+      if (permissionIds.length > 0) {
+        await tx.rolePermission.createMany({
+          data: permissionIds.map((permissionId) => ({ roleId, permissionId })),
+        });
+      }
+    });
+    return this.getRolePermissions(roleId);
+  }
 }
