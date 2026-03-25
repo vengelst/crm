@@ -24,6 +24,45 @@
 - Vor groesseren Aufgaben soll `workstatus.md` gelesen werden.
 - Nach groesseren Umsetzungen, Tests oder Pruefrunden wird `workstatus.md` aktualisiert.
 
+## Fachliche Leitplanken
+
+- Monteure arbeiten ausschliesslich ueber den `Kiosk / Monteur`-Modus mit persoenlicher PIN.
+- Es soll keine fachliche Vermischung von Benutzer-Login und Monteur-Login geben:
+  - Benutzer: E-Mail + Passwort
+  - Monteure: nur PIN im Kiosk
+- Der Kiosk ist die einzige Arbeitsoberflaeche fuer Monteure.
+- Monteure duerfen:
+  - eigene zugeordnete Projekte sehen
+  - Projektdetails oeffnen
+  - vorhandene Projektdokumente lesen
+  - Dokumente zum Projekt hochladen
+  - Arbeit beginnen und beenden
+  - eigene Stundenzettel sehen und signieren lassen
+- Monteure duerfen nicht:
+  - Projekte loeschen oder verwalten
+  - Kunden verwalten
+  - Dokumente loeschen
+  - fremde oder abgeschlossene Stundenzettel veraendern
+
+## Stundenzettel-Regeln
+
+- Stundenzettel sind zentraler Leistungs- und Abrechnungsnachweis.
+- Jeder Monteur hat eigene Stundenzettel pro Projekt und Kalenderwoche.
+- Stundenzettel muessen sichtbar sein in:
+  - Kiosk / Monteur
+  - Projekt
+  - Kunde
+  - Auswertung
+- Nach Kunden-Signatur gilt der Stundenzettel als abgeschlossen:
+  - Status `COMPLETED`
+  - `lockedAt` gesetzt
+  - keine weitere Aenderung oder Neuerzeugung fuer diesen Zettel
+
+## Umsetzungs- und Pruefregel
+
+- Wenn neue Anforderungen den Kiosk, PIN-Logik, Stundenzettel oder Signaturfluss betreffen, ist immer gegen diese Leitplanken zu pruefen.
+- Bei Abweichungen zwischen alter Implementierung und fachlicher Vorgabe ist die fachliche Vorgabe massgeblich und in `workstatus.md` nachzuziehen.
+
 ## Wichtiger Hinweis zur Projektstruktur
 
 - Fuer dieses Projekt soll aktuell keine feste Trennung in `Backend` und `Frontend` angenommen werden.

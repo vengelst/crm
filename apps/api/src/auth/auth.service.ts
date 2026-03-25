@@ -17,7 +17,11 @@ const workerAuthInclude = {
       active: true,
     },
     include: {
-      project: true,
+      project: {
+        include: {
+          customer: true,
+        },
+      },
     },
   },
   pins: {
@@ -131,7 +135,7 @@ export class AuthService {
 
     if (matches.length > 1) {
       throw new BadRequestException(
-        'PIN ist nicht eindeutig. Bitte einen eindeutigen PIN vergeben oder die Monteurnummer verwenden.',
+        'PIN ist nicht eindeutig. Bitte einem aktiven Monteur eine eindeutige PIN zuweisen.',
       );
     }
 
@@ -145,19 +149,14 @@ export class AuthService {
 
     // Nur Zuordnungen beruecksichtigen, die aktuell laufen oder in der Zukunft liegen
     const now = new Date();
-    const relevantAssignments = worker.assignments.filter((a) => {
-      // endDate == null  → laufend (offen)
-      // endDate >= heute → noch nicht abgelaufen
-      return !a.endDate || a.endDate >= now;
-    });
 
-    if (relevantAssignments.length === 0) {
+    if (worker.assignments.length === 0) {
       throw new UnauthorizedException(
-        'Keine aktuelle oder zukuenftige Projektzuordnung vorhanden. Login nicht moeglich.',
+        'Keine Projektzuordnung vorhanden. Login nicht moeglich.',
       );
     }
 
-    const mapProject = (a: (typeof relevantAssignments)[number]) => ({
+    const mapProject = (a: (typeof worker.assignments)[number]) => ({
       id: a.project.id,
       projectNumber: a.project.projectNumber,
       title: a.project.title,
@@ -166,14 +165,19 @@ export class AuthService {
       endDate: a.endDate?.toISOString() ?? null,
       siteLatitude: a.project.siteLatitude ?? null,
       siteLongitude: a.project.siteLongitude ?? null,
+      customerName: a.project.customer?.companyName ?? null,
     });
 
-    const currentProjects = relevantAssignments
-      .filter((a) => a.startDate <= now)
+    const currentProjects = worker.assignments
+      .filter((a) => a.startDate <= now && (!a.endDate || a.endDate >= now))
       .map(mapProject);
 
-    const futureProjects = relevantAssignments
+    const futureProjects = worker.assignments
       .filter((a) => a.startDate > now)
+      .map(mapProject);
+
+    const pastProjects = worker.assignments
+      .filter((a) => a.endDate != null && a.endDate < now)
       .map(mapProject);
 
     const accessToken = await this.jwtService.signAsync({
@@ -192,6 +196,7 @@ export class AuthService {
       },
       currentProjects,
       futureProjects,
+      pastProjects,
     };
   }
 }

@@ -333,3 +333,66 @@
 
 - Offene Punkte:
   - Der Dashboard-Monteurstatus leitet `arbeitet` aktuell aus dem letzten `timeEntry` ab; das ist fuer den aktuellen Stand akzeptiert, spaeter aber eventuell noch durch eine explizitere Open-Work-Logik ersetzbar.
+
+## 2026-03-23
+
+### Kioskmodus, Stundenzettel-Sicht und zentrale Auswertung
+
+- Ausgangslage:
+  - Der Monteurfluss war fachlich noch nicht sauber genug getrennt.
+  - Stundenzettel sollten im Projekt, beim Kunden und zentral in `Auswertung` sichtbar sein.
+  - Der Kiosk sollte der einzige Einstieg fuer Monteure sein.
+
+- Geplante Aufgabe:
+  - Login auf `Benutzer` und `Kiosk / Monteur` reduzieren.
+  - Kiosk-Projektansicht auf volle Projektdetailtiefe bringen.
+  - Stundenzettel in Projekt-, Kunden- und Reports-Sicht anzeigen.
+  - Signaturabschluss sauber sperren und PIN-Meldungen bereinigen.
+
+- Umsetzung durch Claude:
+  - Login auf zwei Modi reduziert:
+    - `Benutzer-Anmeldung` mit E-Mail + Passwort
+    - `Kiosk / Monteur` nur per PIN
+  - Kiosk liefert und zeigt jetzt:
+    - aktuelle Projekte
+    - zukuenftige Projekte
+    - vergangene Projekte
+    - Kundenname pro Projekt
+    - volle Projektansicht mit Stammdaten, Preisen, Monteuren, Auswertung und Stundenzetteln
+  - Wiederverwendbare `TimesheetList` fuer:
+    - Projekt-Detail
+    - Kunden-Detail
+    - Kiosk-Projektansicht
+    - zentrale Reports-Sicht
+  - `ReportsSection` um zentrale Stundenzettel-Uebersicht mit Filtern erweitert:
+    - Kunde
+    - Projekt
+    - Monteur
+    - Status
+  - Signatur-/Sperrlogik nach Kunden-Signatur verschaerft:
+    - automatischer Abschluss auf `COMPLETED`
+    - `lockedAt` wird gesetzt
+    - abgeschlossene Zettel koennen nicht neu erzeugt oder weiter geaendert werden
+  - Fehlermeldung fuer doppelte Monteur-PIN korrigiert und nicht mehr auf den entfernten Monteur-Login verwiesen.
+
+- Pruefung durch Codex:
+  - Mehrere Codex-Abnahmen fuer diese Teilpakete durchgefuehrt.
+  - Bestaetigt:
+    - `pnpm --filter api build` gruen
+    - `pnpm --filter web build` gruen
+    - zentrale Stundenzettel-Sicht in `Auswertung` vorhanden
+    - Kunden- und Projektsicht mit Stundenzetteln vorhanden
+    - Kiosk-Login nur noch per PIN sichtbar
+    - Backend-Meldung bei doppelter PIN fachlich korrigiert
+  - Nachtraeglich auch Lint-Bereinigung fuer `crm-app.tsx` durchgefuehrt:
+    - ungenutzte Destructuring-Variablen entfernt
+    - ungenutzte Hilfskomponenten entfernt
+    - zwei `img`-Warnungen auf `next/image` umgestellt
+
+- Ergebnis / Entscheidung:
+  - Codex-Abnahme fuer Kioskmodus, Stundenzettel-Sichten und zentrale Reports-Verwaltung: **Gruen**.
+  - Der Monteur-Kiosk ist fachlich klarer getrennt, und Stundenzettel sind jetzt in den relevanten Kontexten sichtbar.
+  - Die verbleibenden Lint-Warnungen wurden aufgeraeumt.
+
+- Offene Punkte:
+  - Produktpflege und weitere Verfeinerungen koennen folgen, aber fuer dieses Paket besteht aktuell keine offene Abweichung mehr.

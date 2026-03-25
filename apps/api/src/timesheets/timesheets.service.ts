@@ -170,6 +170,17 @@ export class TimesheetsService {
         },
       });
 
+      // Gesperrter Zettel darf nicht neu generiert werden
+      if (
+        existing &&
+        (existing.status === WeeklyTimesheetStatus.COMPLETED ||
+          existing.status === WeeklyTimesheetStatus.LOCKED)
+      ) {
+        throw new BadRequestException(
+          'Dieser Stundenzettel ist bereits abgeschlossen und kann nicht mehr neu erzeugt werden.',
+        );
+      }
+
       const sheet = existing
         ? await tx.weeklyTimesheet.update({
             where: { id: existing.id },
@@ -553,7 +564,17 @@ export class TimesheetsService {
     dto: SignTimesheetDto,
     ipAddress?: string,
   ) {
-    await this.getById(id);
+    const sheet = await this.getById(id);
+
+    // Gesperrter Zettel darf nicht mehr signiert werden
+    if (
+      sheet.status === WeeklyTimesheetStatus.COMPLETED ||
+      sheet.status === WeeklyTimesheetStatus.LOCKED
+    ) {
+      throw new BadRequestException(
+        'Dieser Stundenzettel ist bereits abgeschlossen und kann nicht mehr geaendert werden.',
+      );
+    }
 
     if (
       !dto.signatureImagePath.startsWith('data:image') &&
@@ -576,10 +597,19 @@ export class TimesheetsService {
       },
     });
 
+    // Nach Kunden-Signatur: automatisch COMPLETED + gesperrt
+    const finalStatus =
+      signerType === SignerType.CUSTOMER
+        ? WeeklyTimesheetStatus.COMPLETED
+        : nextStatus;
+
     return this.prisma.weeklyTimesheet.update({
       where: { id },
       data: {
-        status: nextStatus,
+        status: finalStatus,
+        ...(finalStatus === WeeklyTimesheetStatus.COMPLETED
+          ? { lockedAt: new Date() }
+          : {}),
       },
       include: {
         days: true,

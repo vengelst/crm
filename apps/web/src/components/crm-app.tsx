@@ -1,6 +1,7 @@
 "use client";
 
 import { MapPinned, Settings as SettingsIcon } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -63,6 +64,7 @@ type AuthState = {
     endDate: string | null;
     siteLatitude: number | null;
     siteLongitude: number | null;
+    customerName?: string | null;
   }[];
   futureProjects?: {
     id: string;
@@ -73,6 +75,18 @@ type AuthState = {
     endDate: string | null;
     siteLatitude: number | null;
     siteLongitude: number | null;
+    customerName?: string | null;
+  }[];
+  pastProjects?: {
+    id: string;
+    projectNumber: string;
+    title: string;
+    status: string;
+    startDate: string;
+    endDate: string | null;
+    siteLatitude: number | null;
+    siteLongitude: number | null;
+    customerName?: string | null;
   }[];
 };
 
@@ -529,10 +543,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [loginTab, setLoginTab] = useState<"admin" | "worker" | "kiosk">("admin");
+  const [loginTab, setLoginTab] = useState<"admin" | "kiosk">("admin");
   const [loginEmail, setLoginEmail] = useState("admin@example.local");
   const [loginPassword, setLoginPassword] = useState("admin12345");
-  const [loginWorkerNumber, setLoginWorkerNumber] = useState("");
   const [loginPin, setLoginPin] = useState("");
 
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -558,6 +571,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [documentForm, setDocumentForm] = useState<DocumentFormState>(emptyDocumentForm);
   const [documentPreview, setDocumentPreview] = useState<DocumentPreviewState | null>(null);
   const [projectFinancials, setProjectFinancials] = useState<ProjectFinancials | null>(null);
+  const [projectTimesheets, setProjectTimesheets] = useState<TimesheetItem[]>([]);
   const [customerFinancials, setCustomerFinancials] = useState<CustomerFinancials | null>(null);
 
   const canManageSettings = hasRole(auth, ["SUPERADMIN", "OFFICE"]);
@@ -725,9 +739,11 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       setProjectForm(mapProjectToForm(selectedProject));
       setDocumentForm(emptyDocumentForm());
       void apiFetch<ProjectFinancials>(`/projects/${selectedProject.id}/financials`).then(setProjectFinancials).catch(() => setProjectFinancials(null));
+      void apiFetch<TimesheetItem[]>(`/timesheets/weekly?projectId=${selectedProject.id}`).then(setProjectTimesheets).catch(() => setProjectTimesheets([]));
     } else if (section === "projects") {
       setProjectForm(emptyProjectForm());
       setProjectFinancials(null);
+      setProjectTimesheets([]);
     }
   }, [section, selectedProject, apiFetch]);
 
@@ -785,53 +801,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     }
   }
 
-  async function handlePinLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const response = await apiFetch<{
-        accessToken: string;
-        worker: { id: string; workerNumber: string; name: string };
-        currentProjects: AuthState["currentProjects"];
-        futureProjects: AuthState["futureProjects"];
-      }>("/auth/pin-login", {
-        method: "POST",
-        body: JSON.stringify({
-          workerNumber: loginWorkerNumber,
-          pin: loginPin,
-        }),
-      });
-
-      const nextAuth: AuthState = {
-        accessToken: response.accessToken,
-        type: "worker",
-        user: {
-          id: response.worker.id,
-          email: "",
-          displayName: response.worker.name,
-          roles: ["WORKER"],
-        },
-        worker: response.worker,
-        currentProjects: response.currentProjects,
-        futureProjects: response.futureProjects,
-      };
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuth));
-      }
-
-      setAuth(nextAuth);
-      setSuccess("Anmeldung erfolgreich.");
-    } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Login fehlgeschlagen.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   async function handleKioskLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
@@ -844,6 +813,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         worker: { id: string; workerNumber: string; name: string };
         currentProjects: AuthState["currentProjects"];
         futureProjects: AuthState["futureProjects"];
+        pastProjects: AuthState["pastProjects"];
       }>("/auth/kiosk-login", {
         method: "POST",
         body: JSON.stringify({
@@ -863,6 +833,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         worker: response.worker,
         currentProjects: response.currentProjects,
         futureProjects: response.futureProjects,
+        pastProjects: response.pastProjects,
       };
 
       if (typeof window !== "undefined") {
@@ -895,9 +866,22 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   async function handleCustomerSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await runMutation(async () => {
-      const { id: _id, branches: _b, contacts: _c, ...formBase } = customerForm;
       const payload = sanitizeForApi({
-        ...formBase,
+        customerNumber: customerForm.customerNumber,
+        companyName: customerForm.companyName,
+        legalForm: customerForm.legalForm,
+        status: customerForm.status,
+        billingEmail: customerForm.billingEmail,
+        phone: customerForm.phone,
+        email: customerForm.email,
+        website: customerForm.website,
+        vatId: customerForm.vatId,
+        addressLine1: customerForm.addressLine1,
+        addressLine2: customerForm.addressLine2,
+        postalCode: customerForm.postalCode,
+        city: customerForm.city,
+        country: customerForm.country,
+        notes: customerForm.notes,
         branches: customerForm.branches.map((b) => ({
           name: b.name,
           addressLine1: b.addressLine1,
@@ -947,11 +931,22 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   async function handleProjectSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await runMutation(async () => {
-      const { id: _id, ...formWithoutId } = projectForm;
       const payload = sanitizeForApi({
-        ...formWithoutId,
-        priority: Number(projectForm.priority) || 0,
+        projectNumber: projectForm.projectNumber,
+        customerId: projectForm.customerId,
         branchId: projectForm.branchId || undefined,
+        title: projectForm.title,
+        description: projectForm.description,
+        serviceType: projectForm.serviceType,
+        status: projectForm.status,
+        siteName: projectForm.siteName,
+        siteAddressLine1: projectForm.siteAddressLine1,
+        sitePostalCode: projectForm.sitePostalCode,
+        siteCity: projectForm.siteCity,
+        siteCountry: projectForm.siteCountry,
+        accommodationAddress: projectForm.accommodationAddress,
+        notes: projectForm.notes,
+        priority: Number(projectForm.priority) || 0,
         weeklyFlatRate: projectForm.weeklyFlatRate ? Number(projectForm.weeklyFlatRate) : undefined,
         includedHoursPerWeek: projectForm.includedHoursPerWeek ? Number(projectForm.includedHoursPerWeek) : undefined,
         hourlyRateUpTo40h: projectForm.hourlyRateUpTo40h ? Number(projectForm.hourlyRateUpTo40h) : undefined,
@@ -981,9 +976,21 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   async function handleWorkerSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await runMutation(async () => {
-      const { id: _id, ...formWithoutId } = workerForm;
       const payload = sanitizeForApi({
-        ...formWithoutId,
+        workerNumber: workerForm.workerNumber,
+        firstName: workerForm.firstName,
+        lastName: workerForm.lastName,
+        email: workerForm.email,
+        phoneMobile: workerForm.phoneMobile,
+        phoneOffice: workerForm.phoneOffice,
+        addressLine1: workerForm.addressLine1,
+        addressLine2: workerForm.addressLine2,
+        postalCode: workerForm.postalCode,
+        city: workerForm.city,
+        country: workerForm.country,
+        languageCode: workerForm.languageCode,
+        notes: workerForm.notes,
+        active: workerForm.active,
         phone: workerForm.phoneMobile || undefined,
         internalHourlyRate: workerForm.internalHourlyRate ? Number(workerForm.internalHourlyRate) : undefined,
         pin: workerForm.pin || undefined,
@@ -1263,19 +1270,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
               )}
             >
-              Admin Login
-            </button>
-            <button
-              type="button"
-              onClick={() => { setLoginTab("worker"); setError(null); setSuccess(null); }}
-              className={cx(
-                "rounded-xl border px-4 py-2 text-sm font-medium transition",
-                loginTab === "worker"
-                  ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
-                  : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
-              )}
-            >
-              Monteur
+              Benutzer-Anmeldung
             </button>
             <button
               type="button"
@@ -1287,7 +1282,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
               )}
             >
-              Kiosk
+              Kiosk / Monteur
             </button>
           </div>
 
@@ -1310,30 +1305,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 />
               </FormRow>
               <PrimaryButton disabled={submitting}>
-                {submitting ? "Anmeldung laeuft ..." : "Admin anmelden"}
-              </PrimaryButton>
-              <MessageBar error={error} success={success} />
-            </form>
-          ) : loginTab === "worker" ? (
-            <form
-              onSubmit={handlePinLogin}
-              className="grid gap-4 rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
-            >
-              <FormRow>
-                <Field
-                  label="Monteurnummer"
-                  value={loginWorkerNumber}
-                  onChange={(event) => setLoginWorkerNumber(event.target.value)}
-                />
-                <Field
-                  label="PIN"
-                  type="password"
-                  value={loginPin}
-                  onChange={(event) => setLoginPin(event.target.value)}
-                />
-              </FormRow>
-              <PrimaryButton disabled={submitting}>
-                {submitting ? "Anmeldung laeuft ..." : "Monteur anmelden"}
+                {submitting ? "Anmeldung laeuft ..." : "Anmelden"}
               </PrimaryButton>
               <MessageBar error={error} success={success} />
             </form>
@@ -1343,16 +1315,16 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               className="grid gap-4 rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
             >
               <Field
-                label="PIN"
+                label="Monteur-PIN"
                 type="password"
                 value={loginPin}
                 onChange={(event) => setLoginPin(event.target.value)}
               />
-              <p className="text-sm text-slate-500">
-                Kioskmodus: Anmeldung nur mit PIN. Das funktioniert nur mit eindeutig vergebenen aktiven Monteur-PINs.
+              <p className="text-xs text-slate-500">
+                Monteure melden sich ausschliesslich mit ihrer persoenlichen PIN an. Die PIN muss eindeutig vergeben sein.
               </p>
               <PrimaryButton disabled={submitting}>
-                {submitting ? "Anmeldung laeuft ..." : "Per PIN anmelden"}
+                {submitting ? "Anmeldung laeuft ..." : "Monteur anmelden"}
               </PrimaryButton>
               <MessageBar error={error} success={success} />
             </form>
@@ -1452,6 +1424,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     setDocumentForm={setDocumentForm}
                     authToken={auth.accessToken}
                     onUpload={() => void handleDocumentUpload("CUSTOMER", selectedCustomer.id)}
+                    apiFetch={apiFetch}
                   />
                 </>
               ) : (
@@ -1860,6 +1833,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   <ProjectDetailCard
                     project={selectedProject}
                     financials={projectFinancials}
+                    timesheets={projectTimesheets}
                     documents={filterDocuments(documents, "PROJECT", selectedProject.id)}
                     onOpenDocument={handleOpenDocument}
                     onPrintDocument={handlePrintDocument}
@@ -1869,6 +1843,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     setDocumentForm={setDocumentForm}
                     authToken={auth.accessToken}
                     onUpload={() => void handleDocumentUpload("PROJECT", selectedProject.id)}
+                    apiFetch={apiFetch}
                   />
                 </>
               ) : (
@@ -2165,7 +2140,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
             <SectionCard
               title={workerForm.id ? "Monteur bearbeiten" : "Neuen Monteur anlegen"}
-              subtitle="Beim Anlegen ist ein PIN Pflicht. Beim Bearbeiten setzt ein neuer Wert den PIN zurueck."
+              subtitle="Monteure melden sich ausschliesslich per PIN im Kiosk an. PIN leer lassen = bestehende PIN bleibt erhalten. Neuer Wert = PIN wird ersetzt."
             >
               <form className="grid gap-4" onSubmit={handleWorkerSubmit}>
                 <FormRow>
@@ -2202,7 +2177,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     }
                   />
                   <Field
-                    label="PIN"
+                    label="Kiosk-PIN (fuer Monteur-Anmeldung)"
                     type="password"
                     value={workerForm.pin}
                     onChange={(event) =>
@@ -2530,8 +2505,103 @@ type TimesheetItem = {
   totalMinutesNet: number;
   totalBreakMinutes: number;
   project: { id: string; title: string; projectNumber: string };
+  worker?: { id: string; firstName: string; lastName: string; workerNumber: string };
   signatures: { signerType: string; signerName: string; signedAt: string }[];
+  generatedAt?: string;
 };
+
+function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }: {
+  timesheets: TimesheetItem[];
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  title?: string;
+}) {
+  const [emailTsId, setEmailTsId] = useState<string | null>(null);
+  const [emailRecipient, setEmailRecipient] = useState("");
+  const [sending, setSending] = useState(false);
+  const [tsMsg, setTsMsg] = useState<string | null>(null);
+
+  async function downloadPdf(tsId: string) {
+    try {
+      const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
+      const token = typeof window !== "undefined" ? (JSON.parse(window.localStorage.getItem("crm-admin-auth") ?? "{}") as { accessToken?: string }).accessToken ?? "" : "";
+      const response = await fetch(`${apiRoot}/api/timesheets/${tsId}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error("PDF-Fehler");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `stundenzettel-${tsId}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } catch { setTsMsg("PDF konnte nicht geladen werden."); }
+  }
+
+  async function sendEmail() {
+    if (!emailTsId || !emailRecipient.trim()) return;
+    setSending(true); setTsMsg(null);
+    try {
+      await apiFetch(`/timesheets/${emailTsId}/send-email`, { method: "POST", body: JSON.stringify({ recipients: emailRecipient.split(",").map((r) => r.trim()).filter(Boolean) }) });
+      setTsMsg("E-Mail gesendet."); setEmailTsId(null); setEmailRecipient("");
+    } catch (e) { setTsMsg(e instanceof Error ? e.message : "Fehler"); }
+    finally { setSending(false); }
+  }
+
+  const statusLabel = (s: string) => {
+    switch (s) { case "DRAFT": return "Entwurf"; case "WORKER_SIGNED": return "Monteur signiert"; case "CUSTOMER_SIGNED": return "Kunde signiert"; case "COMPLETED": return "Fertig"; case "LOCKED": return "Gesperrt"; default: return s; }
+  };
+
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+      <h4 className="mb-3 text-base font-semibold">{title}</h4>
+      {tsMsg ? <div className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{tsMsg}</div> : null}
+      {timesheets.length === 0 ? (
+        <p className="text-sm text-slate-500">Keine Stundenzettel vorhanden.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
+                <th className="pb-2 pr-2">KW</th>
+                <th className="pb-2 pr-2">Monteur</th>
+                <th className="pb-2 pr-2">Projekt</th>
+                <th className="pb-2 pr-2 text-right">Netto</th>
+                <th className="pb-2 pr-2">Status</th>
+                <th className="pb-2 pr-2">Signiert</th>
+                <th className="pb-2">Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {timesheets.map((ts) => (
+                <tr key={ts.id} className="border-b border-black/5 dark:border-white/5">
+                  <td className="py-2 pr-2 font-mono text-xs">{ts.weekNumber}/{ts.weekYear}</td>
+                  <td className="py-2 pr-2 text-xs">{ts.worker ? `${ts.worker.firstName} ${ts.worker.lastName}` : "-"}</td>
+                  <td className="py-2 pr-2 text-xs">{ts.project.projectNumber}</td>
+                  <td className="py-2 pr-2 text-right font-mono text-xs">{Math.floor(ts.totalMinutesNet / 60)}h {ts.totalMinutesNet % 60}m</td>
+                  <td className="py-2 pr-2 text-xs">{statusLabel(ts.status)}</td>
+                  <td className="py-2 pr-2 text-xs">{ts.signatures.length > 0 ? `${ts.signatures.length}x` : "-"}</td>
+                  <td className="py-2 text-xs">
+                    <div className="flex gap-1">
+                      <button type="button" onClick={() => void downloadPdf(ts.id)} className="rounded border border-black/10 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 dark:border-white/10">PDF</button>
+                      <button type="button" onClick={() => { setEmailTsId(ts.id); setEmailRecipient(""); }} className="rounded border border-blue-300 px-1.5 py-0.5 text-[10px] text-blue-700 hover:bg-blue-50 dark:border-blue-500/30 dark:text-blue-400">Mail</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {emailTsId ? (
+        <div className="mt-3 rounded-xl border-2 border-blue-300 bg-blue-50/50 p-3 dark:border-blue-500/30 dark:bg-blue-500/5">
+          <div className="grid gap-2">
+            <Field label="Empfaenger (Komma-getrennt)" value={emailRecipient} onChange={(e) => setEmailRecipient(e.target.value)} />
+            <div className="flex gap-2">
+              <button type="button" disabled={sending} onClick={() => void sendEmail()} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-60">{sending ? "Sendet..." : "Senden"}</button>
+              <SecondaryButton onClick={() => setEmailTsId(null)}>Abbrechen</SecondaryButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function WorkerTimesheetSection({
   workerId,
@@ -2739,6 +2809,73 @@ function WorkerTimesheetSection({
   );
 }
 
+function KioskProjectView({ project, financials, timesheets, apiFetch }: {
+  project: Project;
+  financials: ProjectFinancials | null;
+  timesheets: TimesheetItem[];
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+}) {
+  const fmt = (v?: number | null) => v != null ? `${v.toFixed(2)} EUR` : "-";
+  const hasPricing = project.weeklyFlatRate != null || project.hourlyRateUpTo40h != null;
+
+  return (
+    <div className="grid gap-5">
+      {/* Stammdaten */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h3 className="text-lg font-semibold">{project.title}</h3>
+        <p className="text-sm text-slate-500">{project.projectNumber} · {project.customer?.companyName ?? "-"}</p>
+        <div className="mt-2 grid gap-1 text-sm text-slate-500">
+          <div>{project.status ?? "-"}</div>
+          <div>{formatAddress([project.siteAddressLine1, project.sitePostalCode, project.siteCity, project.siteCountry]) || "Keine Projektadresse"}</div>
+        </div>
+      </div>
+
+      {/* Preise */}
+      {hasPricing ? (
+        <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+          <h4 className="mb-3 text-base font-semibold">Projektpreise</h4>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <span className="text-slate-500">Wochenpauschale</span><span className="font-mono">{fmt(project.weeklyFlatRate)}</span>
+            <span className="text-slate-500">Inklusivstunden</span><span className="font-mono">{project.includedHoursPerWeek != null ? `${project.includedHoursPerWeek} h` : "-"}</span>
+            <span className="text-slate-500">Stundensatz</span><span className="font-mono">{fmt(project.hourlyRateUpTo40h)}</span>
+            <span className="text-slate-500">Ueberstundensatz</span><span className="font-mono">{fmt(project.overtimeRate)}</span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Monteure */}
+      {(project.assignments ?? []).length > 0 ? (
+        <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+          <h4 className="mb-3 text-base font-semibold">Zugeordnete Monteure</h4>
+          <div className="grid gap-2">
+            {(project.assignments ?? []).map((a) => (
+              <div key={a.id} className="flex items-center justify-between rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
+                <span className="font-medium">{a.worker.firstName} {a.worker.lastName}</span>
+                <span className="text-xs text-slate-500">{a.worker.workerNumber}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Auswertung */}
+      {financials ? (
+        <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+          <h4 className="mb-3 text-base font-semibold">Auswertung</h4>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <FinancialKpi label="Stunden" value={`${financials.totalHours} h`} />
+            <FinancialKpi label="Umsatz" value={`${financials.totalRevenue.toFixed(2)} EUR`} highlight />
+            <FinancialKpi label="Kosten" value={`${financials.totalCosts.toFixed(2)} EUR`} />
+          </div>
+        </div>
+      ) : null}
+
+      {/* Stundenzettel */}
+      <TimesheetList timesheets={timesheets} apiFetch={apiFetch} />
+    </div>
+  );
+}
+
 function OpenWorkCard({ openWork, working, onClockOut, onOpenProject }: {
   openWork: NonNullable<WorkerTimeStatus["openEntry"]>;
   working: boolean;
@@ -2834,6 +2971,7 @@ function WorkerTimeView({
   const workerId = auth.worker?.id ?? auth.user.id;
   const currentProjects = auth.currentProjects ?? [];
   const futureProjects = auth.futureProjects ?? [];
+  const pastProjects = auth.pastProjects ?? [];
   const hasOnlyFuture = currentProjects.length === 0 && futureProjects.length > 0;
 
   const loadStatus = useCallback(async () => {
@@ -2988,38 +3126,25 @@ function WorkerTimeView({
   const openWork = status?.openEntry;
   const allProjects = [...currentProjects, ...futureProjects];
   const viewingProject = viewingProjectId ? allProjects.find((p) => p.id === viewingProjectId) ?? null : null;
+  const [kioskProjectDetail, setKioskProjectDetail] = useState<Project | null>(null);
+  const [kioskProjectFinancials, setKioskProjectFinancials] = useState<ProjectFinancials | null>(null);
+  const [kioskTimesheets, setKioskTimesheets] = useState<TimesheetItem[]>([]);
+
+  useEffect(() => {
+    if (!viewingProjectId) { setKioskProjectDetail(null); setKioskProjectFinancials(null); setKioskTimesheets([]); return; }
+    void apiFetch<Project>(`/projects/${viewingProjectId}`).then(setKioskProjectDetail).catch(() => {});
+    void apiFetch<ProjectFinancials>(`/projects/${viewingProjectId}/financials`).then(setKioskProjectFinancials).catch(() => {});
+    void apiFetch<TimesheetItem[]>(`/timesheets/weekly?projectId=${viewingProjectId}`).then(setKioskTimesheets).catch(() => {});
+  }, [apiFetch, viewingProjectId]);
 
   // ── Projektdetail-Ansicht ─────────────────────────
-  if (viewingProject) {
+  if (viewingProject && kioskProjectDetail) {
     return (
       <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
         <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
-          <div className="flex flex-col gap-4 rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Projektdetail</p>
-              <h1 className="text-2xl font-semibold">{viewingProject.title}</h1>
-              <p className="text-sm text-slate-500">{viewingProject.projectNumber}</p>
-            </div>
+          <div className="flex items-center gap-3">
             <SecondaryButton onClick={() => setViewingProjectId(null)}>Zurueck</SecondaryButton>
-          </div>
-
-          <div className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
-            <div className="grid gap-3 text-sm">
-              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
-                <span className="text-slate-500">Projektnummer</span>
-                <span className="font-mono">{viewingProject.projectNumber}</span>
-                <span className="text-slate-500">Status</span>
-                <span>{viewingProject.status}</span>
-                <span className="text-slate-500">Zeitraum</span>
-                <span>{viewingProject.startDate.slice(0, 10)} bis {viewingProject.endDate?.slice(0, 10) ?? "offen"}</span>
-                {viewingProject.siteLatitude != null && viewingProject.siteLongitude != null ? (
-                  <>
-                    <span className="text-slate-500">Standort</span>
-                    <span className="font-mono">{viewingProject.siteLatitude.toFixed(5)}, {viewingProject.siteLongitude.toFixed(5)}</span>
-                  </>
-                ) : null}
-              </div>
-            </div>
+            <h2 className="text-xl font-semibold">Projektdetail</h2>
           </div>
 
           {openWork && openWork.projectId === viewingProject.id ? (
@@ -3028,6 +3153,8 @@ function WorkerTimeView({
               <div className="mt-1 text-sm">Gestartet: <span className="font-mono">{new Date(openWork.startedAt).toLocaleString("de-DE")}</span></div>
             </div>
           ) : null}
+
+          <KioskProjectView project={kioskProjectDetail} financials={kioskProjectFinancials} timesheets={kioskTimesheets} apiFetch={apiFetch} />
         </div>
       </div>
     );
@@ -3098,7 +3225,7 @@ function WorkerTimeView({
                         </div>
                         <div>
                           <div className="font-medium">{p.title}</div>
-                          <div className="text-sm text-slate-500">{p.projectNumber}</div>
+                          <div className="text-sm text-slate-500">{p.projectNumber}{p.customerName ? ` · ${p.customerName}` : ""}</div>
                         </div>
                       </div>
                       <button
@@ -3139,19 +3266,33 @@ function WorkerTimeView({
           <SectionCard title="Zukuenftige Projekte">
             <div className="grid gap-3">
               {futureProjects.map((p) => (
-                <div
-                  key={p.id}
-                  className="flex items-center justify-between rounded-2xl border border-black/10 p-4 dark:border-white/10"
-                >
+                <div key={p.id} className="flex items-center justify-between rounded-2xl border border-black/10 p-4 dark:border-white/10">
                   <div>
                     <div className="font-semibold">{p.title}</div>
-                    <p className="text-sm text-slate-500">{p.projectNumber} · ab {p.startDate.slice(0, 10)}</p>
+                    <p className="text-sm text-slate-500">{p.projectNumber} · {p.customerName ?? ""} · ab {p.startDate.slice(0, 10)}</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setViewingProjectId(p.id)}
-                    className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
-                  >
+                  <button type="button" onClick={() => setViewingProjectId(p.id)}
+                    className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800">
+                    Projekt oeffnen
+                  </button>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {/* ── Vergangene Projekte ──────────────────────── */}
+        {pastProjects.length > 0 ? (
+          <SectionCard title="Vergangene Projekte">
+            <div className="grid gap-3">
+              {pastProjects.map((p) => (
+                <div key={p.id} className="flex items-center justify-between rounded-2xl border border-black/5 p-4 text-slate-500 dark:border-white/5">
+                  <div>
+                    <div className="font-medium">{p.title}</div>
+                    <p className="text-sm">{p.projectNumber} · {p.customerName ?? ""} · {p.startDate.slice(0, 10)} bis {p.endDate?.slice(0, 10) ?? "offen"}</p>
+                  </div>
+                  <button type="button" onClick={() => setViewingProjectId(p.id)}
+                    className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800 dark:text-slate-400">
                     Projekt oeffnen
                   </button>
                 </div>
@@ -3319,7 +3460,7 @@ function SettingsPanel({
               <Field label="E-Mail" value={userForm.email} onChange={(e) => setUserForm((c) => ({ ...c, email: e.target.value }))} />
               <FormRow>
                 <Field label="Passwort" type="password" value={userForm.password} onChange={(e) => setUserForm((c) => ({ ...c, password: e.target.value }))} />
-                <Field label="Kiosk-Code" type="password" value={userForm.kioskCode} onChange={(e) => setUserForm((c) => ({ ...c, kioskCode: e.target.value }))} />
+                <Field label="Benutzer-Kiosk-Code" type="password" value={userForm.kioskCode} onChange={(e) => setUserForm((c) => ({ ...c, kioskCode: e.target.value }))} />
               </FormRow>
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Rollen</label>
@@ -3486,6 +3627,8 @@ function ReportsSection({
 }) {
   const [customerFinancials, setCustomerFinancials] = useState<Record<string, { totalRevenue: number; totalCosts: number; margin: number; totalHours: number }>>({});
   const [loadingFinancials, setLoadingFinancials] = useState(true);
+  const [allTimesheets, setAllTimesheets] = useState<TimesheetItem[]>([]);
+  const [tsFilter, setTsFilter] = useState({ customer: "", project: "", worker: "", status: "" });
 
   useEffect(() => {
     let cancelled = false;
@@ -3510,6 +3653,21 @@ function ReportsSection({
     void loadAll();
     return () => { cancelled = true; };
   }, [apiFetch, customers]);
+
+  useEffect(() => {
+    void apiFetch<TimesheetItem[]>("/timesheets/weekly").then(setAllTimesheets).catch(() => setAllTimesheets([]));
+  }, [apiFetch]);
+
+  const filteredTimesheets = allTimesheets.filter((ts) => {
+    if (tsFilter.project && ts.project.id !== tsFilter.project) return false;
+    if (tsFilter.worker && ts.worker?.id !== tsFilter.worker) return false;
+    if (tsFilter.status && ts.status !== tsFilter.status) return false;
+    if (tsFilter.customer) {
+      const proj = projects.find((p) => p.id === ts.project.id);
+      if (proj?.customerId !== tsFilter.customer) return false;
+    }
+    return true;
+  });
 
   const activeWorkers = workers.filter((w) => w.active !== false);
 
@@ -3595,6 +3753,27 @@ function ReportsSection({
             );
           })}
         </div>
+      </SectionCard>
+
+      {/* ── Stundenzettel zentral ──────────────────────── */}
+      <SectionCard title="Stundenzettel" subtitle="Zentrale Uebersicht aller Stundenzettel. PDF-Download und E-Mail-Versand direkt moeglich.">
+        <div className="mb-4 flex flex-wrap gap-3">
+          <SelectField label="Kunde" value={tsFilter.customer} onChange={(e) => setTsFilter((c) => ({ ...c, customer: e.target.value }))}
+            options={customers.map((c) => ({ value: c.id, label: c.companyName }))} />
+          <SelectField label="Projekt" value={tsFilter.project} onChange={(e) => setTsFilter((c) => ({ ...c, project: e.target.value }))}
+            options={projects.map((p) => ({ value: p.id, label: `${p.projectNumber} ${p.title}` }))} />
+          <SelectField label="Monteur" value={tsFilter.worker} onChange={(e) => setTsFilter((c) => ({ ...c, worker: e.target.value }))}
+            options={activeWorkers.map((w) => ({ value: w.id, label: `${w.firstName} ${w.lastName}` }))} />
+          <SelectField label="Status" value={tsFilter.status} onChange={(e) => setTsFilter((c) => ({ ...c, status: e.target.value }))}
+            options={[
+              { value: "DRAFT", label: "Entwurf" },
+              { value: "WORKER_SIGNED", label: "Monteur signiert" },
+              { value: "CUSTOMER_SIGNED", label: "Kunde signiert" },
+              { value: "COMPLETED", label: "Abgeschlossen" },
+              { value: "LOCKED", label: "Gesperrt" },
+            ]} />
+        </div>
+        <TimesheetList timesheets={filteredTimesheets} apiFetch={apiFetch} title={`${filteredTimesheets.length} Stundenzettel`} />
       </SectionCard>
     </div>
   );
@@ -4112,6 +4291,7 @@ function CustomerDetailCard({
   setDocumentForm,
   authToken,
   onUpload,
+  apiFetch,
 }: {
   customer: Customer;
   customerProjects: Project[];
@@ -4125,7 +4305,24 @@ function CustomerDetailCard({
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
   authToken: string;
   onUpload: () => void;
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
+  const [customerTimesheets, setCustomerTimesheets] = useState<TimesheetItem[]>([]);
+
+  useEffect(() => {
+    async function loadTs() {
+      const all: TimesheetItem[] = [];
+      for (const p of customerProjects) {
+        try {
+          const ts = await apiFetch<TimesheetItem[]>(`/timesheets/weekly?projectId=${p.id}`);
+          all.push(...ts);
+        } catch { /* skip */ }
+      }
+      setCustomerTimesheets(all);
+    }
+    void loadTs();
+  }, [apiFetch, customerProjects]);
+
   const customerMapsUrl = mapsUrlFromParts([
     customer.companyName,
     customer.addressLine1,
@@ -4354,6 +4551,9 @@ function CustomerDetailCard({
         </div>
       ) : null}
 
+      {/* ── Stundenzettel ────────────────────────────────────── */}
+      <TimesheetList timesheets={customerTimesheets} apiFetch={apiFetch} title="Stundenzettel (alle Projekte)" />
+
       {/* ── Dokumente und Bilder ───────────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <DocumentPanel
@@ -4375,6 +4575,7 @@ function CustomerDetailCard({
 function ProjectDetailCard({
   project,
   financials,
+  timesheets,
   documents,
   onOpenDocument,
   onPrintDocument,
@@ -4384,9 +4585,11 @@ function ProjectDetailCard({
   setDocumentForm,
   authToken,
   onUpload,
+  apiFetch,
 }: {
   project: Project;
   financials: ProjectFinancials | null;
+  timesheets: TimesheetItem[];
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
   onPrintDocument: (document: DocumentItem) => void;
@@ -4396,6 +4599,7 @@ function ProjectDetailCard({
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
   authToken: string;
   onUpload: () => void;
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
   const projectMapsUrl = mapsUrlFromParts([
     project.title,
@@ -4563,6 +4767,9 @@ function ProjectDetailCard({
           </div>
         </div>
       ) : null}
+
+      {/* ── Stundenzettel ──────────────────────────────── */}
+      <TimesheetList timesheets={timesheets} apiFetch={apiFetch} />
 
       {/* ── Dokumente ───────────────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
@@ -5084,34 +5291,6 @@ function DocumentPanel({
   );
 }
 
-function LinkedItemList({
-  title,
-  items,
-}: {
-  title: string;
-  items: { href: string; label: string; meta?: string }[];
-}) {
-  return (
-    <div className="grid gap-3">
-      <h4 className="font-medium">{title}</h4>
-      {items.length === 0 ? (
-        <p className="text-sm text-slate-500">Keine Eintraege vorhanden.</p>
-      ) : (
-        items.map((item) => (
-          <Link
-            key={`${item.href}-${item.label}`}
-            href={item.href}
-            className="rounded-2xl border border-black/10 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
-          >
-            <div className="font-medium">{item.label}</div>
-            {item.meta ? <div className="text-slate-500">{item.meta}</div> : null}
-          </Link>
-        ))
-      )}
-    </div>
-  );
-}
-
 function MapLinkButton({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a
@@ -5156,9 +5335,12 @@ function DocumentThumbnail({
   if (thumbnailUrl && isImage) {
     return (
       <div className="flex h-20 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/10 bg-slate-50 dark:border-white/10 dark:bg-slate-950">
-        <img
+        <Image
           src={thumbnailUrl}
           alt={document.title || document.originalFilename}
+          width={64}
+          height={80}
+          unoptimized
           className="h-full w-full object-cover"
         />
       </div>
@@ -5259,9 +5441,12 @@ function DocumentPreviewModal({
         </div>
         <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-black/10 bg-slate-50 p-2 dark:border-white/10 dark:bg-slate-950">
           {isImage ? (
-            <img
+            <Image
               src={preview.url}
               alt={preview.title}
+              width={1200}
+              height={1600}
+              unoptimized
               className="mx-auto max-h-[72vh] w-auto rounded-xl object-contain"
             />
           ) : isPdf ? (
@@ -5284,33 +5469,6 @@ function DocumentPreviewModal({
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function NestedBlock({
-  title,
-  onAdd,
-  children,
-  bordered = true,
-}: {
-  title: string;
-  onAdd: () => void;
-  children: ReactNode;
-  bordered?: boolean;
-}) {
-  return (
-    <div
-      className={cx(
-        "grid gap-3 rounded-2xl p-4",
-        bordered && "border border-black/10 dark:border-white/10",
-      )}
-    >
-      <div className="flex items-center justify-between">
-        <h3 className="font-medium">{title}</h3>
-        <SecondaryButton onClick={onAdd}>Hinzufuegen</SecondaryButton>
-      </div>
-      <div className="grid gap-3">{children}</div>
     </div>
   );
 }
