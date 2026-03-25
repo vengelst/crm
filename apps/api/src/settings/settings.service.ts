@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { createTransport } from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 
@@ -128,6 +129,69 @@ export class SettingsService {
       });
     }
     return this.prisma.smtpConfig.create({ data });
+  }
+
+  async sendSmtpTest(data: {
+    host: string;
+    port: number;
+    user?: string;
+    password?: string;
+    fromEmail: string;
+    secure: boolean;
+    recipient: string;
+  }) {
+    if (!data.host || !data.port || !data.fromEmail || !data.recipient) {
+      throw new BadRequestException(
+        'SMTP Host, Port, Absenderadresse und Testempfaenger sind erforderlich.',
+      );
+    }
+
+    const transport = createTransport({
+      host: data.host,
+      port: data.port,
+      secure: data.secure,
+      auth:
+        data.user && data.password
+          ? { user: data.user, pass: data.password }
+          : undefined,
+    });
+
+    try {
+      await transport.verify();
+
+      const result = await transport.sendMail({
+        from: data.fromEmail,
+        to: data.recipient,
+        subject: 'CRM SMTP-Test',
+        text: `Dies ist eine Test-E-Mail der CRM-App.\n\nHost: ${data.host}\nPort: ${data.port}\nSicher: ${data.secure ? 'ja' : 'nein'}`,
+      });
+
+      return {
+        ok: true,
+        recipient: data.recipient,
+        messageId: result.messageId,
+      };
+    } catch (error) {
+      throw new BadRequestException(this.formatSmtpError(error));
+    }
+  }
+
+  private formatSmtpError(error: unknown) {
+    if (!(error instanceof Error)) {
+      return 'SMTP-Test fehlgeschlagen.';
+    }
+
+    const code = (error as { code?: string }).code;
+
+    if (code === 'EAUTH') {
+      return 'SMTP-Anmeldung fehlgeschlagen. Benutzername oder Passwort sind ungueltig.';
+    }
+
+    if (code === 'ESOCKET' && error.message.includes('wrong version number')) {
+      return 'SMTP-Verbindung fehlgeschlagen. Bitte Port und SSL/TLS-Einstellung pruefen (meist Port 587 mit "Sicher" aus oder Port 465 mit "Sicher" an).';
+    }
+
+    return `SMTP-Test fehlgeschlagen: ${error.message}`;
   }
 
   async getPermissions() {

@@ -4,9 +4,18 @@ import {
   ServiceType,
   ProjectStatus,
 } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { hash } from 'bcryptjs';
+import pg from 'pg';
 
-const prisma = new PrismaClient();
+const pool = new pg.Pool({
+  connectionString:
+    process.env.DATABASE_URL ??
+    'postgresql://postgres:postgres@127.0.0.1:55432/crm_monteur',
+});
+
+const adapter = new PrismaPg(pool as any);
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   const roles = [

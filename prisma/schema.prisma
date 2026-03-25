@@ -1,10 +1,10 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum RoleCode {
@@ -305,6 +305,7 @@ model WorkerPin {
   id        String   @id @default(cuid())
   workerId  String
   pinHash   String
+  pinPlain  String?
   validFrom DateTime @default(now())
   validTo   DateTime?
   isActive  Boolean  @default(true)

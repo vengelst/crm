@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPinned, Settings as SettingsIcon } from "lucide-react";
+import { Settings as SettingsIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -19,417 +19,30 @@ import {
   useState,
 } from "react";
 import { ThemeToggle } from "./theme-toggle";
+import type {
+  AppSection, CrmAppProps, Summary, AuthState,
+  CustomerBranch, CustomerContact, Customer,
+  Project, Worker,
+  DocumentItem, TeamItem, TeamFormState,
+  RoleItem, UserItem,
+  ProjectFinancials, CustomerFinancials,
+  AppSettings,
+  CustomerFormState, ProjectFormState, WorkerFormState, UserFormState,
+  DocumentFormState, DocumentPreviewState,
+  TimesheetItem, WorkerTimeStatus,
+  PermissionItem, SmtpFormState,
+} from "./crm-app/types";
+import { API_ROOT, AUTH_STORAGE_KEY } from "./crm-app/types";
+import {
+  cx, formatAddress, mapsUrlFromParts, toDateInput, sanitizeForApi,
+  NavLink, IconNavLink, PrimaryButton, SecondaryButton,
+  SectionCard, InfoCard, MessageBar, MiniStat, MapLinkButton,
+  FormRow, Field, SelectField, TextArea,
+} from "./crm-app/shared";
 
-type AppSection =
-  | "dashboard"
-  | "customers"
-  | "projects"
-  | "workers"
-  | "reports"
-  | "settings"
-  | "users";
+// Re-export types for page files that import CrmAppProps
+export type { CrmAppProps } from "./crm-app/types";
 
-type CrmAppProps = {
-  section: AppSection;
-  entityId?: string;
-};
-
-type Summary = {
-  customers: number;
-  projects: number;
-  workers: number;
-  openTimesheets: number;
-};
-
-type AuthState = {
-  accessToken: string;
-  type: "user" | "worker";
-  user: {
-    id: string;
-    email: string;
-    displayName: string;
-    roles: string[];
-  };
-  worker?: {
-    id: string;
-    workerNumber: string;
-    name: string;
-  };
-  currentProjects?: {
-    id: string;
-    projectNumber: string;
-    title: string;
-    status: string;
-    startDate: string;
-    endDate: string | null;
-    siteLatitude: number | null;
-    siteLongitude: number | null;
-    customerName?: string | null;
-  }[];
-  futureProjects?: {
-    id: string;
-    projectNumber: string;
-    title: string;
-    status: string;
-    startDate: string;
-    endDate: string | null;
-    siteLatitude: number | null;
-    siteLongitude: number | null;
-    customerName?: string | null;
-  }[];
-  pastProjects?: {
-    id: string;
-    projectNumber: string;
-    title: string;
-    status: string;
-    startDate: string;
-    endDate: string | null;
-    siteLatitude: number | null;
-    siteLongitude: number | null;
-    customerName?: string | null;
-  }[];
-};
-
-type CustomerBranch = {
-  id?: string;
-  name: string;
-  addressLine1?: string;
-  addressLine2?: string;
-  postalCode?: string;
-  city?: string;
-  country?: string;
-  phone?: string;
-  email?: string;
-  notes?: string;
-  active?: boolean;
-};
-
-type CustomerContact = {
-  id?: string;
-  branchId?: string;
-  branchName?: string;
-  firstName: string;
-  lastName: string;
-  role?: string;
-  email?: string;
-  phoneMobile?: string;
-  phoneLandline?: string;
-  isAccountingContact?: boolean;
-  isProjectContact?: boolean;
-  isSignatory?: boolean;
-  notes?: string;
-};
-
-type Customer = {
-  id: string;
-  customerNumber: string;
-  companyName: string;
-  legalForm?: string | null;
-  status?: string;
-  billingEmail?: string | null;
-  phone?: string | null;
-  email?: string | null;
-  website?: string | null;
-  vatId?: string | null;
-  addressLine1?: string | null;
-  addressLine2?: string | null;
-  postalCode?: string | null;
-  city?: string | null;
-  country?: string | null;
-  notes?: string | null;
-  branches: CustomerBranch[];
-  contacts: CustomerContact[];
-};
-
-type ProjectAssignment = {
-  id: string;
-  worker: {
-    id: string;
-    workerNumber: string;
-    firstName: string;
-    lastName: string;
-    internalHourlyRate?: number | null;
-  };
-};
-
-type Project = {
-  id: string;
-  projectNumber: string;
-  title: string;
-  status?: string;
-  serviceType?: string;
-  description?: string | null;
-  customerId: string;
-  branchId?: string | null;
-  siteName?: string | null;
-  siteAddressLine1?: string | null;
-  sitePostalCode?: string | null;
-  siteCity?: string | null;
-  siteCountry?: string | null;
-  accommodationAddress?: string | null;
-  weeklyFlatRate?: number | null;
-  includedHoursPerWeek?: number | null;
-  hourlyRateUpTo40h?: number | null;
-  overtimeRate?: number | null;
-  plannedStartDate?: string | null;
-  plannedEndDate?: string | null;
-  notes?: string | null;
-  customer?: {
-    id: string;
-    companyName: string;
-  };
-  branch?: {
-    id: string;
-    name: string;
-  } | null;
-  assignments?: ProjectAssignment[];
-};
-
-type Worker = {
-  id: string;
-  workerNumber: string;
-  firstName: string;
-  lastName: string;
-  email?: string | null;
-  phone?: string | null;
-  phoneMobile?: string | null;
-  phoneOffice?: string | null;
-  addressLine1?: string | null;
-  addressLine2?: string | null;
-  postalCode?: string | null;
-  city?: string | null;
-  country?: string | null;
-  languageCode?: string | null;
-  notes?: string | null;
-  active?: boolean;
-  internalHourlyRate?: number | null;
-  timeEntries?: {
-    id: string;
-    entryType: string;
-    occurredAtClient: string;
-    occurredAtServer: string;
-    projectId: string;
-    latitude?: number | null;
-    longitude?: number | null;
-    locationSource?: string | null;
-    project?: { id: string; title: string; projectNumber: string };
-  }[];
-  assignments?: {
-    id: string;
-    startDate: string;
-    endDate?: string | null;
-    project: {
-      id: string;
-      title: string;
-      projectNumber: string;
-    };
-  }[];
-};
-
-type DocumentItem = {
-  id: string;
-  documentType: string;
-  title?: string | null;
-  description?: string | null;
-  originalFilename: string;
-  mimeType: string;
-  createdAt: string;
-  links: {
-    entityType: string;
-    entityId: string;
-  }[];
-};
-
-type TeamItem = {
-  id: string;
-  name: string;
-  notes?: string | null;
-  active: boolean;
-  members: {
-    id: string;
-    role?: string | null;
-    worker: {
-      id: string;
-      workerNumber: string;
-      firstName: string;
-      lastName: string;
-    };
-  }[];
-};
-
-type TeamFormState = {
-  id?: string;
-  name: string;
-  notes: string;
-  active: boolean;
-  memberWorkerIds: string[];
-};
-
-type RoleItem = {
-  id: string;
-  code: string;
-  name: string;
-};
-
-type UserItem = {
-  id: string;
-  email: string;
-  displayName: string;
-  isActive: boolean;
-  roles: {
-    role: RoleItem;
-  }[];
-};
-
-type ProjectFinancials = {
-  projectId: string;
-  totalHours: number;
-  overtimeHours: number;
-  baseRevenue: number;
-  overtimeRevenue: number;
-  totalRevenue: number;
-  workerCosts: {
-    workerId: string;
-    name: string;
-    hours: number;
-    rate: number | null;
-    cost: number;
-  }[];
-  totalCosts: number;
-  margin: number;
-  weeklyBreakdown: {
-    week: string;
-    hours: number;
-    overtimeHours: number;
-    baseRevenue: number;
-    overtimeRevenue: number;
-  }[];
-  pricingModel: string;
-};
-
-type CustomerFinancials = {
-  customerId: string;
-  totalHours: number;
-  overtimeHours: number;
-  baseRevenue: number;
-  overtimeRevenue: number;
-  totalRevenue: number;
-  totalCosts: number;
-  margin: number;
-  projects: {
-    projectId: string;
-    projectNumber: string;
-    title: string;
-    hours: number;
-    overtimeHours: number;
-    revenue: number;
-    costs: number;
-    margin: number;
-  }[];
-};
-
-type AppSettings = {
-  passwordMinLength: number;
-  kioskCodeLength: number;
-  defaultTheme: "light" | "dark";
-};
-
-type CustomerFormState = {
-  id?: string;
-  customerNumber: string;
-  companyName: string;
-  legalForm: string;
-  status: string;
-  billingEmail: string;
-  phone: string;
-  email: string;
-  website: string;
-  vatId: string;
-  addressLine1: string;
-  addressLine2: string;
-  postalCode: string;
-  city: string;
-  country: string;
-  notes: string;
-  branches: CustomerBranch[];
-  contacts: CustomerContact[];
-};
-
-type ProjectFormState = {
-  id?: string;
-  projectNumber: string;
-  customerId: string;
-  branchId: string;
-  title: string;
-  description: string;
-  serviceType: string;
-  status: string;
-  priority: number;
-  siteName: string;
-  siteAddressLine1: string;
-  sitePostalCode: string;
-  siteCity: string;
-  siteCountry: string;
-  accommodationAddress: string;
-  weeklyFlatRate: string;
-  includedHoursPerWeek: string;
-  hourlyRateUpTo40h: string;
-  overtimeRate: string;
-  plannedStartDate: string;
-  plannedEndDate: string;
-  notes: string;
-};
-
-type WorkerFormState = {
-  id?: string;
-  workerNumber: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phoneMobile: string;
-  phoneOffice: string;
-  addressLine1: string;
-  addressLine2: string;
-  postalCode: string;
-  city: string;
-  country: string;
-  languageCode: string;
-  notes: string;
-  active: boolean;
-  internalHourlyRate: string;
-  pin: string;
-};
-
-type UserFormState = {
-  id?: string;
-  email: string;
-  displayName: string;
-  password: string;
-  kioskCode: string;
-  roleCodes: string[];
-  isActive: boolean;
-};
-
-type DocumentFormState = {
-  title: string;
-  description: string;
-  documentType: string;
-  file: File | null;
-};
-
-type DocumentPreviewState = {
-  documentId: string;
-  url: string;
-  mimeType: string;
-  title: string;
-};
-
-const API_ROOT = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(
-  /\/$/,
-  "",
-);
-
-const AUTH_STORAGE_KEY = "crm-admin-auth";
 
 const emptyCustomerForm = (): CustomerFormState => ({
   customerNumber: "",
@@ -509,29 +122,6 @@ const emptyDocumentForm = (): DocumentFormState => ({
   documentType: "ALLGEMEIN",
   file: null,
 });
-
-function sanitizeForApi<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value
-      .map((entry) => sanitizeForApi(entry))
-      .filter((entry) => entry !== undefined) as T;
-  }
-
-  if (value && typeof value === "object") {
-    const nextEntries = Object.entries(value as Record<string, unknown>)
-      .map(([key, entry]) => [key, sanitizeForApi(entry)] as const)
-      .filter(([, entry]) => entry !== undefined);
-
-    return Object.fromEntries(nextEntries) as T;
-  }
-
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return (trimmed === "" ? undefined : trimmed) as T;
-  }
-
-  return value;
-}
 
 export function CrmApp({ section, entityId }: CrmAppProps) {
   const { setTheme } = useTheme();
@@ -1266,7 +856,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               className={cx(
                 "rounded-xl border px-4 py-2 text-sm font-medium transition",
                 loginTab === "admin"
-                  ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                  ? "border-slate-900 bg-slate-900 !text-white dark:border-slate-300 dark:bg-slate-200 dark:!text-slate-950"
                   : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
               )}
             >
@@ -1278,7 +868,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               className={cx(
                 "rounded-xl border px-4 py-2 text-sm font-medium transition",
                 loginTab === "kiosk"
-                  ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                  ? "border-slate-900 bg-slate-900 !text-white dark:border-slate-300 dark:bg-slate-200 dark:!text-slate-950"
                   : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
               )}
             >
@@ -1295,12 +885,14 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 <Field
                   label="E-Mail"
                   value={loginEmail}
+                  autoComplete="username"
                   onChange={(event) => setLoginEmail(event.target.value)}
                 />
                 <Field
                   label="Passwort"
                   type="password"
                   value={loginPassword}
+                  autoComplete="current-password"
                   onChange={(event) => setLoginPassword(event.target.value)}
                 />
               </FormRow>
@@ -1318,10 +910,11 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 label="Monteur-PIN"
                 type="password"
                 value={loginPin}
+                autoComplete="off"
                 onChange={(event) => setLoginPin(event.target.value)}
               />
               <p className="text-xs text-slate-500">
-                Monteure melden sich ausschliesslich mit ihrer persoenlichen PIN an. Die PIN muss eindeutig vergeben sein.
+                Monteure und Projektleiter melden sich ausschliesslich per PIN an. Die PIN muss eindeutig vergeben sein.
               </p>
               <PrimaryButton disabled={submitting}>
                 {submitting ? "Anmeldung laeuft ..." : "Monteur anmelden"}
@@ -2176,17 +1769,24 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                       }))
                     }
                   />
-                  <Field
-                    label="Kiosk-PIN (fuer Monteur-Anmeldung)"
-                    type="password"
-                    value={workerForm.pin}
-                    onChange={(event) =>
-                      setWorkerForm((current) => ({
-                        ...current,
-                        pin: event.target.value,
-                      }))
-                    }
-                  />
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">Kiosk-PIN</label>
+                    {workerForm.id && selectedWorker?.pins?.[0]?.pinPlain ? (
+                      <div className="mb-1 rounded-lg bg-slate-100 px-3 py-2 font-mono text-sm dark:bg-slate-800">
+                        Aktueller PIN: <span className="font-semibold">{selectedWorker.pins[0].pinPlain}</span>
+                      </div>
+                    ) : null}
+                    <input
+                      type="text"
+                      value={workerForm.pin}
+                      onChange={(event) => setWorkerForm((current) => ({ ...current, pin: event.target.value }))}
+                      placeholder={workerForm.id ? "Neuer PIN (leer = bleibt)" : "PIN vergeben"}
+                      className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
+                    />
+                    <p className="text-xs text-slate-500">
+                      {workerForm.id ? "Leer lassen = bestehender PIN bleibt. Neuer Wert = PIN wird ersetzt." : "PIN fuer Kiosk-Anmeldung vergeben."}
+                    </p>
+                  </div>
                 </FormRow>
                 <FormRow>
                   <Field
@@ -2496,19 +2096,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 }
 
 // ── Monteur Stundenzettel ────────────────────────────────────
-type TimesheetItem = {
-  id: string;
-  weekYear: number;
-  weekNumber: number;
-  status: string;
-  totalMinutesGross: number;
-  totalMinutesNet: number;
-  totalBreakMinutes: number;
-  project: { id: string; title: string; projectNumber: string };
-  worker?: { id: string; firstName: string; lastName: string; workerNumber: string };
-  signatures: { signerType: string; signerName: string; signedAt: string }[];
-  generatedAt?: string;
-};
 
 function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }: {
   timesheets: TimesheetItem[];
@@ -2938,20 +2525,6 @@ function OpenWorkCard({ openWork, working, onClockOut, onOpenProject }: {
 }
 
 // ── Monteur Zeiterfassungs-View ──────────────────────────────
-type WorkerTimeStatus = {
-  hasOpenWork: boolean;
-  openEntry: {
-    id: string;
-    projectId: string;
-    projectTitle: string;
-    projectNumber: string;
-    startedAt: string;
-    latitude?: number | null;
-    longitude?: number | null;
-    locationSource?: string | null;
-  } | null;
-};
-
 function WorkerTimeView({
   auth,
   apiFetch,
@@ -3305,8 +2878,6 @@ function WorkerTimeView({
   );
 }
 
-type PermissionItem = { id: string; code: string; name: string; category: string };
-type SmtpFormState = { host: string; port: string; user: string; password: string; fromEmail: string; secure: boolean };
 
 function SettingsPanel({
   settingsForm, setSettingsForm, onSettingsSubmit,
@@ -3333,6 +2904,8 @@ function SettingsPanel({
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [rolePermissionIds, setRolePermissionIds] = useState<string[]>([]);
   const [smtpForm, setSmtpForm] = useState<SmtpFormState>({ host: "", port: "587", user: "", password: "", fromEmail: "", secure: false });
+  const [smtpTestRecipient, setSmtpTestRecipient] = useState("");
+  const [smtpTesting, setSmtpTesting] = useState(false);
   const [backupForm, setBackupForm] = useState({ enabled: false, interval: "daily", time: "02:00", keepCount: "7" });
   const [companyForm, setCompanyForm] = useState({ name: "", street: "", postalCode: "", city: "", country: "DE", phone: "", email: "", website: "" });
   const [pdfConfigForm, setPdfConfigForm] = useState({ header: "", footer: "", extraText: "", useLogo: false });
@@ -3345,7 +2918,10 @@ function SettingsPanel({
 
   useEffect(() => {
     void apiFetch<{ host: string; port: number; user: string; password: string; fromEmail: string; secure: boolean }>("/settings/smtp")
-      .then((s) => setSmtpForm({ host: s.host ?? "", port: String(s.port ?? 587), user: s.user ?? "", password: s.password ?? "", fromEmail: s.fromEmail ?? "", secure: s.secure ?? false }))
+      .then((s) => {
+        setSmtpForm({ host: s.host ?? "", port: String(s.port ?? 587), user: s.user ?? "", password: s.password ?? "", fromEmail: s.fromEmail ?? "", secure: s.secure ?? false });
+        setSmtpTestRecipient(s.fromEmail ?? "");
+      })
       .catch(() => {});
     void apiFetch<{ enabled: boolean; interval: string; time: string; keepCount: number }>("/settings/backup")
       .then((b) => setBackupForm({ enabled: b.enabled, interval: b.interval, time: b.time, keepCount: String(b.keepCount) }))
@@ -3373,6 +2949,26 @@ function SettingsPanel({
       await apiFetch("/settings/smtp", { method: "PUT", body: JSON.stringify({ ...smtpForm, port: Number(smtpForm.port) }) });
       setPanelSuccess("SMTP gespeichert.");
     } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler"); }
+  }
+
+  async function testSmtp() {
+    setPanelError(null); setPanelSuccess(null); setSmtpTesting(true);
+    try {
+      const recipient = smtpTestRecipient.trim() || smtpForm.fromEmail.trim();
+      await apiFetch("/settings/smtp/test", {
+        method: "PUT",
+        body: JSON.stringify({
+          ...smtpForm,
+          port: Number(smtpForm.port),
+          recipient,
+        }),
+      });
+      setPanelSuccess(`Test-E-Mail erfolgreich an ${recipient} gesendet.`);
+    } catch (err) {
+      setPanelError(err instanceof Error ? err.message : "Fehler");
+    } finally {
+      setSmtpTesting(false);
+    }
   }
 
   async function saveCompanyInfo(e: FormEvent<HTMLFormElement>) {
@@ -3424,7 +3020,7 @@ function SettingsPanel({
           <button key={t.key} type="button" onClick={() => { setSettingsTab(t.key); setPanelSuccess(null); setPanelError(null); }}
             className={cx("rounded-xl border px-3 py-2 text-sm font-medium transition",
               settingsTab === t.key
-                ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                ? "border-slate-900 bg-slate-900 !text-white dark:border-slate-300 dark:bg-slate-200 dark:!text-slate-950"
                 : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
             )}>{t.label}</button>
         ))}
@@ -3459,8 +3055,8 @@ function SettingsPanel({
               <Field label="Anzeigename" value={userForm.displayName} onChange={(e) => setUserForm((c) => ({ ...c, displayName: e.target.value }))} />
               <Field label="E-Mail" value={userForm.email} onChange={(e) => setUserForm((c) => ({ ...c, email: e.target.value }))} />
               <FormRow>
-                <Field label="Passwort" type="password" value={userForm.password} onChange={(e) => setUserForm((c) => ({ ...c, password: e.target.value }))} />
-                <Field label="Benutzer-Kiosk-Code" type="password" value={userForm.kioskCode} onChange={(e) => setUserForm((c) => ({ ...c, kioskCode: e.target.value }))} />
+                <Field label="Passwort" type="password" autoComplete="new-password" value={userForm.password} onChange={(e) => setUserForm((c) => ({ ...c, password: e.target.value }))} />
+                <Field label="Sicherheitscode (intern)" type="password" autoComplete="new-password" value={userForm.kioskCode} onChange={(e) => setUserForm((c) => ({ ...c, kioskCode: e.target.value }))} />
               </FormRow>
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Rollen</label>
@@ -3556,14 +3152,24 @@ function SettingsPanel({
             </FormRow>
             <FormRow>
               <Field label="SMTP Benutzer" value={smtpForm.user} onChange={(e) => setSmtpForm((c) => ({ ...c, user: e.target.value }))} />
-              <Field label="SMTP Passwort" type="password" value={smtpForm.password} onChange={(e) => setSmtpForm((c) => ({ ...c, password: e.target.value }))} />
+              <Field label="SMTP Passwort" type="password" autoComplete="new-password" value={smtpForm.password} onChange={(e) => setSmtpForm((c) => ({ ...c, password: e.target.value }))} />
             </FormRow>
             <Field label="Absenderadresse" value={smtpForm.fromEmail} onChange={(e) => setSmtpForm((c) => ({ ...c, fromEmail: e.target.value }))} />
             <label className="inline-flex items-center gap-2 text-sm">
               <input type="checkbox" checked={smtpForm.secure} onChange={(e) => setSmtpForm((c) => ({ ...c, secure: e.target.checked }))} />
               TLS / SSL verwenden
             </label>
-            <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "SMTP speichern"}</PrimaryButton>
+            <Field
+              label="Test-E-Mail an"
+              value={smtpTestRecipient}
+              onChange={(e) => setSmtpTestRecipient(e.target.value)}
+            />
+            <div className="flex flex-wrap gap-3">
+              <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "SMTP speichern"}</PrimaryButton>
+              <SecondaryButton onClick={() => void testSmtp()}>
+                {smtpTesting ? "Testet ..." : "SMTP testen"}
+              </SecondaryButton>
+            </div>
           </form>
         </SectionCard>
       ) : null}
@@ -3918,174 +3524,6 @@ function availableBranches(customers: Customer[], customerId: string) {
   return customers.find((customer) => customer.id === customerId)?.branches ?? [];
 }
 
-function toDateInput(value?: string | null) {
-  return value ? value.slice(0, 10) : "";
-}
-
-function formatAddress(parts: Array<string | null | undefined>) {
-  return parts.filter((part) => Boolean(part && part.trim())).join(", ");
-}
-
-function mapsUrlFromParts(parts: Array<string | null | undefined>) {
-  const query = formatAddress(parts);
-  if (!query) {
-    return null;
-  }
-
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-}
-
-function cx(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(" ");
-}
-
-function NavLink({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cx(
-        "rounded-xl border px-3 py-2 text-sm font-medium transition",
-        active
-          ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
-          : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
-      )}
-    >
-      {children}
-    </Link>
-  );
-}
-
-function IconNavLink({
-  href,
-  active,
-  label,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-label={label}
-      title={label}
-      className={cx(
-        "inline-flex h-10 w-10 items-center justify-center rounded-xl border transition",
-        active
-          ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
-          : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
-      )}
-    >
-      {children}
-    </Link>
-  );
-}
-
-function PrimaryButton({
-  children,
-  disabled,
-}: {
-  children: ReactNode;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="submit"
-      disabled={disabled}
-      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-    >
-      {children}
-    </button>
-  );
-}
-
-function SecondaryButton({
-  children,
-  onClick,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
-    >
-      {children}
-    </button>
-  );
-}
-
-function SectionCard({
-  title,
-  subtitle,
-  children,
-  bordered = true,
-}: {
-  title: string;
-  subtitle?: string;
-  children: ReactNode;
-  bordered?: boolean;
-}) {
-  return (
-    <section
-      className={cx(
-        "rounded-3xl bg-white/80 p-5 shadow-sm dark:bg-slate-900/80",
-        bordered && "border border-black/10 dark:border-white/10",
-      )}
-    >
-      <div className="mb-4">
-        <h2 className="text-xl font-semibold">{title}</h2>
-        {subtitle ? <p className="text-sm text-slate-500">{subtitle}</p> : null}
-      </div>
-      <div className="grid gap-4">{children}</div>
-    </section>
-  );
-}
-
-function InfoCard({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <SectionCard title={title}>
-      <p className="text-sm text-slate-500">{children}</p>
-    </SectionCard>
-  );
-}
-
-function MessageBar({
-  error,
-  success,
-}: {
-  error: string | null;
-  success: string | null;
-}) {
-  if (!error && !success) {
-    return null;
-  }
-
-  return (
-    <div
-      className={cx(
-        "rounded-2xl border px-4 py-3 text-sm",
-        error
-          ? "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200"
-          : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200",
-      )}
-    >
-      {error ?? success}
-    </div>
-  );
-}
 
 function DashboardSection({
   summary,
@@ -4192,15 +3630,6 @@ function DashboardSection({
           })}
         </div>
       </SectionCard>
-    </div>
-  );
-}
-
-function MiniStat({ title, value }: { title: string; value: number }) {
-  return (
-    <div className="rounded-2xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-slate-900">
-      <p className="text-sm text-slate-500">{title}</p>
-      <p className="text-3xl font-semibold">{value}</p>
     </div>
   );
 }
@@ -5291,19 +4720,6 @@ function DocumentPanel({
   );
 }
 
-function MapLinkButton({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
-    >
-      <MapPinned className="h-4 w-4" />
-      {children}
-    </a>
-  );
-}
 
 function DocumentThumbnail({
   document,
@@ -5473,106 +4889,3 @@ function DocumentPreviewModal({
   );
 }
 
-function FormRow({ children }: { children: ReactNode }) {
-  return <div className="grid gap-4 md:grid-cols-2">{children}</div>;
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  type?: string;
-}) {
-  const [showSecret, setShowSecret] = useState(false);
-  const isSecret = type === "password";
-
-  return (
-    <div className="grid gap-2">
-      <label className="text-sm font-medium">{label}</label>
-      <div className="relative">
-        <input
-          type={isSecret && showSecret ? "text" : type}
-          value={value}
-          onChange={onChange}
-          className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
-        />
-        {isSecret ? (
-          <button
-            type="button"
-            onClick={() => setShowSecret((v) => !v)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-            tabIndex={-1}
-          >
-            {showSecret ? (
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-              </svg>
-            ) : (
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            )}
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function SelectField({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div className="grid gap-2">
-      <label className="text-sm font-medium">{label}</label>
-      <select
-        value={value}
-        onChange={onChange}
-        className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
-      >
-        <option value="">Bitte waehlen</option>
-        {options.map((option) => (
-          <option key={`${option.value}-${option.label}`} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function TextArea({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
-}) {
-  return (
-    <div className="grid gap-2">
-      <label className="text-sm font-medium">{label}</label>
-      <textarea
-        value={value}
-        onChange={onChange}
-        rows={4}
-        className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
-      />
-    </div>
-  );
-}

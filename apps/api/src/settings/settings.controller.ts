@@ -39,6 +39,22 @@ export class SettingsController {
     return this.settingsService.updateSmtpConfig(dto);
   }
 
+  @Put('smtp/test')
+  testSmtp(
+    @Body()
+    dto: {
+      host: string;
+      port: number;
+      user?: string;
+      password?: string;
+      fromEmail: string;
+      secure: boolean;
+      recipient: string;
+    },
+  ) {
+    return this.settingsService.sendSmtpTest(dto);
+  }
+
   @Get('permissions')
   getPermissions() {
     return this.settingsService.getPermissions();

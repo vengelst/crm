@@ -1,0 +1,377 @@
+// ── Alle gemeinsamen Typen fuer die CRM-App ──────────────────
+
+export type AppSection =
+  | "dashboard"
+  | "customers"
+  | "projects"
+  | "workers"
+  | "reports"
+  | "settings"
+  | "users";
+
+export type CrmAppProps = {
+  section: AppSection;
+  entityId?: string;
+};
+
+export type Summary = {
+  customers: number;
+  projects: number;
+  workers: number;
+  openTimesheets: number;
+};
+
+export type AuthState = {
+  accessToken: string;
+  type: "user" | "worker";
+  user: {
+    id: string;
+    email: string;
+    displayName: string;
+    roles: string[];
+  };
+  worker?: {
+    id: string;
+    workerNumber: string;
+    name: string;
+  };
+  currentProjects?: AuthProject[];
+  futureProjects?: AuthProject[];
+  pastProjects?: AuthProject[];
+};
+
+export type AuthProject = {
+  id: string;
+  projectNumber: string;
+  title: string;
+  status: string;
+  startDate: string;
+  endDate: string | null;
+  siteLatitude: number | null;
+  siteLongitude: number | null;
+  customerName?: string | null;
+};
+
+export type CustomerBranch = {
+  id?: string;
+  name: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  postalCode?: string;
+  city?: string;
+  country?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  active?: boolean;
+};
+
+export type CustomerContact = {
+  id?: string;
+  branchId?: string;
+  branchName?: string;
+  firstName: string;
+  lastName: string;
+  role?: string;
+  email?: string;
+  phoneMobile?: string;
+  phoneLandline?: string;
+  isAccountingContact?: boolean;
+  isProjectContact?: boolean;
+  isSignatory?: boolean;
+  notes?: string;
+};
+
+export type Customer = {
+  id: string;
+  customerNumber: string;
+  companyName: string;
+  legalForm?: string | null;
+  status?: string;
+  billingEmail?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  vatId?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  country?: string | null;
+  notes?: string | null;
+  branches: CustomerBranch[];
+  contacts: CustomerContact[];
+};
+
+export type ProjectAssignment = {
+  id: string;
+  worker: {
+    id: string;
+    workerNumber: string;
+    firstName: string;
+    lastName: string;
+    internalHourlyRate?: number | null;
+  };
+};
+
+export type Project = {
+  id: string;
+  projectNumber: string;
+  title: string;
+  status?: string;
+  serviceType?: string;
+  description?: string | null;
+  customerId: string;
+  branchId?: string | null;
+  siteName?: string | null;
+  siteAddressLine1?: string | null;
+  sitePostalCode?: string | null;
+  siteCity?: string | null;
+  siteCountry?: string | null;
+  accommodationAddress?: string | null;
+  weeklyFlatRate?: number | null;
+  includedHoursPerWeek?: number | null;
+  hourlyRateUpTo40h?: number | null;
+  overtimeRate?: number | null;
+  plannedStartDate?: string | null;
+  plannedEndDate?: string | null;
+  notes?: string | null;
+  customer?: { id: string; companyName: string };
+  branch?: { id: string; name: string } | null;
+  assignments?: ProjectAssignment[];
+};
+
+export type Worker = {
+  id: string;
+  workerNumber: string;
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  phone?: string | null;
+  phoneMobile?: string | null;
+  phoneOffice?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  country?: string | null;
+  languageCode?: string | null;
+  notes?: string | null;
+  active?: boolean;
+  internalHourlyRate?: number | null;
+  pins?: { pinPlain?: string | null }[];
+  timeEntries?: {
+    id: string;
+    entryType: string;
+    occurredAtClient: string;
+    occurredAtServer: string;
+    projectId: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    locationSource?: string | null;
+    project?: { id: string; title: string; projectNumber: string };
+  }[];
+  assignments?: {
+    id: string;
+    startDate: string;
+    endDate?: string | null;
+    project: { id: string; title: string; projectNumber: string };
+  }[];
+};
+
+export type DocumentItem = {
+  id: string;
+  documentType: string;
+  title?: string | null;
+  description?: string | null;
+  originalFilename: string;
+  mimeType: string;
+  createdAt: string;
+  links: { entityType: string; entityId: string }[];
+};
+
+export type TeamItem = {
+  id: string;
+  name: string;
+  notes?: string | null;
+  active: boolean;
+  members: {
+    id: string;
+    role?: string | null;
+    worker: { id: string; workerNumber: string; firstName: string; lastName: string };
+  }[];
+};
+
+export type TeamFormState = {
+  id?: string;
+  name: string;
+  notes: string;
+  active: boolean;
+  memberWorkerIds: string[];
+};
+
+export type RoleItem = { id: string; code: string; name: string };
+
+export type UserItem = {
+  id: string;
+  email: string;
+  displayName: string;
+  isActive: boolean;
+  roles: { role: RoleItem }[];
+};
+
+export type ProjectFinancials = {
+  projectId: string;
+  totalHours: number;
+  overtimeHours: number;
+  baseRevenue: number;
+  overtimeRevenue: number;
+  totalRevenue: number;
+  workerCosts: { workerId: string; name: string; hours: number; rate: number | null; cost: number }[];
+  totalCosts: number;
+  margin: number;
+  weeklyBreakdown: { week: string; hours: number; overtimeHours: number; baseRevenue: number; overtimeRevenue: number }[];
+  pricingModel: string;
+};
+
+export type CustomerFinancials = {
+  customerId: string;
+  totalHours: number;
+  overtimeHours: number;
+  baseRevenue: number;
+  overtimeRevenue: number;
+  totalRevenue: number;
+  totalCosts: number;
+  margin: number;
+  projects: { projectId: string; projectNumber: string; title: string; hours: number; overtimeHours: number; revenue: number; costs: number; margin: number }[];
+};
+
+export type AppSettings = {
+  passwordMinLength: number;
+  kioskCodeLength: number;
+  defaultTheme: "light" | "dark";
+};
+
+export type CustomerFormState = {
+  id?: string;
+  customerNumber: string;
+  companyName: string;
+  legalForm: string;
+  status: string;
+  billingEmail: string;
+  phone: string;
+  email: string;
+  website: string;
+  vatId: string;
+  addressLine1: string;
+  addressLine2: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  notes: string;
+  branches: CustomerBranch[];
+  contacts: CustomerContact[];
+};
+
+export type ProjectFormState = {
+  id?: string;
+  projectNumber: string;
+  customerId: string;
+  branchId: string;
+  title: string;
+  description: string;
+  serviceType: string;
+  status: string;
+  priority: number;
+  siteName: string;
+  siteAddressLine1: string;
+  sitePostalCode: string;
+  siteCity: string;
+  siteCountry: string;
+  accommodationAddress: string;
+  weeklyFlatRate: string;
+  includedHoursPerWeek: string;
+  hourlyRateUpTo40h: string;
+  overtimeRate: string;
+  plannedStartDate: string;
+  plannedEndDate: string;
+  notes: string;
+};
+
+export type WorkerFormState = {
+  id?: string;
+  workerNumber: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneMobile: string;
+  phoneOffice: string;
+  addressLine1: string;
+  addressLine2: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  languageCode: string;
+  notes: string;
+  active: boolean;
+  internalHourlyRate: string;
+  pin: string;
+};
+
+export type UserFormState = {
+  id?: string;
+  email: string;
+  displayName: string;
+  password: string;
+  kioskCode: string;
+  roleCodes: string[];
+  isActive: boolean;
+};
+
+export type DocumentFormState = {
+  title: string;
+  description: string;
+  documentType: string;
+  file: File | null;
+};
+
+export type DocumentPreviewState = {
+  documentId: string;
+  url: string;
+  mimeType: string;
+  title: string;
+};
+
+export type TimesheetItem = {
+  id: string;
+  weekYear: number;
+  weekNumber: number;
+  status: string;
+  totalMinutesGross: number;
+  totalMinutesNet: number;
+  totalBreakMinutes: number;
+  project: { id: string; title: string; projectNumber: string };
+  worker?: { id: string; firstName: string; lastName: string; workerNumber: string };
+  signatures: { signerType: string; signerName: string; signedAt: string }[];
+  generatedAt?: string;
+};
+
+export type WorkerTimeStatus = {
+  hasOpenWork: boolean;
+  openEntry: {
+    id: string;
+    projectId: string;
+    projectTitle: string;
+    projectNumber: string;
+    startedAt: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    locationSource?: string | null;
+  } | null;
+};
+
+export type PermissionItem = { id: string; code: string; name: string; category: string };
+export type SmtpFormState = { host: string; port: string; user: string; password: string; fromEmail: string; secure: boolean };
+
+export const API_ROOT = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
+export const AUTH_STORAGE_KEY = "crm-admin-auth";
