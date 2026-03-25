@@ -5,5 +5,5 @@
 define('SMTP_HOST', 'smtp.ionos.de');
 define('SMTP_PORT', 587);
 define('SMTP_USER', 'info@vivahome.de');
-define('SMTP_PASS', 'Mondoma&2026');
+define('SMTP_PASS', 'Gerresheim40625');
 ?>
