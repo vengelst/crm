@@ -2,6 +2,7 @@
 
 import { MapPinned, Settings as SettingsIcon } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
   type ChangeEvent,
@@ -515,6 +516,7 @@ function sanitizeForApi<T>(value: T): T {
 
 export function CrmApp({ section, entityId }: CrmAppProps) {
   const { setTheme } = useTheme();
+  const router = useRouter();
   const [ready, setReady] = useState(false);
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1456,7 +1458,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     href={(item) => `/customers/${item.id}`}
                     editLabel="Bearbeiten"
                     deleteLabel="Loeschen"
-                    onEdit={(item) => setCustomerForm(mapCustomerToForm(item))}
+                    onEdit={(item) => router.push(`/customers/${item.id}`)}
                     onDelete={(item) => void handleDelete(`/customers/${item.id}`, "Kunde", true)}
                   />
                 </SectionCard>
@@ -1873,7 +1875,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     href={(item) => `/projects/${item.id}`}
                     editLabel="Bearbeiten"
                     deleteLabel="Loeschen"
-                    onEdit={(item) => setProjectForm(mapProjectToForm(item))}
+                    onEdit={(item) => router.push(`/projects/${item.id}`)}
                     onDelete={(item) => void handleDelete(`/projects/${item.id}`, "Projekt")}
                   />
                 </SectionCard>
@@ -2149,7 +2151,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     href={(item) => `/workers/${item.id}`}
                     editLabel="Bearbeiten"
                     deleteLabel="Loeschen"
-                    onEdit={(item) => setWorkerForm(mapWorkerToForm(item))}
+                    onEdit={(item) => router.push(`/workers/${item.id}`)}
                     onDelete={(item) => void handleDelete(`/workers/${item.id}`, "Monteur", true)}
                   />
                 </SectionCard>
