@@ -3149,12 +3149,21 @@ function SettingsPanel({
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [rolePermissionIds, setRolePermissionIds] = useState<string[]>([]);
   const [smtpForm, setSmtpForm] = useState<SmtpFormState>({ host: "", port: "587", user: "", password: "", fromEmail: "", secure: false });
+  const [backupForm, setBackupForm] = useState({ enabled: false, interval: "daily", time: "02:00", keepCount: "7" });
   const [panelSuccess, setPanelSuccess] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
 
   useEffect(() => {
-    void apiFetch<PermissionItem[]>("/settings/permissions").then(setPermissions).catch(() => {});
-    void apiFetch<SmtpFormState>("/settings/smtp").then((s) => setSmtpForm({ ...s, port: String(s.port) })).catch(() => {});
+    void apiFetch<PermissionItem[]>("/settings/permissions").then(setPermissions).catch(() => setPermissions([]));
+  }, [apiFetch]);
+
+  useEffect(() => {
+    void apiFetch<{ host: string; port: number; user: string; password: string; fromEmail: string; secure: boolean }>("/settings/smtp")
+      .then((s) => setSmtpForm({ host: s.host ?? "", port: String(s.port ?? 587), user: s.user ?? "", password: s.password ?? "", fromEmail: s.fromEmail ?? "", secure: s.secure ?? false }))
+      .catch(() => {});
+    void apiFetch<{ enabled: boolean; interval: string; time: string; keepCount: number }>("/settings/backup")
+      .then((b) => setBackupForm({ enabled: b.enabled, interval: b.interval, time: b.time, keepCount: String(b.keepCount) }))
+      .catch(() => {});
   }, [apiFetch]);
 
   useEffect(() => {
@@ -3175,6 +3184,17 @@ function SettingsPanel({
     try {
       await apiFetch("/settings/smtp", { method: "PUT", body: JSON.stringify({ ...smtpForm, port: Number(smtpForm.port) }) });
       setPanelSuccess("SMTP gespeichert.");
+    } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler"); }
+  }
+
+  async function saveBackupConfig(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setPanelError(null); setPanelSuccess(null);
+    try {
+      await apiFetch("/settings/backup", {
+        method: "PUT",
+        body: JSON.stringify({ ...backupForm, keepCount: Number(backupForm.keepCount) }),
+      });
+      setPanelSuccess("Backup-Konfiguration gespeichert.");
     } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler"); }
   }
 
@@ -3308,23 +3328,46 @@ function SettingsPanel({
       ) : null}
 
       {settingsTab === "backup" ? (
-        <SectionCard title="Backup" subtitle="Datensicherung und Wiederherstellung.">
-          <div className="grid gap-4">
-            <div className="rounded-xl border border-black/10 bg-slate-50/50 p-4 dark:border-white/10 dark:bg-slate-950/30">
-              <h4 className="mb-2 text-sm font-semibold">Manuelles Backup</h4>
-              <p className="mb-3 text-sm text-slate-500">Erstellt ein vollstaendiges Backup der Datenbank und des Storages.</p>
-              <SecondaryButton onClick={() => setPanelSuccess("Backup-Funktion wird in einem spaeteren Update vollstaendig aktiviert.")}>Backup jetzt erstellen</SecondaryButton>
-            </div>
-            <div className="rounded-xl border border-black/10 bg-slate-50/50 p-4 dark:border-white/10 dark:bg-slate-950/30">
-              <h4 className="mb-2 text-sm font-semibold">Automatische Backups</h4>
-              <p className="text-sm text-slate-500">Konfiguration fuer zeitgesteuerte Backups. Wird in einem spaeteren Update aktiviert.</p>
-            </div>
+        <div className="grid gap-6">
+          <SectionCard title="Manuelles Backup" subtitle="Sofort ein vollstaendiges Backup erstellen.">
+            <SecondaryButton onClick={() => setPanelSuccess("Backup-Funktion wird in einem spaeteren Update vollstaendig aktiviert.")}>Backup jetzt erstellen</SecondaryButton>
+          </SectionCard>
+
+          <SectionCard title="Automatische Backups" subtitle="Zeitgesteuerte Datensicherung konfigurieren.">
+            <form className="grid gap-4 md:max-w-2xl" onSubmit={(e) => void saveBackupConfig(e)}>
+              <label className="inline-flex items-center gap-3 text-sm font-medium">
+                <input type="checkbox" checked={backupForm.enabled}
+                  onChange={(e) => setBackupForm((c) => ({ ...c, enabled: e.target.checked }))} />
+                Automatische Backups aktiviert
+              </label>
+              <FormRow>
+                <SelectField label="Intervall" value={backupForm.interval}
+                  onChange={(e) => setBackupForm((c) => ({ ...c, interval: e.target.value }))}
+                  options={[
+                    { value: "daily", label: "Taeglich" },
+                    { value: "weekly", label: "Woechentlich" },
+                    { value: "monthly", label: "Monatlich" },
+                  ]}
+                />
+                <Field label="Uhrzeit" value={backupForm.time}
+                  onChange={(e) => setBackupForm((c) => ({ ...c, time: e.target.value }))} />
+              </FormRow>
+              <Field label="Aufzubewahrende Backups" value={backupForm.keepCount}
+                onChange={(e) => setBackupForm((c) => ({ ...c, keepCount: e.target.value }))} />
+              <PrimaryButton disabled={submitting}>
+                {submitting ? "Speichert ..." : "Backup-Konfiguration speichern"}
+              </PrimaryButton>
+            </form>
+          </SectionCard>
+
+          <SectionCard title="Wiederherstellung" subtitle="Backup zurueckspielen.">
             <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-500/30 dark:bg-amber-500/5">
-              <h4 className="mb-2 text-sm font-semibold text-amber-700 dark:text-amber-400">Wiederherstellung</h4>
-              <p className="text-sm text-amber-600 dark:text-amber-400">Backup-Wiederherstellung mit selektiver Auswahl (Datenbank, Dokumente, Einstellungen) wird in einem spaeteren Update aktiviert.</p>
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                Backup-Wiederherstellung mit selektiver Auswahl (Datenbank, Dokumente, Einstellungen) wird in einem spaeteren Update aktiviert.
+              </p>
             </div>
-          </div>
-        </SectionCard>
+          </SectionCard>
+        </div>
       ) : null}
     </div>
   );
@@ -3342,13 +3385,13 @@ function ReportsSection({
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
   const [customerFinancials, setCustomerFinancials] = useState<Record<string, { totalRevenue: number; totalCosts: number; margin: number; totalHours: number }>>({});
-  const [loadingFinancials, setLoadingFinancials] = useState(false);
+  const [loadingFinancials, setLoadingFinancials] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    setLoadingFinancials(true);
 
     async function loadAll() {
+      setLoadingFinancials(true);
       const results: Record<string, { totalRevenue: number; totalCosts: number; margin: number; totalHours: number }> = {};
       for (const c of customers) {
         try {
@@ -4649,18 +4692,19 @@ function DocumentPanel({
     let cancelled = false;
     const createdUrls: string[] = [];
 
-    if (documents.length === 0) {
-      setThumbnailUrls({});
-      setThumbnailErrors({});
-      return;
-    }
-
     type ThumbnailResult =
       | { kind: "error"; id: string; error: string }
       | { kind: "url"; id: string; url: string }
       | { kind: "ok"; id: string };
 
     async function loadThumbnails() {
+      if (documents.length === 0) {
+        if (!cancelled) {
+          setThumbnailUrls({});
+          setThumbnailErrors({});
+        }
+        return;
+      }
       const results: ThumbnailResult[] = await Promise.all(
         documents.map(async (document): Promise<ThumbnailResult> => {
           const isPreviewable =

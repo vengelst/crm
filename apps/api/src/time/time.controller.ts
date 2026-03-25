@@ -43,8 +43,7 @@ export class TimeController {
   ) {
     const resolvedWorkerId = this.resolveWorkerId(request, workerId);
 
-    const openEntry =
-      await this.timeService.findOpenClockIn(resolvedWorkerId);
+    const openEntry = await this.timeService.findOpenClockIn(resolvedWorkerId);
     return {
       hasOpenWork: !!openEntry,
       openEntry: openEntry
@@ -76,10 +75,7 @@ export class TimeController {
    * fuer sich selbst buchen. Der Body-workerId wird gegen
    * den JWT-workerId validiert.
    */
-  private enforceWorkerIdentity(
-    request: RequestWithUser,
-    dto: ClockEntryDto,
-  ) {
+  private enforceWorkerIdentity(request: RequestWithUser, dto: ClockEntryDto) {
     if (request.user?.type === 'worker') {
       const jwtWorkerId = request.user.workerId ?? request.user.sub;
       if (dto.workerId !== jwtWorkerId) {

@@ -127,7 +127,11 @@ export class ProjectsService {
 
     if (dto.projectNumber) {
       const existing = await this.prisma.project.findFirst({
-        where: { projectNumber: dto.projectNumber, deletedAt: null, NOT: { id } },
+        where: {
+          projectNumber: dto.projectNumber,
+          deletedAt: null,
+          NOT: { id },
+        },
       });
       if (existing) {
         throw new BadRequestException('Projektnummer bereits vergeben.');
@@ -248,10 +252,7 @@ export class ProjectsService {
     const weeklyHoursMap = new Map<string, number>(); // "YYYY-WW" → hours
 
     // Gruppiere nach Worker, paare IN/OUT
-    const entriesByWorker = new Map<
-      string,
-      typeof project.timeEntries
-    >();
+    const entriesByWorker = new Map<string, typeof project.timeEntries>();
     for (const entry of project.timeEntries) {
       const list = entriesByWorker.get(entry.workerId) ?? [];
       list.push(entry);
@@ -299,8 +300,8 @@ export class ProjectsService {
     const hourlyRate = project.hourlyRateUpTo40h ?? 0;
     const overtimeRate = project.overtimeRate ?? 0;
 
-    const sortedWeeks = [...weeklyHoursMap.entries()].sort(
-      ([a], [b]) => a.localeCompare(b),
+    const sortedWeeks = [...weeklyHoursMap.entries()].sort(([a], [b]) =>
+      a.localeCompare(b),
     );
 
     const weeklyBreakdown: {

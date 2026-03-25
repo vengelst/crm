@@ -151,7 +151,11 @@ export class CustomersService {
 
     if (dto.customerNumber) {
       const existing = await this.prisma.customer.findFirst({
-        where: { customerNumber: dto.customerNumber, deletedAt: null, NOT: { id } },
+        where: {
+          customerNumber: dto.customerNumber,
+          deletedAt: null,
+          NOT: { id },
+        },
       });
       if (existing) {
         throw new BadRequestException('Kundennummer bereits vergeben.');
@@ -293,10 +297,7 @@ export class CustomersService {
       const workerHoursMap = new Map<string, number>();
       const weeklyHoursMap = new Map<string, number>();
 
-      const entriesByWorker = new Map<
-        string,
-        typeof project.timeEntries
-      >();
+      const entriesByWorker = new Map<string, typeof project.timeEntries>();
       for (const entry of project.timeEntries) {
         const list = entriesByWorker.get(entry.workerId) ?? [];
         list.push(entry);
@@ -328,10 +329,7 @@ export class CustomersService {
         }
       }
 
-      const projHours = [...workerHoursMap.values()].reduce(
-        (s, h) => s + h,
-        0,
-      );
+      const projHours = [...workerHoursMap.values()].reduce((s, h) => s + h, 0);
 
       // Umsatz wochenweise
       const weeklyFlatRate = project.weeklyFlatRate ?? null;

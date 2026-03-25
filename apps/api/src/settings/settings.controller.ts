@@ -56,4 +56,22 @@ export class SettingsController {
   ) {
     return this.settingsService.setRolePermissions(roleId, body.permissionIds);
   }
+
+  @Get('backup')
+  getBackupConfig() {
+    return this.settingsService.getBackupConfig();
+  }
+
+  @Put('backup')
+  updateBackupConfig(
+    @Body()
+    dto: {
+      enabled: boolean;
+      interval: string;
+      time: string;
+      keepCount: number;
+    },
+  ) {
+    return this.settingsService.updateBackupConfig(dto);
+  }
 }

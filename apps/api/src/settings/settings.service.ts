@@ -93,7 +93,14 @@ export class SettingsService {
   async getSmtpConfig() {
     const config = await this.prisma.smtpConfig.findFirst();
     if (!config) {
-      return { host: '', port: 587, user: '', password: '', fromEmail: '', secure: false };
+      return {
+        host: '',
+        port: 587,
+        user: '',
+        password: '',
+        fromEmail: '',
+        secure: false,
+      };
     }
     return {
       host: config.host,
@@ -147,5 +154,48 @@ export class SettingsService {
       }
     });
     return this.getRolePermissions(roleId);
+  }
+
+  async getBackupConfig() {
+    const keys = [
+      'backup.enabled',
+      'backup.interval',
+      'backup.time',
+      'backup.keepCount',
+    ];
+    const rows = await this.prisma.setting.findMany({
+      where: { key: { in: keys } },
+    });
+    const byKey = new Map(rows.map((r) => [r.key, r.valueJson]));
+    return {
+      enabled: byKey.get('backup.enabled') === true,
+      interval: (byKey.get('backup.interval') as string) ?? 'daily',
+      time: (byKey.get('backup.time') as string) ?? '02:00',
+      keepCount: this.readNumber(byKey.get('backup.keepCount'), 7),
+    };
+  }
+
+  async updateBackupConfig(data: {
+    enabled: boolean;
+    interval: string;
+    time: string;
+    keepCount: number;
+  }) {
+    const entries: [string, string | number | boolean][] = [
+      ['backup.enabled', data.enabled],
+      ['backup.interval', data.interval],
+      ['backup.time', data.time],
+      ['backup.keepCount', data.keepCount],
+    ];
+
+    for (const [key, valueJson] of entries) {
+      await this.prisma.setting.upsert({
+        where: { key },
+        update: { valueJson },
+        create: { key, valueJson },
+      });
+    }
+
+    return this.getBackupConfig();
   }
 }

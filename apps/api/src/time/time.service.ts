@@ -19,11 +19,7 @@ export class TimeService {
     // 2. Pruefen: aktuelle Projektzuordnung gueltig
     await this.ensureCurrentAssignment(dto.workerId, dto.projectId);
 
-    return this.createEntry(
-      TimeEntryType.CLOCK_IN,
-      GpsEventType.CLOCK_IN,
-      dto,
-    );
+    return this.createEntry(TimeEntryType.CLOCK_IN, GpsEventType.CLOCK_IN, dto);
   }
 
   async clockOut(dto: ClockEntryDto) {
@@ -89,10 +85,7 @@ export class TimeService {
     });
   }
 
-  private async ensureCurrentAssignment(
-    workerId: string,
-    projectId: string,
-  ) {
+  private async ensureCurrentAssignment(workerId: string, projectId: string) {
     const now = new Date();
     const assignment = await this.prisma.projectAssignment.findFirst({
       where: {
