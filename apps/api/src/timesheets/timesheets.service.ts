@@ -36,7 +36,11 @@ export class TimesheetsService {
       where: { id },
       include: {
         worker: true,
-        project: true,
+        project: {
+          include: {
+            customer: true,
+          },
+        },
         days: {
           orderBy: {
             workDate: 'asc',
@@ -249,75 +253,223 @@ export class TimesheetsService {
 
   async renderPdf(id: string) {
     const sheet = await this.getById(id);
+
+    // Lade Firmen- und PDF-Einstellungen
+    const companyRows = await this.prisma.setting.findMany({
+      where: { key: { startsWith: 'company.' } },
+    });
+    const company: Record<string, string> = {};
+    for (const row of companyRows) {
+      const val = row.valueJson;
+      company[row.key.slice(8)] = typeof val === 'string' ? val : '';
+    }
+
+    const pdfRows = await this.prisma.setting.findMany({
+      where: { key: { startsWith: 'pdf.' } },
+    });
+    const pdfRaw: Record<string, unknown> = {};
+    for (const row of pdfRows) {
+      pdfRaw[row.key.slice(4)] = row.valueJson;
+    }
+    const pdfCfg = {
+      header: typeof pdfRaw.header === 'string' ? pdfRaw.header : '',
+      footer: typeof pdfRaw.footer === 'string' ? pdfRaw.footer : '',
+      extraText: typeof pdfRaw.extraText === 'string' ? pdfRaw.extraText : '',
+      useLogo: pdfRaw.useLogo === true,
+    };
+
     const pdf = await PDFDocument.create();
     const page = pdf.addPage([595.28, 841.89]);
     const font = await pdf.embedFont(StandardFonts.Helvetica);
     const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const pageWidth = 595.28;
+    const margin = 40;
 
-    let cursorY = 800;
+    let y = 800;
 
-    const drawLine = (label: string, value: string, bold = false) => {
-      page.drawText(`${label}: ${value}`, {
-        x: 40,
-        y: cursorY,
-        size: 11,
-        font: bold ? boldFont : font,
-      });
-      cursorY -= 18;
+    const text = (str: string, x: number, size: number, f = font) => {
+      page.drawText(str, { x, y, size, font: f });
     };
 
-    page.drawText('Wochen-Stundenzettel', {
-      x: 40,
-      y: cursorY,
-      size: 18,
-      font: boldFont,
-    });
-    cursorY -= 30;
+    const hLine = () => {
+      page.drawLine({
+        start: { x: margin, y: y + 4 },
+        end: { x: pageWidth - margin, y: y + 4 },
+        thickness: 0.5,
+      });
+    };
 
-    drawLine('Monteur', `${sheet.worker.firstName} ${sheet.worker.lastName}`);
-    drawLine('Projekt', sheet.project.title);
-    drawLine('Kalenderwoche', `${sheet.weekNumber}/${sheet.weekYear}`);
-    drawLine('Nettozeit', `${(sheet.totalMinutesNet / 60).toFixed(2)} Stunden`);
-    drawLine(
-      'Bruttozeit',
-      `${(sheet.totalMinutesGross / 60).toFixed(2)} Stunden`,
+    // ── Kopfzeile ──────────────────────────────────
+    if (pdfCfg.header) {
+      text(String(pdfCfg.header), margin, 8);
+      y -= 14;
+    }
+
+    // ── Titel ──────────────────────────────────────
+    text('Wochen-Stundenzettel', margin, 18, boldFont);
+    y -= 8;
+    text(`KW ${sheet.weekNumber} / ${sheet.weekYear}`, margin + 250, 12);
+    y -= 26;
+    hLine();
+    y -= 16;
+
+    // ── Firma ──────────────────────────────────────
+    if (company.name) {
+      text('Auftraggeber', margin, 9, boldFont);
+      text('Kunde', pageWidth / 2, 9, boldFont);
+      y -= 14;
+      text(company.name, margin, 10);
+      text(
+        (sheet.project as { customer?: { companyName?: string } }).customer
+          ?.companyName ?? '-',
+        pageWidth / 2,
+        10,
+      );
+      y -= 13;
+      if (company.street) {
+        text(company.street, margin, 9);
+        y -= 12;
+      }
+      const cityLine = [company.postalCode, company.city]
+        .filter(Boolean)
+        .join(' ');
+      if (cityLine) {
+        text(cityLine, margin, 9);
+        y -= 12;
+      }
+      if (company.phone) {
+        text(`Tel: ${company.phone}`, margin, 9);
+        y -= 12;
+      }
+      y -= 8;
+      hLine();
+      y -= 16;
+    }
+
+    // ── Projekt / Monteur ──────────────────────────
+    text('Projekt', margin, 9, boldFont);
+    text('Monteur', pageWidth / 2, 9, boldFont);
+    y -= 14;
+    text(`${sheet.project.projectNumber} - ${sheet.project.title}`, margin, 10);
+    text(
+      `${sheet.worker.firstName} ${sheet.worker.lastName}`,
+      pageWidth / 2,
+      10,
     );
-    drawLine('Pausen', `${(sheet.totalBreakMinutes / 60).toFixed(2)} Stunden`);
-    drawLine('Status', sheet.status, true);
-    cursorY -= 10;
+    y -= 13;
 
-    page.drawText('Tagesuebersicht', {
-      x: 40,
-      y: cursorY,
-      size: 14,
-      font: boldFont,
-    });
-    cursorY -= 24;
+    const siteAddr = [
+      sheet.project.siteAddressLine1,
+      sheet.project.sitePostalCode,
+      sheet.project.siteCity,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    if (siteAddr) {
+      text(`Ort: ${siteAddr}`, margin, 9);
+      y -= 12;
+    }
+    y -= 8;
+    hLine();
+    y -= 16;
+
+    // ── Tagesübersicht Tabelle ─────────────────────
+    text('Tagesuebersicht', margin, 12, boldFont);
+    y -= 18;
+
+    // Tabellenkopf
+    const cols = [margin, 120, 190, 260, 340, 420];
+    const headers = ['Datum', 'Beginn', 'Ende', 'Brutto', 'Pause', 'Netto'];
+    for (let i = 0; i < headers.length; i++) {
+      text(headers[i], cols[i], 9, boldFont);
+    }
+    y -= 14;
+    hLine();
+    y -= 12;
 
     for (const day of sheet.days) {
-      const workDate = day.workDate.toLocaleDateString('de-DE');
-      const interval = `${formatTime(day.firstClockInAt)} - ${formatTime(day.lastClockOutAt)}`;
-      const netHours = `${(day.netMinutes / 60).toFixed(2)} h`;
-      drawLine(workDate, `${interval} | Netto ${netHours}`);
-    }
-
-    if (sheet.signatures.length > 0) {
-      cursorY -= 10;
-      page.drawText('Signaturen', {
-        x: 40,
-        y: cursorY,
-        size: 14,
-        font: boldFont,
+      const workDate = day.workDate.toLocaleDateString('de-DE', {
+        weekday: 'short',
+        day: '2-digit',
+        month: '2-digit',
       });
-      cursorY -= 24;
-
-      for (const signature of sheet.signatures) {
-        drawLine(
-          signature.signerType,
-          `${signature.signerName} am ${signature.signedAt.toLocaleString('de-DE')}`,
-        );
-      }
+      text(workDate, cols[0], 9);
+      text(formatTime(day.firstClockInAt), cols[1], 9);
+      text(formatTime(day.lastClockOutAt), cols[2], 9);
+      text(fmtMinutes(day.grossMinutes), cols[3], 9);
+      text(fmtMinutes(day.breakMinutes), cols[4], 9);
+      text(fmtMinutes(day.netMinutes), cols[5], 9, boldFont);
+      y -= 14;
     }
+
+    // Summenzeile
+    y -= 4;
+    hLine();
+    y -= 14;
+    text('Summe', cols[0], 10, boldFont);
+    text(fmtMinutes(sheet.totalMinutesGross), cols[3], 10, boldFont);
+    text(fmtMinutes(sheet.totalBreakMinutes), cols[4], 10, boldFont);
+    text(fmtMinutes(sheet.totalMinutesNet), cols[5], 10, boldFont);
+    y -= 20;
+
+    // ── Zusatztext ─────────────────────────────────
+    if (pdfCfg.extraText) {
+      text(String(pdfCfg.extraText), margin, 9);
+      y -= 16;
+    }
+
+    // ── Signaturen ─────────────────────────────────
+    hLine();
+    y -= 16;
+    text('Unterschriften', margin, 12, boldFont);
+    y -= 18;
+
+    const workerSig = sheet.signatures.find((s) => s.signerType === 'WORKER');
+    const customerSig = sheet.signatures.find(
+      (s) => s.signerType === 'CUSTOMER',
+    );
+
+    text('Monteur:', margin, 9, boldFont);
+    text('Kunde:', pageWidth / 2, 9, boldFont);
+    y -= 14;
+
+    if (workerSig) {
+      text(
+        `${workerSig.signerName} (${workerSig.signedAt.toLocaleDateString('de-DE')})`,
+        margin,
+        9,
+      );
+    } else {
+      text('________________________', margin, 9);
+    }
+
+    if (customerSig) {
+      text(
+        `${customerSig.signerName} (${customerSig.signedAt.toLocaleDateString('de-DE')})`,
+        pageWidth / 2,
+        9,
+      );
+    } else {
+      text('________________________', pageWidth / 2, 9);
+    }
+    y -= 20;
+
+    // ── Fusszeile ──────────────────────────────────
+    if (pdfCfg.footer) {
+      page.drawText(String(pdfCfg.footer), {
+        x: margin,
+        y: 30,
+        size: 7,
+        font,
+      });
+    }
+
+    page.drawText(`Erstellt: ${new Date().toLocaleString('de-DE')}`, {
+      x: pageWidth - 180,
+      y: 30,
+      size: 7,
+      font,
+    });
 
     return Buffer.from(await pdf.save());
   }
@@ -439,6 +591,12 @@ export class TimesheetsService {
 
 function createPdfFilename(year: number, week: number) {
   return `wochenzettel-${year}-kw${String(week).padStart(2, '0')}.pdf`;
+}
+
+function fmtMinutes(minutes: number) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h}:${String(m).padStart(2, '0')}`;
 }
 
 function formatTime(value: Date | null) {

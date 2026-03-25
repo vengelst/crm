@@ -45,10 +45,13 @@ export class WorkersService {
           },
         },
         timeEntries: {
+          include: {
+            project: true,
+          },
           orderBy: {
             occurredAtServer: 'desc',
           },
-          take: 25,
+          take: 100,
         },
         weeklyTimesheets: {
           orderBy: {

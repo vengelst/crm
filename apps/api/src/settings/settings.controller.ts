@@ -57,6 +57,34 @@ export class SettingsController {
     return this.settingsService.setRolePermissions(roleId, body.permissionIds);
   }
 
+  @Get('company')
+  getCompanyInfo() {
+    return this.settingsService.getCompanyInfo();
+  }
+
+  @Put('company')
+  updateCompanyInfo(@Body() dto: Record<string, string>) {
+    return this.settingsService.updateCompanyInfo(dto);
+  }
+
+  @Get('pdf-config')
+  getPdfConfig() {
+    return this.settingsService.getPdfConfig();
+  }
+
+  @Put('pdf-config')
+  updatePdfConfig(
+    @Body()
+    dto: {
+      header: string;
+      footer: string;
+      extraText: string;
+      useLogo: boolean;
+    },
+  ) {
+    return this.settingsService.updatePdfConfig(dto);
+  }
+
   @Get('backup')
   getBackupConfig() {
     return this.settingsService.getBackupConfig();

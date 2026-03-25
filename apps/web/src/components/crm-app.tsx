@@ -192,8 +192,13 @@ type Worker = {
   timeEntries?: {
     id: string;
     entryType: string;
+    occurredAtClient: string;
     occurredAtServer: string;
     projectId: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    locationSource?: string | null;
+    project?: { id: string; title: string; projectNumber: string };
   }[];
   assignments?: {
     id: string;
@@ -2734,6 +2739,67 @@ function WorkerTimesheetSection({
   );
 }
 
+function OpenWorkCard({ openWork, working, onClockOut, onOpenProject }: {
+  openWork: NonNullable<WorkerTimeStatus["openEntry"]>;
+  working: boolean;
+  onClockOut: () => void;
+  onOpenProject: () => void;
+}) {
+  const [elapsed, setElapsed] = useState("");
+
+  useEffect(() => {
+    function update() {
+      const ms = Date.now() - new Date(openWork.startedAt).getTime();
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      setElapsed(`${h}h ${String(m).padStart(2, "0")}m`);
+    }
+    update();
+    const interval = setInterval(update, 30000);
+    return () => clearInterval(interval);
+  }, [openWork.startedAt]);
+
+  const mapsLink = openWork.latitude != null && openWork.longitude != null
+    ? `https://www.google.com/maps/search/?api=1&query=${openWork.latitude},${openWork.longitude}`
+    : null;
+
+  return (
+    <div className="rounded-3xl border-2 border-emerald-400 bg-emerald-50/60 p-6 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/5">
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Laufende Arbeit</div>
+      <div className="text-xl font-semibold">{openWork.projectTitle}</div>
+      <p className="text-sm text-slate-500">{openWork.projectNumber}</p>
+      <div className="mt-3 grid gap-2 text-sm">
+        <div className="flex items-center gap-4">
+          <div>
+            <span className="text-slate-500">Gestartet:</span>{" "}
+            <span className="font-mono">{new Date(openWork.startedAt).toLocaleString("de-DE")}</span>
+          </div>
+          <div className="rounded-lg bg-emerald-100 px-3 py-1 font-mono text-lg font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
+            {elapsed}
+          </div>
+        </div>
+        {mapsLink ? (
+          <div className="text-slate-500">
+            Start-Standort:{" "}
+            <a href={mapsLink} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+              {openWork.latitude?.toFixed(5)}, {openWork.longitude?.toFixed(5)} (Karte)
+            </a>
+          </div>
+        ) : (
+          <div className="text-slate-400">Kein Start-Standort gespeichert</div>
+        )}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button type="button" disabled={working} onClick={onClockOut}
+          className="rounded-xl bg-red-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-60">
+          {working ? "Beende Arbeit ..." : "Arbeit beenden"}
+        </button>
+        <SecondaryButton onClick={onOpenProject}>Projekt oeffnen</SecondaryButton>
+      </div>
+    </div>
+  );
+}
+
 // ── Monteur Zeiterfassungs-View ──────────────────────────────
 type WorkerTimeStatus = {
   hasOpenWork: boolean;
@@ -2990,30 +3056,7 @@ function WorkerTimeView({
 
         {/* ── Laufende Arbeit ──────────────────────────── */}
         {openWork ? (
-          <div className="rounded-3xl border-2 border-emerald-400 bg-emerald-50/60 p-6 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/5">
-            <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Laufende Arbeit</div>
-            <div className="text-xl font-semibold">{openWork.projectTitle}</div>
-            <p className="text-sm text-slate-500">{openWork.projectNumber}</p>
-            <div className="mt-3 grid gap-1 text-sm">
-              <div>Gestartet: <span className="font-mono">{new Date(openWork.startedAt).toLocaleString("de-DE")}</span></div>
-              {openWork.latitude != null && openWork.longitude != null ? (
-                <div className="text-slate-500">Standort: {openWork.latitude.toFixed(5)}, {openWork.longitude.toFixed(5)}</div>
-              ) : null}
-            </div>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                type="button"
-                disabled={working}
-                onClick={() => void handleClockOut()}
-                className="rounded-xl bg-red-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-60"
-              >
-                {working ? "Beende Arbeit ..." : "Arbeit beenden"}
-              </button>
-              <SecondaryButton onClick={() => setViewingProjectId(openWork.projectId)}>
-                Projekt oeffnen
-              </SecondaryButton>
-            </div>
-          </div>
+          <OpenWorkCard openWork={openWork} working={working} onClockOut={() => void handleClockOut()} onOpenProject={() => setViewingProjectId(openWork.projectId)} />
         ) : null}
 
         {/* ── Arbeit beginnen (nur wenn keine offene Arbeit) ── */}
@@ -3144,12 +3187,14 @@ function SettingsPanel({
   error: string | null;
   success: string | null;
 }) {
-  const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "smtp" | "backup">("general");
+  const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "company" | "pdfconfig" | "smtp" | "backup">("general");
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [rolePermissionIds, setRolePermissionIds] = useState<string[]>([]);
   const [smtpForm, setSmtpForm] = useState<SmtpFormState>({ host: "", port: "587", user: "", password: "", fromEmail: "", secure: false });
   const [backupForm, setBackupForm] = useState({ enabled: false, interval: "daily", time: "02:00", keepCount: "7" });
+  const [companyForm, setCompanyForm] = useState({ name: "", street: "", postalCode: "", city: "", country: "DE", phone: "", email: "", website: "" });
+  const [pdfConfigForm, setPdfConfigForm] = useState({ header: "", footer: "", extraText: "", useLogo: false });
   const [panelSuccess, setPanelSuccess] = useState<string | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
 
@@ -3164,6 +3209,8 @@ function SettingsPanel({
     void apiFetch<{ enabled: boolean; interval: string; time: string; keepCount: number }>("/settings/backup")
       .then((b) => setBackupForm({ enabled: b.enabled, interval: b.interval, time: b.time, keepCount: String(b.keepCount) }))
       .catch(() => {});
+    void apiFetch<typeof companyForm>("/settings/company").then(setCompanyForm).catch(() => {});
+    void apiFetch<typeof pdfConfigForm>("/settings/pdf-config").then(setPdfConfigForm).catch(() => {});
   }, [apiFetch]);
 
   useEffect(() => {
@@ -3187,6 +3234,22 @@ function SettingsPanel({
     } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler"); }
   }
 
+  async function saveCompanyInfo(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setPanelError(null); setPanelSuccess(null);
+    try {
+      await apiFetch("/settings/company", { method: "PUT", body: JSON.stringify(companyForm) });
+      setPanelSuccess("Firmeninformationen gespeichert.");
+    } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler"); }
+  }
+
+  async function savePdfConfig(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setPanelError(null); setPanelSuccess(null);
+    try {
+      await apiFetch("/settings/pdf-config", { method: "PUT", body: JSON.stringify(pdfConfigForm) });
+      setPanelSuccess("PDF-Konfiguration gespeichert.");
+    } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler"); }
+  }
+
   async function saveBackupConfig(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setPanelError(null); setPanelSuccess(null);
     try {
@@ -3202,6 +3265,8 @@ function SettingsPanel({
     { key: "general", label: "Allgemein" },
     ...(canManageUsers ? [{ key: "users" as const, label: "Benutzer" }] : []),
     ...(canManageUsers ? [{ key: "roles" as const, label: "Rollen & Rechte" }] : []),
+    { key: "company" as const, label: "Firma" },
+    { key: "pdfconfig" as const, label: "PDF" },
     { key: "smtp", label: "E-Mail / SMTP" },
     { key: "backup", label: "Backup" },
   ];
@@ -3303,6 +3368,41 @@ function SettingsPanel({
               </div>
             ) : null}
           </div>
+        </SectionCard>
+      ) : null}
+
+      {settingsTab === "company" ? (
+        <SectionCard title="Firmeninformationen" subtitle="Diese Daten erscheinen auf Stundenzetteln und PDFs.">
+          <form className="grid gap-4 md:max-w-2xl" onSubmit={(e) => void saveCompanyInfo(e)}>
+            <Field label="Firmenname" value={companyForm.name} onChange={(e) => setCompanyForm((c) => ({ ...c, name: e.target.value }))} />
+            <Field label="Strasse / Hausnummer" value={companyForm.street} onChange={(e) => setCompanyForm((c) => ({ ...c, street: e.target.value }))} />
+            <FormRow>
+              <Field label="PLZ" value={companyForm.postalCode} onChange={(e) => setCompanyForm((c) => ({ ...c, postalCode: e.target.value }))} />
+              <Field label="Ort" value={companyForm.city} onChange={(e) => setCompanyForm((c) => ({ ...c, city: e.target.value }))} />
+            </FormRow>
+            <Field label="Land" value={companyForm.country} onChange={(e) => setCompanyForm((c) => ({ ...c, country: e.target.value }))} />
+            <FormRow>
+              <Field label="Telefon" value={companyForm.phone} onChange={(e) => setCompanyForm((c) => ({ ...c, phone: e.target.value }))} />
+              <Field label="E-Mail" value={companyForm.email} onChange={(e) => setCompanyForm((c) => ({ ...c, email: e.target.value }))} />
+            </FormRow>
+            <Field label="Website" value={companyForm.website} onChange={(e) => setCompanyForm((c) => ({ ...c, website: e.target.value }))} />
+            <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "Firmeninformationen speichern"}</PrimaryButton>
+          </form>
+        </SectionCard>
+      ) : null}
+
+      {settingsTab === "pdfconfig" ? (
+        <SectionCard title="PDF-Konfiguration" subtitle="Darstellung fuer Stundenzettel und Dokumente.">
+          <form className="grid gap-4 md:max-w-2xl" onSubmit={(e) => void savePdfConfig(e)}>
+            <Field label="PDF-Kopfzeile" value={pdfConfigForm.header} onChange={(e) => setPdfConfigForm((c) => ({ ...c, header: e.target.value }))} />
+            <Field label="PDF-Fusszeile" value={pdfConfigForm.footer} onChange={(e) => setPdfConfigForm((c) => ({ ...c, footer: e.target.value }))} />
+            <TextArea label="Zusatztext / Freitext" value={pdfConfigForm.extraText} onChange={(e) => setPdfConfigForm((c) => ({ ...c, extraText: e.target.value }))} />
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={pdfConfigForm.useLogo} onChange={(e) => setPdfConfigForm((c) => ({ ...c, useLogo: e.target.checked }))} />
+              Logo im PDF verwenden
+            </label>
+            <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "PDF-Konfiguration speichern"}</PrimaryButton>
+          </form>
         </SectionCard>
       ) : null}
 
@@ -4482,6 +4582,101 @@ function ProjectDetailCard({
   );
 }
 
+function WorkerTimeLog({ entries }: { entries: NonNullable<Worker["timeEntries"]> }) {
+  // Paare CLOCK_IN/CLOCK_OUT
+  type WorkPair = {
+    clockIn: (typeof entries)[number];
+    clockOut: (typeof entries)[number] | null;
+  };
+
+  const sorted = [...entries].sort(
+    (a, b) => new Date(a.occurredAtClient).getTime() - new Date(b.occurredAtClient).getTime(),
+  );
+
+  const pairs: WorkPair[] = [];
+  let pendingIn: (typeof entries)[number] | null = null;
+
+  for (const entry of sorted) {
+    if (entry.entryType === "CLOCK_IN") {
+      if (pendingIn) pairs.push({ clockIn: pendingIn, clockOut: null });
+      pendingIn = entry;
+    } else if (entry.entryType === "CLOCK_OUT" && pendingIn) {
+      pairs.push({ clockIn: pendingIn, clockOut: entry });
+      pendingIn = null;
+    }
+  }
+  if (pendingIn) pairs.push({ clockIn: pendingIn, clockOut: null });
+
+  pairs.reverse();
+
+  function mapsUrl(lat?: number | null, lon?: number | null) {
+    if (lat == null || lon == null) return null;
+    return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+  }
+
+  function duration(start: string, end: string | null) {
+    if (!end) return "laufend";
+    const ms = new Date(end).getTime() - new Date(start).getTime();
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    return `${h}h ${m}m`;
+  }
+
+  if (pairs.length === 0) {
+    return (
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h4 className="text-base font-semibold">Arbeitsprotokoll</h4>
+        <p className="mt-2 text-sm text-slate-500">Keine Zeitbuchungen vorhanden.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+      <h4 className="mb-3 text-base font-semibold">Arbeitsprotokoll</h4>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
+              <th className="pb-2 pr-2">Datum</th>
+              <th className="pb-2 pr-2">Projekt</th>
+              <th className="pb-2 pr-2">Anmeldung</th>
+              <th className="pb-2 pr-2">Ort</th>
+              <th className="pb-2 pr-2">Abmeldung</th>
+              <th className="pb-2 pr-2">Ort</th>
+              <th className="pb-2 pr-2">Dauer</th>
+              <th className="pb-2">Quelle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pairs.map((p, i) => {
+              const inUrl = mapsUrl(p.clockIn.latitude, p.clockIn.longitude);
+              const outUrl = p.clockOut ? mapsUrl(p.clockOut.latitude, p.clockOut.longitude) : null;
+              const isOpen = !p.clockOut;
+              return (
+                <tr key={i} className={cx("border-b border-black/5 dark:border-white/5", isOpen && "bg-emerald-50/50 dark:bg-emerald-500/5")}>
+                  <td className="py-2 pr-2 font-mono text-xs">{new Date(p.clockIn.occurredAtClient).toLocaleDateString("de-DE")}</td>
+                  <td className="py-2 pr-2 text-xs">{p.clockIn.project?.projectNumber ?? "-"}</td>
+                  <td className="py-2 pr-2 font-mono text-xs">{new Date(p.clockIn.occurredAtClient).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</td>
+                  <td className="py-2 pr-2 text-xs">
+                    {inUrl ? <a href={inUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">Karte</a> : <span className="text-slate-400">-</span>}
+                  </td>
+                  <td className="py-2 pr-2 font-mono text-xs">{p.clockOut ? new Date(p.clockOut.occurredAtClient).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : <span className="font-semibold text-emerald-600 dark:text-emerald-400">laufend</span>}</td>
+                  <td className="py-2 pr-2 text-xs">
+                    {outUrl ? <a href={outUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">Karte</a> : <span className="text-slate-400">-</span>}
+                  </td>
+                  <td className="py-2 pr-2 font-mono text-xs">{duration(p.clockIn.occurredAtClient, p.clockOut?.occurredAtClient ?? null)}</td>
+                  <td className="py-2 text-xs text-slate-400">{p.clockIn.locationSource ?? "-"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function FinancialKpi({ label, value, highlight, warn }: { label: string; value: string; highlight?: boolean; warn?: boolean }) {
   return (
     <div className={cx(
@@ -4645,6 +4840,9 @@ function WorkerDetailCard({
           </div>
         </div>
       ) : null}
+
+      {/* ── Arbeitsprotokoll ──────────────────────────────── */}
+      <WorkerTimeLog entries={worker.timeEntries ?? []} />
 
       {/* ── Dokumente ───────────────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">

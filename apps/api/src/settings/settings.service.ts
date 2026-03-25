@@ -156,6 +156,76 @@ export class SettingsService {
     return this.getRolePermissions(roleId);
   }
 
+  async getCompanyInfo() {
+    const prefix = 'company.';
+    const rows = await this.prisma.setting.findMany({
+      where: { key: { startsWith: prefix } },
+    });
+    const byKey = new Map(
+      rows.map((r) => [r.key.slice(prefix.length), r.valueJson]),
+    );
+    return {
+      name: (byKey.get('name') as string) ?? '',
+      street: (byKey.get('street') as string) ?? '',
+      postalCode: (byKey.get('postalCode') as string) ?? '',
+      city: (byKey.get('city') as string) ?? '',
+      country: (byKey.get('country') as string) ?? '',
+      phone: (byKey.get('phone') as string) ?? '',
+      email: (byKey.get('email') as string) ?? '',
+      website: (byKey.get('website') as string) ?? '',
+    };
+  }
+
+  async updateCompanyInfo(data: Record<string, string>) {
+    for (const [field, value] of Object.entries(data)) {
+      const key = `company.${field}`;
+      await this.prisma.setting.upsert({
+        where: { key },
+        update: { valueJson: value },
+        create: { key, valueJson: value },
+      });
+    }
+    return this.getCompanyInfo();
+  }
+
+  async getPdfConfig() {
+    const prefix = 'pdf.';
+    const rows = await this.prisma.setting.findMany({
+      where: { key: { startsWith: prefix } },
+    });
+    const byKey = new Map(
+      rows.map((r) => [r.key.slice(prefix.length), r.valueJson]),
+    );
+    return {
+      header: (byKey.get('header') as string) ?? '',
+      footer: (byKey.get('footer') as string) ?? '',
+      extraText: (byKey.get('extraText') as string) ?? '',
+      useLogo: byKey.get('useLogo') === true,
+    };
+  }
+
+  async updatePdfConfig(data: {
+    header: string;
+    footer: string;
+    extraText: string;
+    useLogo: boolean;
+  }) {
+    const entries: [string, string | boolean][] = [
+      ['pdf.header', data.header],
+      ['pdf.footer', data.footer],
+      ['pdf.extraText', data.extraText],
+      ['pdf.useLogo', data.useLogo],
+    ];
+    for (const [key, valueJson] of entries) {
+      await this.prisma.setting.upsert({
+        where: { key },
+        update: { valueJson },
+        create: { key, valueJson },
+      });
+    }
+    return this.getPdfConfig();
+  }
+
   async getBackupConfig() {
     const keys = [
       'backup.enabled',
