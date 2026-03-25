@@ -211,12 +211,15 @@ function Run-Deploy {
     # ── 5. Deploy-Modus waehlen und starten ────────────────────
     Write-Host ""
     Write-Host "Deploy mode:"
-    Write-Host "1  FULL snapshot                - Code + DB + Storage auf TEST spiegeln"
-    Write-Host "2  APP only                     - Nur Code auf TEST aktualisieren"
+    Write-Host "1  APP  (sicher)       - Code + DB-Migration auf TEST"
+    Write-Host "                         TEST-Datenbank und Storage bleiben erhalten"
+    Write-Host "2  FULL (destruktiv)   - Lokale DB + Storage auf TEST ueberschreiben"
+    Write-Host "                         ACHTUNG: Ueberschreibt alle TEST-Daten!"
+    Write-Host ""
     $choice = Read-Host "Select mode [1]"
     if ([string]::IsNullOrWhiteSpace($choice)) { $choice = "1" }
 
-    $mode = if ($choice -eq "2") { "app" } else { "full" }
+    $mode = if ($choice -eq "2") { "full" } else { "app" }
     & "$base\deploy-test.ps1" -Mode $mode -Branch "main"
     Pause
 }
@@ -317,7 +320,7 @@ while ($true) {
     Write-Host "8  Run DB Seed                  - pnpm db:seed"
     Write-Host "9  Create DB Dump               - SQL-Dump aus crm-postgres"
     Write-Host "10 Restore DB Dump              - Dump in crm_monteur einspielen"
-    Write-Host "11 Deploy to TEST Server        - Deploy nach crm.vivahome.de"
+    Write-Host "11 Deploy to TEST Server        - APP (Code+Migration) oder FULL (destruktiv)"
     Write-Host "12 Live Status Dashboard        - Laufende Statusansicht"
     Write-Host "13 Git Workflow                 - Status/Add/Commit/Push"
     Write-Host "20 Exit"

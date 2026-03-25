@@ -1422,47 +1422,45 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         ) : null}
 
         {section === "customers" ? (
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <SectionCard
-              title={selectedCustomer ? "Kunde Detail" : "Kundenliste"}
-              subtitle={
-                selectedCustomer
-                  ? "Details, Dokumente und Ansprechpartner des gewaehlten Kunden."
-                  : "Klick auf den Kundentitel oeffnet die Kundenseite."
-              }
-              bordered={false}
-            >
-              {selectedCustomer ? (
-                <CustomerDetailCard
-                  customer={selectedCustomer}
-                  customerProjects={projects.filter((p) => p.customerId === selectedCustomer.id)}
-                  financials={customerFinancials}
-                  documents={filterDocuments(documents, "CUSTOMER", selectedCustomer.id)}
-                  onOpenDocument={handleOpenDocument}
-                  onPrintDocument={handlePrintDocument}
-                  onDownload={handleDownloadDocument}
-                  onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, "Dokument")}
-                  documentForm={documentForm}
-                  setDocumentForm={setDocumentForm}
-                  authToken={auth.accessToken}
-                  onUpload={() => void handleDocumentUpload("CUSTOMER", selectedCustomer.id)}
-                />
-              ) : null}
-              {selectedCustomer ? null : (
-                <EntityList
-                  items={customers}
-                  title={(item) => item.companyName}
-                  subtitle={(item) => item.customerNumber}
-                  href={(item) => `/customers/${item.id}`}
-                  editLabel="Bearbeiten"
-                  deleteLabel="Loeschen"
-                  onEdit={(item) => setCustomerForm(mapCustomerToForm(item))}
-                  onDelete={(item) => void handleDelete(`/customers/${item.id}`, "Kunde", true)}
-                />
-              )}
+          <>
+          {selectedCustomer ? (
+            <div className="grid gap-6">
+              <div className="flex items-center gap-3">
+                <Link href="/customers" className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800">
+                  Zurueck zur Liste
+                </Link>
+                <h2 className="text-xl font-semibold">Kunde Detail</h2>
+              </div>
+              <CustomerDetailCard
+                customer={selectedCustomer}
+                customerProjects={projects.filter((p) => p.customerId === selectedCustomer.id)}
+                financials={customerFinancials}
+                documents={filterDocuments(documents, "CUSTOMER", selectedCustomer.id)}
+                onOpenDocument={handleOpenDocument}
+                onPrintDocument={handlePrintDocument}
+                onDownload={handleDownloadDocument}
+                onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, "Dokument")}
+                documentForm={documentForm}
+                setDocumentForm={setDocumentForm}
+                authToken={auth.accessToken}
+                onUpload={() => void handleDocumentUpload("CUSTOMER", selectedCustomer.id)}
+              />
+            </div>
+          ) : (
+            <SectionCard title="Kundenliste" subtitle="Klick auf den Kundentitel oeffnet die Kundenseite." bordered={false}>
+              <EntityList
+                items={customers}
+                title={(item) => item.companyName}
+                subtitle={(item) => item.customerNumber}
+                href={(item) => `/customers/${item.id}`}
+                editLabel="Bearbeiten"
+                deleteLabel="Loeschen"
+                onEdit={(item) => setCustomerForm(mapCustomerToForm(item))}
+                onDelete={(item) => void handleDelete(`/customers/${item.id}`, "Kunde", true)}
+              />
             </SectionCard>
-
-            <form className="grid gap-5" onSubmit={handleCustomerSubmit}>
+          )}
+          <form className="grid gap-5" onSubmit={handleCustomerSubmit}>
               {/* ── Stammdaten-Karte ─────────────────────────── */}
               <section className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
                 <div className="mb-4">
@@ -1836,30 +1834,35 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </SecondaryButton>
               </div>
             </form>
-          </div>
+          </>
         ) : null}
 
         {section === "projects" ? (
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <SectionCard
-              title={selectedProject ? "Projekt geoeffnet" : "Projektliste"}
-              subtitle="Klick auf den Projekttitel oeffnet die Projektseite."
-            >
-              {selectedProject ? (
-                <ProjectDetailCard
-                  project={selectedProject}
-                  financials={projectFinancials}
-                  documents={filterDocuments(documents, "PROJECT", selectedProject.id)}
-                  onOpenDocument={handleOpenDocument}
-                  onPrintDocument={handlePrintDocument}
-                  onDownload={handleDownloadDocument}
-                  onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, "Dokument")}
-                  documentForm={documentForm}
-                  setDocumentForm={setDocumentForm}
-                  authToken={auth.accessToken}
-                  onUpload={() => void handleDocumentUpload("PROJECT", selectedProject.id)}
-                />
-              ) : null}
+          <>
+          {selectedProject ? (
+            <div className="grid gap-6">
+              <div className="flex items-center gap-3">
+                <Link href="/projects" className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800">
+                  Zurueck zur Liste
+                </Link>
+                <h2 className="text-xl font-semibold">Projekt Detail</h2>
+              </div>
+              <ProjectDetailCard
+                project={selectedProject}
+                financials={projectFinancials}
+                documents={filterDocuments(documents, "PROJECT", selectedProject.id)}
+                onOpenDocument={handleOpenDocument}
+                onPrintDocument={handlePrintDocument}
+                onDownload={handleDownloadDocument}
+                onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, "Dokument")}
+                documentForm={documentForm}
+                setDocumentForm={setDocumentForm}
+                authToken={auth.accessToken}
+                onUpload={() => void handleDocumentUpload("PROJECT", selectedProject.id)}
+              />
+            </div>
+          ) : (
+            <SectionCard title="Projektliste" subtitle="Klick auf den Projekttitel oeffnet die Projektseite.">
               <EntityList
                 items={projects}
                 title={(item) => item.title}
@@ -1871,12 +1874,13 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 onDelete={(item) => void handleDelete(`/projects/${item.id}`, "Projekt")}
               />
             </SectionCard>
+          )}
 
-            <SectionCard
-              title={projectForm.id ? "Projekt bearbeiten" : "Neues Projekt anlegen"}
-              subtitle="Der Kunde wird direkt dem Projekt zugeordnet."
-            >
-              <form className="grid gap-4" onSubmit={handleProjectSubmit}>
+          <SectionCard
+            title={projectForm.id ? "Projekt bearbeiten" : "Neues Projekt anlegen"}
+            subtitle="Der Kunde wird direkt dem Projekt zugeordnet."
+          >
+            <form className="grid gap-4" onSubmit={handleProjectSubmit}>
                 <FormRow>
                   <Field
                     label="Projektnummer"
@@ -2104,30 +2108,34 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </div>
               </form>
             </SectionCard>
-          </div>
+          </>
         ) : null}
 
         {section === "workers" ? (
           <>
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <SectionCard
-              title={selectedWorker ? "Monteur geoeffnet" : "Monteursliste"}
-              subtitle="Klick auf den Monteurtitel oeffnet die Monteurseite."
-            >
-              {selectedWorker ? (
-                <WorkerDetailCard
-                  worker={selectedWorker}
-                  documents={filterDocuments(documents, "WORKER", selectedWorker.id)}
-                  onOpenDocument={handleOpenDocument}
-                  onPrintDocument={handlePrintDocument}
-                  onDownload={handleDownloadDocument}
-                  onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, "Dokument")}
-                  documentForm={documentForm}
-                  setDocumentForm={setDocumentForm}
-                  authToken={auth.accessToken}
-                  onUpload={() => void handleDocumentUpload("WORKER", selectedWorker.id)}
-                />
-              ) : null}
+          {selectedWorker ? (
+            <div className="grid gap-6">
+              <div className="flex items-center gap-3">
+                <Link href="/workers" className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800">
+                  Zurueck zur Liste
+                </Link>
+                <h2 className="text-xl font-semibold">Monteur Detail</h2>
+              </div>
+              <WorkerDetailCard
+                worker={selectedWorker}
+                documents={filterDocuments(documents, "WORKER", selectedWorker.id)}
+                onOpenDocument={handleOpenDocument}
+                onPrintDocument={handlePrintDocument}
+                onDownload={handleDownloadDocument}
+                onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, "Dokument")}
+                documentForm={documentForm}
+                setDocumentForm={setDocumentForm}
+                authToken={auth.accessToken}
+                onUpload={() => void handleDocumentUpload("WORKER", selectedWorker.id)}
+              />
+            </div>
+          ) : (
+            <SectionCard title="Monteursliste" subtitle="Klick auf den Monteurtitel oeffnet die Monteurseite.">
               <EntityList
                 items={workers}
                 title={(item) => `${item.firstName} ${item.lastName}${item.active === false ? " (deaktiviert)" : ""}`}
@@ -2139,9 +2147,10 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 onDelete={(item) => void handleDelete(`/workers/${item.id}`, "Monteur", true)}
               />
             </SectionCard>
+          )}
 
-            <SectionCard
-              title={workerForm.id ? "Monteur bearbeiten" : "Neuen Monteur anlegen"}
+          <SectionCard
+            title={workerForm.id ? "Monteur bearbeiten" : "Neuen Monteur anlegen"}
               subtitle="Beim Anlegen ist ein PIN Pflicht. Beim Bearbeiten setzt ein neuer Wert den PIN zurueck."
             >
               <form className="grid gap-4" onSubmit={handleWorkerSubmit}>
@@ -2308,7 +2317,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </div>
               </form>
             </SectionCard>
-          </div>
 
           {/* ── Teams ────────────────────────────────────── */}
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">

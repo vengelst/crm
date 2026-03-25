@@ -134,7 +134,7 @@ $tmpRemoteScript = Join-Path $env:TEMP "crm_test_remote_deploy.sh"
 if ($Mode -eq "full") {
     $activePostgresContainer = Resolve-RunningPostgresContainer $LocalPostgresContainer
 
-    $confirm = Ask "FULL mode ueberschreibt TEST-Datenbank und Storage. Bitte 'yes' eingeben"
+    $confirm = Ask "ACHTUNG DESTRUKTIV: FULL ueberschreibt die gesamte TEST-Datenbank und den Storage mit dem lokalen Stand. Bitte 'yes' eingeben"
     if ($confirm -ne "yes") { Err "Abgebrochen durch Benutzer." }
 
     Info "Erstelle DB-Dump aus lokalem Container $activePostgresContainer..."
@@ -216,10 +216,10 @@ for i in $(seq 1 30); do
 done
 
 if [ "{{MODE}}" = "full" ]; then
-  echo "[db] restoring crm_monteur"
+  echo "[db] FULL: restoring crm_monteur from local dump (DESTRUKTIV)"
   cat /tmp/crm_dump.sql | docker exec -i crm-postgres psql -U postgres -d crm_monteur
 
-  echo "[storage] replacing storage directory"
+  echo "[storage] FULL: replacing storage directory"
   rm -rf storage
   mkdir -p storage
 
@@ -253,6 +253,19 @@ PY
     echo "[storage] neither python3 nor unzip available" >&2
     exit 1
   fi
+else
+  echo "[db] APP: fuehre Prisma-Migration auf TEST-Datenbank aus..."
+  if ! docker compose run --rm -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/crm_monteur api sh -c "npx prisma migrate deploy --schema ./prisma/schema.prisma"; then
+    echo "" >&2
+    echo "========================================" >&2
+    echo "  APP-Deploy abgebrochen:" >&2
+    echo "  Prisma-Migration auf TEST fehlgeschlagen." >&2
+    echo "  Kein Container-Rebuild durchgefuehrt." >&2
+    echo "  TEST-System laeuft weiter mit altem Stand." >&2
+    echo "========================================" >&2
+    exit 1
+  fi
+  echo "[db] APP: Migration erfolgreich."
 fi
 
 echo "[docker] rebuilding stack"
