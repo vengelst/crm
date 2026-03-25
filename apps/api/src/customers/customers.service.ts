@@ -52,6 +52,13 @@ export class CustomersService {
       );
     }
 
+    const existing = await this.prisma.customer.findFirst({
+      where: { customerNumber: dto.customerNumber, deletedAt: null },
+    });
+    if (existing) {
+      throw new BadRequestException('Kundennummer bereits vergeben.');
+    }
+
     const customerNumber = dto.customerNumber;
     const companyName = dto.companyName;
 
@@ -141,6 +148,15 @@ export class CustomersService {
 
   async update(id: string, dto: SaveCustomerDto) {
     await this.getById(id);
+
+    if (dto.customerNumber) {
+      const existing = await this.prisma.customer.findFirst({
+        where: { customerNumber: dto.customerNumber, deletedAt: null, NOT: { id } },
+      });
+      if (existing) {
+        throw new BadRequestException('Kundennummer bereits vergeben.');
+      }
+    }
 
     return this.prisma.$transaction(async (tx) => {
       if (dto.branches) {

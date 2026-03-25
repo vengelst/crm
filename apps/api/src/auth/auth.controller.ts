@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { AuthService } from './auth.service';
+import { KioskLoginDto } from './dto/kiosk-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { PinLoginDto } from './dto/pin-login.dto';
 
@@ -27,6 +28,12 @@ export class AuthController {
   @Post('pin-login')
   pinLogin(@Body() dto: PinLoginDto) {
     return this.authService.pinLogin(dto);
+  }
+
+  @Public()
+  @Post('kiosk-login')
+  kioskLogin(@Body() dto: KioskLoginDto) {
+    return this.authService.kioskLogin(dto);
   }
 
   @Get('me')

@@ -184,3 +184,70 @@
 
 - Offene Punkte:
   - Spaetere Erweiterungen wie Zuschlaege, Reisekosten oder komplexere Wochenmodelle sind noch offen.
+
+## 2026-03-24
+
+### Deaktivierte Monteure und PIN-Login
+
+- Ausgangslage:
+  - Deaktivierte Monteure sollten konsequent aus der Team-Auswahl herausfallen und sich nicht mehr per PIN anmelden koennen.
+  - Der Login sollte klar zwischen Admin-Anmeldung und Monteur-/Kiosk-Anmeldung getrennt sein.
+  - Nach PIN-Login sollte nur noch die reduzierte Monteur-Sicht mit eigenen Projekten sichtbar sein.
+
+- Geplante Aufgabe:
+  - Deaktivierte Monteure in Team-Checkboxen ausblenden.
+  - PIN-Login fuer deaktivierte Monteure serverseitig sperren.
+  - Login-Oberflaeche in zwei Modi aufteilen.
+  - Admin-Datenladen fuer Worker-Sitzungen unterbinden.
+
+- Umsetzung durch Claude:
+  - Deaktivierte Monteure werden in der Team-Auswahl nicht mehr angeboten.
+  - Deaktivierte Monteure bleiben in der Admin-Monteurliste sichtbar und werden als `(deaktiviert)` markiert.
+  - Der PIN-Login lehnt deaktivierte Monteure sowie Monteure ohne aktuelle oder zukuenftige Zuordnung ab.
+  - Die Login-Seite zeigt getrennte Bereiche fuer `Admin Login` und `Monteur / Kiosk`.
+  - Nach erfolgreichem PIN-Login wird eine reduzierte Monteur-Sicht mit `Aktuelle Projekte` und `Zukuenftige Projekte` angezeigt.
+  - Alte gespeicherte Auth-Daten ohne `type` werden weiterhin als `user` interpretiert.
+
+- Pruefung durch Codex:
+  - `pnpm --filter web build` gruen.
+  - Dev-Docker-Stack auf `localhost:3800` und `localhost:3801` laeuft.
+  - Backend-Pruefung bestaetigt in `auth.service.ts`:
+    - deaktivierte Monteure werden beim PIN-Login gesperrt
+    - fehlende relevante Projektzuordnung fuehrt zur erwarteten Fehlermeldung
+    - Rueckgabe enthaelt getrennt `currentProjects` und `futureProjects`
+  - Frontend-Pruefung bestaetigt in `crm-app.tsx`:
+    - zwei Login-Modi `Admin Login` und `Monteur / Kiosk`
+    - getrennte Worker-Sicht nach PIN-Login
+    - `loadData()` bricht fuer `auth.type === "worker"` sauber ab
+    - Team-Auswahl filtert auf aktive Monteure
+    - Monteurliste markiert deaktivierte Monteure sichtbar
+
+- Ergebnis / Entscheidung:
+  - Codex-Abnahme fuer deaktivierte Monteure und PIN-Login: **Teilweise**.
+  - Code, Build und Datenlade-Logik sind stimmig und ohne erkennbare Abweichung zur Anforderung umgesetzt.
+
+- Offene Punkte:
+  - Ein kompletter interaktiver Browser-Durchlauf des Login-Flows wurde in dieser Pruefrunde nicht erneut automatisiert bestaetigt.
+
+## 2026-03-24
+
+### Prozessabweichung Codex
+
+- Ausgangslage:
+  - Fuer dieses Projekt ist verbindlich vereinbart: wir planen gemeinsam, Claude implementiert, Codex prueft und dokumentiert.
+
+- Geplante Aufgabe:
+  - Die Rollenverteilung sauber einhalten und bei Abweichungen transparent festhalten.
+
+- Umsetzung durch Claude:
+  - Keine.
+
+- Pruefung durch Codex:
+  - Codex hat in einer Runde dennoch selbst Codeaenderungen fuer `Kioskmodus` und `PIN` vorgenommen und damit gegen die vereinbarte Arbeitsweise verstossen.
+
+- Ergebnis / Entscheidung:
+  - Die Abweichung wird dokumentiert.
+  - Fuer weitere neue Umsetzungen gilt wieder ausschliesslich: Claude implementiert, Codex prueft.
+
+- Offene Punkte:
+  - Das naechste neue Arbeitspaket wird wieder als klare Claude-Aufgabe formuliert und erst danach von Codex abgenommen.

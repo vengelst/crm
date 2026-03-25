@@ -13,6 +13,7 @@ import { TimesheetsModule } from './timesheets/timesheets.module';
 import { DocumentsModule } from './documents/documents.module';
 import { SettingsModule } from './settings/settings.module';
 import { UsersModule } from './users/users.module';
+import { TeamsModule } from './teams/teams.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { UsersModule } from './users/users.module';
     CustomersModule,
     ProjectsModule,
     WorkersModule,
+    TeamsModule,
     TimeModule,
     TimesheetsModule,
     DocumentsModule,

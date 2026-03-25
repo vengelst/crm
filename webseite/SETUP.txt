@@ -1,0 +1,39 @@
+SETUP ANLEITUNG – Viva Home GmbH Kontaktformular
+================================================
+
+1. PHPMailer herunterladen
+   → https://github.com/PHPMailer/PHPMailer/releases
+   → Neueste Version herunterladen (z.B. v6.9.1)
+   → ZIP entpacken
+
+2. Folgende 3 Dateien aus dem PHPMailer-Paket in einen
+   Ordner namens "phpmailer" auf deinem Server hochladen:
+   - src/Exception.php  → /phpmailer/Exception.php
+   - src/PHPMailer.php  → /phpmailer/PHPMailer.php
+   - src/SMTP.php       → /phpmailer/SMTP.php
+
+3. Folgende Dateien ins Wurzelverzeichnis von vivahome.de hochladen:
+   - index.html
+   - mail.php
+   - config.php
+   - .htaccess
+
+   Verzeichnisstruktur:
+   /
+   ├── index.html
+   ├── mail.php
+   ├── config.php
+   ├── .htaccess
+   ├── datenschutz.html
+   └── phpmailer/
+       ├── Exception.php
+       ├── PHPMailer.php
+       └── SMTP.php
+
+4. WICHTIG: Nach dem Hochladen das Passwort in IONOS ändern!
+   → mein.ionos.de → E-Mail → info@vivahome.de → Passwort ändern
+   → Dann config.php mit dem neuen Passwort aktualisieren
+
+5. Test: Formular auf vivahome.de ausfüllen und absenden.
+   - ve@vivahome.de sollte die Anfrage erhalten
+   - Absender-Adresse sollte eine Bestätigung erhalten

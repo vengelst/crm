@@ -39,12 +39,34 @@ type Summary = {
 
 type AuthState = {
   accessToken: string;
+  type: "user" | "worker";
   user: {
     id: string;
     email: string;
     displayName: string;
     roles: string[];
   };
+  worker?: {
+    id: string;
+    workerNumber: string;
+    name: string;
+  };
+  currentProjects?: {
+    id: string;
+    projectNumber: string;
+    title: string;
+    status: string;
+    startDate: string;
+    endDate: string | null;
+  }[];
+  futureProjects?: {
+    id: string;
+    projectNumber: string;
+    title: string;
+    status: string;
+    startDate: string;
+    endDate: string | null;
+  }[];
 };
 
 type CustomerBranch = {
@@ -184,6 +206,31 @@ type DocumentItem = {
     entityType: string;
     entityId: string;
   }[];
+};
+
+type TeamItem = {
+  id: string;
+  name: string;
+  notes?: string | null;
+  active: boolean;
+  members: {
+    id: string;
+    role?: string | null;
+    worker: {
+      id: string;
+      workerNumber: string;
+      firstName: string;
+      lastName: string;
+    };
+  }[];
+};
+
+type TeamFormState = {
+  id?: string;
+  name: string;
+  notes: string;
+  active: boolean;
+  memberWorkerIds: string[];
 };
 
 type RoleItem = {
@@ -463,14 +510,18 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [loginTab, setLoginTab] = useState<"admin" | "worker" | "kiosk">("admin");
   const [loginEmail, setLoginEmail] = useState("admin@example.local");
   const [loginPassword, setLoginPassword] = useState("admin12345");
+  const [loginWorkerNumber, setLoginWorkerNumber] = useState("");
+  const [loginPin, setLoginPin] = useState("");
 
   const [summary, setSummary] = useState<Summary | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [teams, setTeams] = useState<TeamItem[]>([]);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -478,6 +529,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [customerForm, setCustomerForm] = useState<CustomerFormState>(emptyCustomerForm);
   const [projectForm, setProjectForm] = useState<ProjectFormState>(emptyProjectForm);
   const [workerForm, setWorkerForm] = useState<WorkerFormState>(emptyWorkerForm);
+  const [teamForm, setTeamForm] = useState<TeamFormState>({ name: "", notes: "", active: true, memberWorkerIds: [] });
   const [userForm, setUserForm] = useState<UserFormState>(emptyUserForm);
   const [settingsForm, setSettingsForm] = useState<AppSettings>({
     passwordMinLength: 8,
@@ -528,15 +580,22 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       if (!response.ok) {
         const fallback = `API-Fehler ${response.status}`;
         let message = fallback;
-        try {
-          const body = (await response.json()) as { message?: string | string[] };
-          const parsed = Array.isArray(body.message)
-            ? body.message.join(", ")
-            : body.message;
-          if (parsed) message = parsed;
-        } catch {
-          // response not JSON – keep fallback
+        const rawBody = await response.text();
+
+        if (rawBody.trim()) {
+          try {
+            const body = JSON.parse(rawBody) as { message?: string | string[] };
+            const parsed = Array.isArray(body.message)
+              ? body.message.join(", ")
+              : body.message;
+            if (parsed) {
+              message = parsed;
+            }
+          } catch {
+            message = rawBody;
+          }
         }
+
         throw new Error(message);
       }
 
@@ -556,7 +615,12 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
     try {
       const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
-      setAuth(raw ? (JSON.parse(raw) as AuthState) : null);
+      if (raw) {
+        const parsed = JSON.parse(raw) as AuthState;
+        // Alte Daten ohne type-Feld als user behandeln
+        if (!parsed.type) parsed.type = "user";
+        setAuth(parsed);
+      }
     } catch {
       window.localStorage.removeItem(AUTH_STORAGE_KEY);
       setAuth(null);
@@ -566,7 +630,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   }, []);
 
   const loadData = useCallback(async () => {
-    if (!auth) {
+    if (!auth || auth.type === "worker") {
       return;
     }
 
@@ -580,6 +644,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         apiFetch<Project[]>("/projects").then(setProjects),
         apiFetch<Worker[]>("/workers").then(setWorkers),
         apiFetch<DocumentItem[]>("/documents").then(setDocuments),
+        apiFetch<TeamItem[]>("/teams").then(setTeams),
       ];
 
       if (canManageSettings) {
@@ -678,13 +743,108 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     setSuccess(null);
 
     try {
-      const nextAuth = await apiFetch<AuthState>("/auth/login", {
+      const response = await apiFetch<AuthState>("/auth/login", {
         method: "POST",
         body: JSON.stringify({
           email: loginEmail,
           password: loginPassword,
         }),
       });
+
+      const nextAuth: AuthState = { ...response, type: "user" };
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuth));
+      }
+
+      setAuth(nextAuth);
+      setSuccess("Anmeldung erfolgreich.");
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : "Login fehlgeschlagen.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handlePinLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await apiFetch<{
+        accessToken: string;
+        worker: { id: string; workerNumber: string; name: string };
+        currentProjects: AuthState["currentProjects"];
+        futureProjects: AuthState["futureProjects"];
+      }>("/auth/pin-login", {
+        method: "POST",
+        body: JSON.stringify({
+          workerNumber: loginWorkerNumber,
+          pin: loginPin,
+        }),
+      });
+
+      const nextAuth: AuthState = {
+        accessToken: response.accessToken,
+        type: "worker",
+        user: {
+          id: response.worker.id,
+          email: "",
+          displayName: response.worker.name,
+          roles: ["WORKER"],
+        },
+        worker: response.worker,
+        currentProjects: response.currentProjects,
+        futureProjects: response.futureProjects,
+      };
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuth));
+      }
+
+      setAuth(nextAuth);
+      setSuccess("Anmeldung erfolgreich.");
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : "Login fehlgeschlagen.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleKioskLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await apiFetch<{
+        accessToken: string;
+        worker: { id: string; workerNumber: string; name: string };
+        currentProjects: AuthState["currentProjects"];
+        futureProjects: AuthState["futureProjects"];
+      }>("/auth/kiosk-login", {
+        method: "POST",
+        body: JSON.stringify({
+          pin: loginPin,
+        }),
+      });
+
+      const nextAuth: AuthState = {
+        accessToken: response.accessToken,
+        type: "worker",
+        user: {
+          id: response.worker.id,
+          email: "",
+          displayName: response.worker.name,
+          roles: ["WORKER"],
+        },
+        worker: response.worker,
+        currentProjects: response.currentProjects,
+        futureProjects: response.futureProjects,
+      };
 
       if (typeof window !== "undefined") {
         window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuth));
@@ -716,14 +876,35 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   async function handleCustomerSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await runMutation(async () => {
-      const { id: _id, ...formWithoutId } = customerForm;
+      const { id: _id, branches: _b, contacts: _c, ...formBase } = customerForm;
       const payload = sanitizeForApi({
-        ...formWithoutId,
-        branches: customerForm.branches.map(({ id: _branchId, ...branch }) => ({
-          ...branch,
-          active: branch.active ?? true,
+        ...formBase,
+        branches: customerForm.branches.map((b) => ({
+          name: b.name,
+          addressLine1: b.addressLine1,
+          addressLine2: b.addressLine2,
+          postalCode: b.postalCode,
+          city: b.city,
+          country: b.country,
+          phone: b.phone,
+          email: b.email,
+          notes: b.notes,
+          active: b.active ?? true,
         })),
-        contacts: customerForm.contacts.map(({ id: _contactId, ...contact }) => contact),
+        contacts: customerForm.contacts.map((c) => ({
+          branchId: c.branchId,
+          branchName: c.branchName,
+          firstName: c.firstName,
+          lastName: c.lastName,
+          role: c.role,
+          email: c.email,
+          phoneMobile: c.phoneMobile,
+          phoneLandline: c.phoneLandline,
+          isAccountingContact: c.isAccountingContact,
+          isProjectContact: c.isProjectContact,
+          isSignatory: c.isSignatory,
+          notes: c.notes,
+        })),
       });
 
       if (customerForm.id) {
@@ -804,6 +985,34 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       setWorkerForm(emptyWorkerForm());
       await loadData();
       setSuccess("Monteur gespeichert.");
+    });
+  }
+
+  async function handleTeamSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runMutation(async () => {
+      const payload = sanitizeForApi({
+        name: teamForm.name,
+        notes: teamForm.notes,
+        active: teamForm.active,
+        members: teamForm.memberWorkerIds.map((wid) => ({ workerId: wid })),
+      });
+
+      if (teamForm.id) {
+        await apiFetch(`/teams/${teamForm.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await apiFetch("/teams", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+
+      setTeamForm({ name: "", notes: "", active: true, memberWorkerIds: [] });
+      await loadData();
+      setSuccess("Team gespeichert.");
     });
   }
 
@@ -967,12 +1176,17 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
     if (!response.ok) {
       let message = "Dokument konnte nicht geladen werden.";
-      try {
-        const body = (await response.json()) as { message?: string | string[] };
-        const parsed = Array.isArray(body.message) ? body.message.join(", ") : body.message;
-        if (parsed) message = parsed;
-      } catch {
-        // response not JSON – keep default
+      const rawBody = await response.text();
+      if (rawBody.trim()) {
+        try {
+          const body = JSON.parse(rawBody) as { message?: string | string[] };
+          const parsed = Array.isArray(body.message) ? body.message.join(", ") : body.message;
+          if (parsed) {
+            message = parsed;
+          }
+        } catch {
+          message = rawBody;
+        }
       }
       throw new Error(message);
     }
@@ -1007,40 +1221,129 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
           <div className="flex items-center justify-between rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
             <div>
               <p className="text-sm uppercase tracking-[0.2em] text-slate-500">CRM Monteur Plattform</p>
-              <h1 className="text-3xl font-semibold">Admin Login</h1>
+              <h1 className="text-3xl font-semibold">Anmeldung</h1>
             </div>
             <ThemeToggle />
           </div>
 
-          <form
-            onSubmit={handleLogin}
-            className="grid gap-4 rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
-          >
-            <FormRow>
-              <Field
-                label="E-Mail"
-                value={loginEmail}
-                onChange={(event) => setLoginEmail(event.target.value)}
-              />
-              <Field
-                label="Passwort"
-                type="password"
-                value={loginPassword}
-                onChange={(event) => setLoginPassword(event.target.value)}
-              />
-            </FormRow>
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => { setLoginTab("admin"); setError(null); setSuccess(null); }}
+              className={cx(
+                "rounded-xl border px-4 py-2 text-sm font-medium transition",
+                loginTab === "admin"
+                  ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                  : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
+              )}
+            >
+              Admin Login
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLoginTab("worker"); setError(null); setSuccess(null); }}
+              className={cx(
+                "rounded-xl border px-4 py-2 text-sm font-medium transition",
+                loginTab === "worker"
+                  ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                  : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
+              )}
+            >
+              Monteur
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLoginTab("kiosk"); setError(null); setSuccess(null); }}
+              className={cx(
+                "rounded-xl border px-4 py-2 text-sm font-medium transition",
+                loginTab === "kiosk"
+                  ? "border-slate-900 bg-slate-900 text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-900"
+                  : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
+              )}
+            >
+              Kiosk
+            </button>
+          </div>
+
+          {loginTab === "admin" ? (
+            <form
+              onSubmit={handleLogin}
+              className="grid gap-4 rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
+            >
+              <FormRow>
+                <Field
+                  label="E-Mail"
+                  value={loginEmail}
+                  onChange={(event) => setLoginEmail(event.target.value)}
+                />
+                <Field
+                  label="Passwort"
+                  type="password"
+                  value={loginPassword}
+                  onChange={(event) => setLoginPassword(event.target.value)}
+                />
+              </FormRow>
               <PrimaryButton disabled={submitting}>
-                {submitting ? "Anmeldung laeuft ..." : "Anmelden"}
+                {submitting ? "Anmeldung laeuft ..." : "Admin anmelden"}
               </PrimaryButton>
-              <span className="text-sm text-slate-500">
-                Demo: `admin@example.local` / `admin12345`
-              </span>
-            </div>
-            <MessageBar error={error} success={success} />
-          </form>
+              <MessageBar error={error} success={success} />
+            </form>
+          ) : loginTab === "worker" ? (
+            <form
+              onSubmit={handlePinLogin}
+              className="grid gap-4 rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
+            >
+              <FormRow>
+                <Field
+                  label="Monteurnummer"
+                  value={loginWorkerNumber}
+                  onChange={(event) => setLoginWorkerNumber(event.target.value)}
+                />
+                <Field
+                  label="PIN"
+                  type="password"
+                  value={loginPin}
+                  onChange={(event) => setLoginPin(event.target.value)}
+                />
+              </FormRow>
+              <PrimaryButton disabled={submitting}>
+                {submitting ? "Anmeldung laeuft ..." : "Monteur anmelden"}
+              </PrimaryButton>
+              <MessageBar error={error} success={success} />
+            </form>
+          ) : (
+            <form
+              onSubmit={handleKioskLogin}
+              className="grid gap-4 rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
+            >
+              <Field
+                label="PIN"
+                type="password"
+                value={loginPin}
+                onChange={(event) => setLoginPin(event.target.value)}
+              />
+              <p className="text-sm text-slate-500">
+                Kioskmodus: Anmeldung nur mit PIN. Das funktioniert nur mit eindeutig vergebenen aktiven Monteur-PINs.
+              </p>
+              <PrimaryButton disabled={submitting}>
+                {submitting ? "Anmeldung laeuft ..." : "Per PIN anmelden"}
+              </PrimaryButton>
+              <MessageBar error={error} success={success} />
+            </form>
+          )}
         </div>
       </div>
+    );
+  }
+
+  // ── Monteur-Sicht (nach PIN-Login) ──────────────────────────
+  if (auth.type === "worker") {
+    return (
+      <WorkerTimeView
+        auth={auth}
+        apiFetch={apiFetch}
+        onLogout={logout}
+      />
     );
   }
 
@@ -1782,6 +2085,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         ) : null}
 
         {section === "workers" ? (
+          <>
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             <SectionCard
               title={selectedWorker ? "Monteur geoeffnet" : "Monteursliste"}
@@ -1803,7 +2107,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               ) : null}
               <EntityList
                 items={workers}
-                title={(item) => `${item.firstName} ${item.lastName}`}
+                title={(item) => `${item.firstName} ${item.lastName}${item.active === false ? " (deaktiviert)" : ""}`}
                 subtitle={(item) => item.workerNumber}
                 href={(item) => `/workers/${item.id}`}
                 editLabel="Bearbeiten"
@@ -1982,6 +2286,112 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               </form>
             </SectionCard>
           </div>
+
+          {/* ── Teams ────────────────────────────────────── */}
+          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <SectionCard title="Monteur-Teams" subtitle="Teams fuer die Projektplanung.">
+              {teams.length === 0 ? (
+                <p className="text-sm text-slate-500">Noch keine Teams angelegt.</p>
+              ) : (
+                <div className="grid gap-3">
+                  {teams.map((team) => (
+                    <div
+                      key={team.id}
+                      className="flex flex-col gap-2 rounded-2xl border border-black/10 p-4 dark:border-white/10 lg:flex-row lg:items-center lg:justify-between"
+                    >
+                      <div>
+                        <div className="text-lg font-semibold">{team.name}</div>
+                        <p className="text-sm text-slate-500">
+                          {team.members.length === 0
+                            ? "Keine Mitglieder"
+                            : team.members.map((m) => `${m.worker.firstName} ${m.worker.lastName}`).join(", ")}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <SecondaryButton
+                          onClick={() =>
+                            setTeamForm({
+                              id: team.id,
+                              name: team.name,
+                              notes: team.notes ?? "",
+                              active: team.active,
+                              memberWorkerIds: team.members.map((m) => m.worker.id),
+                            })
+                          }
+                        >
+                          Bearbeiten
+                        </SecondaryButton>
+                        <SecondaryButton onClick={() => void handleDelete(`/teams/${team.id}`, "Team")}>
+                          Loeschen
+                        </SecondaryButton>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+
+            <SectionCard
+              title={teamForm.id ? "Team bearbeiten" : "Neues Team anlegen"}
+              subtitle="Monteure koennen einem oder mehreren Teams zugeordnet werden."
+            >
+              <form className="grid gap-4" onSubmit={handleTeamSubmit}>
+                <Field
+                  label="Teamname"
+                  value={teamForm.name}
+                  onChange={(event) =>
+                    setTeamForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                />
+                <TextArea
+                  label="Notizen"
+                  value={teamForm.notes}
+                  onChange={(event) =>
+                    setTeamForm((current) => ({ ...current, notes: event.target.value }))
+                  }
+                />
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Mitglieder</label>
+                  <div className="flex flex-wrap gap-2">
+                    {workers.filter((w) => w.active !== false).map((w) => {
+                      const checked = teamForm.memberWorkerIds.includes(w.id);
+                      return (
+                        <label
+                          key={w.id}
+                          className="inline-flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) => {
+                              setTeamForm((current) => ({
+                                ...current,
+                                memberWorkerIds: event.target.checked
+                                  ? [...current.memberWorkerIds, w.id]
+                                  : current.memberWorkerIds.filter((id) => id !== w.id),
+                              }));
+                            }}
+                          />
+                          {w.firstName} {w.lastName} ({w.workerNumber})
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <PrimaryButton disabled={submitting}>
+                    {submitting ? "Speichert ..." : "Team speichern"}
+                  </PrimaryButton>
+                  <SecondaryButton
+                    onClick={() => setTeamForm({ name: "", notes: "", active: true, memberWorkerIds: [] })}
+                  >
+                    Zuruecksetzen
+                  </SecondaryButton>
+                </div>
+              </form>
+            </SectionCard>
+          </div>
+          </>
         ) : null}
 
         {section === "settings" ? (
@@ -2208,6 +2618,285 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   }
 }
 
+// ── Monteur Zeiterfassungs-View ──────────────────────────────
+type WorkerTimeStatus = {
+  hasOpenWork: boolean;
+  openEntry: {
+    id: string;
+    projectId: string;
+    projectTitle: string;
+    projectNumber: string;
+    startedAt: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    locationSource?: string | null;
+  } | null;
+};
+
+function WorkerTimeView({
+  auth,
+  apiFetch,
+  onLogout,
+}: {
+  auth: AuthState;
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  onLogout: () => void;
+}) {
+  const [status, setStatus] = useState<WorkerTimeStatus | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [working, setWorking] = useState(false);
+  const [workerError, setWorkerError] = useState<string | null>(null);
+  const [workerSuccess, setWorkerSuccess] = useState<string | null>(null);
+
+  const workerId = auth.worker?.id ?? auth.user.id;
+  const currentProjects = auth.currentProjects ?? [];
+  const futureProjects = auth.futureProjects ?? [];
+  const hasOnlyFuture = currentProjects.length === 0 && futureProjects.length > 0;
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const s = await apiFetch<WorkerTimeStatus>(`/time/status?workerId=${workerId}`);
+      setStatus(s);
+    } catch {
+      setStatus({ hasOpenWork: false, openEntry: null });
+    }
+  }, [apiFetch, workerId]);
+
+  useEffect(() => {
+    void loadStatus();
+  }, [loadStatus]);
+
+  type LocationResult = {
+    latitude?: number;
+    longitude?: number;
+    accuracy?: number;
+    locationSource: string;
+  };
+
+  function getLocation(projectId?: string): Promise<LocationResult> {
+    return new Promise((resolve) => {
+      // 1. Live-Standort versuchen
+      if (typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            resolve({
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+              locationSource: "live",
+            });
+          },
+          () => {
+            // Live fehlgeschlagen → Fallback 2: Projekt-Standort
+            resolve(getProjectFallback(projectId));
+          },
+          { timeout: 8000, enableHighAccuracy: true },
+        );
+        return;
+      }
+
+      // Kein Geolocation → direkt Projekt-Fallback
+      resolve(getProjectFallback(projectId));
+    });
+  }
+
+  function getProjectFallback(projectId?: string): LocationResult {
+    // Projektadresse als Fallback suchen (aus auth.currentProjects)
+    // Koordinaten haben wir nicht direkt, aber wir kennzeichnen die Herkunft
+    if (projectId) {
+      return { locationSource: "project_fallback" };
+    }
+    return { locationSource: "none" };
+  }
+
+  async function handleClockIn() {
+    if (!selectedProjectId) {
+      setWorkerError("Bitte zuerst ein Projekt waehlen.");
+      return;
+    }
+    setWorking(true);
+    setWorkerError(null);
+    setWorkerSuccess(null);
+    try {
+      const loc = await getLocation(selectedProjectId);
+      await apiFetch("/time/clock-in", {
+        method: "POST",
+        body: JSON.stringify({
+          workerId,
+          projectId: selectedProjectId,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          accuracy: loc.accuracy,
+          locationSource: loc.locationSource,
+          sourceDevice: "web",
+        }),
+      });
+      setWorkerSuccess("Arbeit gestartet.");
+      setSelectedProjectId("");
+      await loadStatus();
+    } catch (err) {
+      setWorkerError(err instanceof Error ? err.message : "Fehler beim Starten.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleClockOut() {
+    if (!status?.openEntry) return;
+    setWorking(true);
+    setWorkerError(null);
+    setWorkerSuccess(null);
+    try {
+      const loc = await getLocation(status.openEntry.projectId);
+      await apiFetch("/time/clock-out", {
+        method: "POST",
+        body: JSON.stringify({
+          workerId,
+          projectId: status.openEntry.projectId,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          accuracy: loc.accuracy,
+          locationSource: loc.locationSource,
+          sourceDevice: "web",
+        }),
+      });
+      setWorkerSuccess("Arbeit beendet.");
+      await loadStatus();
+    } catch (err) {
+      setWorkerError(err instanceof Error ? err.message : "Fehler beim Beenden.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  const openWork = status?.openEntry;
+
+  return (
+    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
+        {/* Header */}
+        <div className="flex flex-col gap-4 rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.2em] text-slate-500">CRM Monteur Plattform</p>
+            <h1 className="text-2xl font-semibold">Zeiterfassung</h1>
+            <p className="text-sm text-slate-500">
+              {auth.worker?.name} · {auth.worker?.workerNumber}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <SecondaryButton onClick={onLogout}>Abmelden</SecondaryButton>
+          </div>
+        </div>
+
+        <MessageBar error={workerError} success={workerSuccess} />
+
+        {/* ── Laufende Arbeit ──────────────────────────── */}
+        {openWork ? (
+          <div className="rounded-3xl border-2 border-emerald-400 bg-emerald-50/60 p-6 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/5">
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Laufende Arbeit</div>
+            <div className="text-xl font-semibold">{openWork.projectTitle}</div>
+            <p className="text-sm text-slate-500">{openWork.projectNumber}</p>
+            <div className="mt-3 grid gap-1 text-sm">
+              <div>Gestartet: <span className="font-mono">{new Date(openWork.startedAt).toLocaleString("de-DE")}</span></div>
+              {openWork.latitude != null && openWork.longitude != null ? (
+                <div className="text-slate-500">Standort: {openWork.latitude.toFixed(5)}, {openWork.longitude.toFixed(5)}</div>
+              ) : null}
+            </div>
+            <div className="mt-4">
+              <button
+                type="button"
+                disabled={working}
+                onClick={() => void handleClockOut()}
+                className="rounded-xl bg-red-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-60"
+              >
+                {working ? "Beende Arbeit ..." : "Arbeit beenden"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ── Arbeit beginnen (nur wenn keine offene Arbeit) ── */}
+        {!openWork && status !== null ? (
+          <>
+            {hasOnlyFuture ? (
+              <div className="rounded-2xl border border-amber-300 bg-amber-50/60 p-4 dark:border-amber-500/40 dark:bg-amber-500/5">
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                  Du hast derzeit kein aktives Projekt. Deine Zuordnung beginnt erst in der Zukunft.
+                </p>
+              </div>
+            ) : null}
+
+            {currentProjects.length > 0 ? (
+              <div className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
+                <h2 className="mb-4 text-lg font-semibold">Arbeit beginnen</h2>
+                <div className="grid gap-4">
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">Projekt waehlen</label>
+                    <div className="grid gap-2">
+                      {currentProjects.map((p) => (
+                        <label
+                          key={p.id}
+                          className={cx(
+                            "flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition",
+                            selectedProjectId === p.id
+                              ? "border-slate-900 bg-slate-900/5 dark:border-slate-100 dark:bg-slate-100/5"
+                              : "border-black/10 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800",
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="project"
+                            value={p.id}
+                            checked={selectedProjectId === p.id}
+                            onChange={() => setSelectedProjectId(p.id)}
+                            className="accent-slate-900 dark:accent-slate-100"
+                          />
+                          <div>
+                            <div className="font-medium">{p.title}</div>
+                            <div className="text-sm text-slate-500">{p.projectNumber}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={working || !selectedProjectId}
+                    onClick={() => void handleClockIn()}
+                    className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {working ? "Starte Arbeit ..." : "Arbeit beginnen"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+
+        {/* Lade-Zustand */}
+        {status === null ? (
+          <div className="text-center text-sm text-slate-500">Lade Status ...</div>
+        ) : null}
+
+        {/* ── Zukuenftige Projekte ─────────────────────── */}
+        {futureProjects.length > 0 ? (
+          <SectionCard title="Zukuenftige Projekte">
+            <div className="grid gap-3">
+              {futureProjects.map((p) => (
+                <div key={p.id} className="rounded-2xl border border-black/10 p-4 dark:border-white/10">
+                  <div className="font-semibold">{p.title}</div>
+                  <p className="text-sm text-slate-500">{p.projectNumber} · ab {p.startDate.slice(0, 10)}</p>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function sectionTitle(section: AppSection) {
   switch (section) {
     case "dashboard":
@@ -2249,8 +2938,34 @@ function mapCustomerToForm(customer: Customer): CustomerFormState {
     city: customer.city ?? "",
     country: customer.country ?? "DE",
     notes: customer.notes ?? "",
-    branches: customer.branches ?? [],
-    contacts: customer.contacts ?? [],
+    branches: (customer.branches ?? []).map((b) => ({
+      id: b.id,
+      name: b.name,
+      addressLine1: b.addressLine1,
+      addressLine2: b.addressLine2,
+      postalCode: b.postalCode,
+      city: b.city,
+      country: b.country,
+      phone: b.phone,
+      email: b.email,
+      notes: b.notes,
+      active: b.active,
+    })),
+    contacts: (customer.contacts ?? []).map((c) => ({
+      id: c.id,
+      branchId: c.branchId,
+      branchName: c.branchName,
+      firstName: c.firstName,
+      lastName: c.lastName,
+      role: c.role,
+      email: c.email,
+      phoneMobile: c.phoneMobile,
+      phoneLandline: c.phoneLandline,
+      isAccountingContact: c.isAccountingContact,
+      isProjectContact: c.isProjectContact,
+      isSignatory: c.isSignatory,
+      notes: c.notes,
+    })),
   };
 }
 
@@ -3754,15 +4469,39 @@ function Field({
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
   type?: string;
 }) {
+  const [showSecret, setShowSecret] = useState(false);
+  const isSecret = type === "password";
+
   return (
     <div className="grid gap-2">
       <label className="text-sm font-medium">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={onChange}
-        className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
-      />
+      <div className="relative">
+        <input
+          type={isSecret && showSecret ? "text" : type}
+          value={value}
+          onChange={onChange}
+          className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
+        />
+        {isSecret ? (
+          <button
+            type="button"
+            onClick={() => setShowSecret((v) => !v)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            tabIndex={-1}
+          >
+            {showSecret ? (
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+              </svg>
+            ) : (
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            )}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

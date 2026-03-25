@@ -244,6 +244,29 @@ model Worker {
   weeklyTimesheets WeeklyTimesheet[]
   vehicleAssignments WorkerVehicleAssignment[]
   equipmentIssues WorkerEquipmentIssue[]
+  teamMemberships WorkerTeamMember[]
+}
+
+model WorkerTeam {
+  id        String             @id @default(cuid())
+  name      String
+  notes     String?
+  active    Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  members   WorkerTeamMember[]
+}
+
+model WorkerTeamMember {
+  id       String     @id @default(cuid())
+  teamId   String
+  workerId String
+  role     String?
+  joinedAt DateTime   @default(now())
+  team     WorkerTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  worker   Worker     @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, workerId])
 }
 
 model WorkerPin {
@@ -342,6 +365,7 @@ model TimeEntry {
   latitude          Float?
   longitude         Float?
   accuracy          Float?
+  locationSource    String?
   comment           String?
   sourceDevice      String?
   createdByUserId   String?

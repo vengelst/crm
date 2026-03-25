@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Projekthistorie – Viva Home GmbH · vivahome.de</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --black:#000;--white:#fff;--gold:#c8a96e;--gold-light:#e8c98e;
+  --gray-dark:#111;--gray-mid:#1a1a1a;--text-muted:#888;
+  --blue:#378add;--green:#1d9e75;--orange:#d85a30;--purple:#8b5cf6;
+  --font:'Segoe UI',system-ui,sans-serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--black);color:var(--white);font-family:var(--font);line-height:1.7}
+
+nav{
+  position:sticky;top:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:1rem 4rem;background:rgba(0,0,0,0.95);
+  border-bottom:1px solid rgba(200,169,110,0.15);
+}
+.nav-logo{font-size:1rem;font-weight:700;color:var(--white);text-decoration:none}
+.nav-logo span{color:var(--gold)}
+.nav-back{font-size:0.8rem;color:var(--gold);text-decoration:none}
+.nav-back:hover{color:var(--gold-light)}
+
+.hero{
+  padding:5rem 4rem 3rem;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  background:linear-gradient(180deg,#0a0a0a 0%,#000 100%);
+}
+.hero-label{font-size:0.7rem;letter-spacing:0.25em;text-transform:uppercase;color:var(--gold);margin-bottom:0.75rem}
+.hero h1{font-size:clamp(1.75rem,3vw,2.5rem);font-weight:700;letter-spacing:-0.02em;margin-bottom:0.5rem}
+.hero-meta{font-size:0.82rem;color:var(--text-muted)}
+.hero-meta span{color:var(--gold);margin:0 0.5rem}
+
+.stats-row{
+  display:flex;gap:2rem;padding:2rem 4rem;
+  background:var(--gray-mid);
+  border-bottom:1px solid rgba(200,169,110,0.1);
+  flex-wrap:wrap;
+}
+.stat{text-align:center;min-width:80px}
+.stat-n{font-size:1.75rem;font-weight:700;color:var(--gold);line-height:1}
+.stat-l{font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:0.2rem}
+
+.content{max-width:900px;margin:0 auto;padding:3rem 4rem}
+
+.phase{margin-bottom:3.5rem}
+.phase-header{
+  display:flex;align-items:center;gap:1rem;
+  margin-bottom:1.5rem;padding-bottom:0.75rem;
+  border-bottom:1px solid rgba(200,169,110,0.2);
+}
+.phase-num{
+  width:32px;height:32px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:0.75rem;font-weight:700;flex-shrink:0;
+}
+.phase-title{font-size:1.1rem;font-weight:600}
+.phase-date{font-size:0.75rem;color:var(--text-muted);margin-left:auto}
+
+.entry{
+  display:flex;gap:1rem;margin-bottom:1rem;
+  padding:0.75rem 1rem;
+  background:var(--gray-mid);
+  border-radius:4px;
+  border-left:3px solid transparent;
+}
+.entry.done{border-left-color:var(--green)}
+.entry.fix{border-left-color:var(--orange)}
+.entry.feature{border-left-color:var(--blue)}
+.entry.server{border-left-color:var(--purple)}
+.entry.config{border-left-color:var(--gold)}
+
+.entry-icon{font-size:16px;margin-top:2px;flex-shrink:0;width:20px;text-align:center}
+.entry-body{}
+.entry-title{font-size:0.9rem;font-weight:500;color:var(--white);margin-bottom:0.2rem}
+.entry-desc{font-size:0.8rem;color:var(--text-muted);line-height:1.6}
+.entry-code{
+  font-family:monospace;font-size:0.75rem;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:3px;padding:0.5rem 0.75rem;
+  margin-top:0.4rem;color:rgba(255,255,255,0.6);
+  white-space:pre-wrap;word-break:break-all;
+}
+
+.tag{
+  display:inline-block;font-size:10px;font-weight:600;
+  padding:1px 7px;border-radius:2px;margin-right:4px;
+  text-transform:uppercase;letter-spacing:0.05em;
+}
+.tag-done{background:rgba(29,158,117,0.2);color:#1d9e75}
+.tag-fix{background:rgba(216,90,48,0.2);color:#d85a30}
+.tag-feature{background:rgba(55,138,221,0.2);color:#378add}
+.tag-server{background:rgba(139,92,246,0.2);color:#8b5cf6}
+
+.file-list{
+  display:flex;flex-wrap:wrap;gap:6px;margin-top:0.5rem;
+}
+.file-chip{
+  font-size:11px;font-family:monospace;
+  background:rgba(200,169,110,0.1);color:var(--gold);
+  border:1px solid rgba(200,169,110,0.2);
+  border-radius:3px;padding:2px 8px;
+}
+
+.legend{
+  display:flex;gap:1.5rem;flex-wrap:wrap;
+  padding:1rem 4rem;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  background:rgba(255,255,255,0.02);
+  font-size:0.75rem;
+}
+.legend-item{display:flex;align-items:center;gap:6px;color:var(--text-muted)}
+.legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+
+footer{
+  background:var(--black);border-top:1px solid rgba(255,255,255,0.06);
+  padding:2rem 4rem;display:flex;justify-content:space-between;align-items:center;
+  flex-wrap:wrap;gap:1rem;
+}
+footer p{font-size:0.78rem;color:var(--text-muted)}
+footer a{color:var(--gold);text-decoration:none;font-size:0.78rem}
+
+@media(max-width:768px){
+  nav,footer,.hero,.stats-row,.legend{padding-left:1.5rem;padding-right:1.5rem}
+  .content{padding:2rem 1.5rem}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">Viva <span>Home</span> GmbH</a>
+  <a href="/" class="nav-back">← Zurück zur Website</a>
+</nav>
+
+<div class="hero">
+  <p class="hero-label">Entwicklungsdokumentation</p>
+  <h1>Projekthistorie · vivahome.de</h1>
+  <p class="hero-meta">Session vom <span>24. März 2026</span> · Durchgeführt mit KI-Unterstützung (Claude · Anthropic)</p>
+</div>
+
+<div class="stats-row">
+  <div class="stat"><div class="stat-n">3</div><div class="stat-l">KI-Agenten</div></div>
+  <div class="stat"><div class="stat-n">12</div><div class="stat-l">Leads gefunden</div></div>
+  <div class="stat"><div class="stat-n">7</div><div class="stat-l">E-Mails versendet</div></div>
+  <div class="stat"><div class="stat-n">1</div><div class="stat-l">Website gebaut</div></div>
+  <div class="stat"><div class="stat-n">PHP</div><div class="stat-l">Server konfiguriert</div></div>
+  <div class="stat"><div class="stat-n">SMTP</div><div class="stat-l">Mailversand aktiv</div></div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#1d9e75"></div>Umgesetzt</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#378add"></div>Feature / Neuentwicklung</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#d85a30"></div>Bugfix</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div>Server / Infrastruktur</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#c8a96e"></div>Konfiguration</div>
+</div>
+
+<div class="content">
+
+  <!-- PHASE 1 -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num" style="background:rgba(55,138,221,0.2);color:#378add">1</div>
+      <div class="phase-title">KI-Akquise Agent</div>
+      <div class="phase-date">24.03.2026</div>
+    </div>
+
+    <div class="entry feature">
+      <div class="entry-icon">🤖</div>
+      <div class="entry-body">
+        <div class="entry-title">KI-Akquise Agent v1 gebaut <span class="tag tag-feature">Feature</span></div>
+        <div class="entry-desc">Vollständiger KI-Agent mit Lead-Suche (Websuche + KI), automatischer E-Mail-Generierung, Genehmigungs-Workflow und Gmail-Integration. Zielgruppen: Elektro/Sicherheitstechnik, Bauunternehmen, Facility Management im DACH-Raum.</div>
+      </div>
+    </div>
+
+    <div class="entry feature">
+      <div class="entry-icon">📋</div>
+      <div class="entry-body">
+        <div class="entry-title">Follow-up & CRM System (v2) <span class="tag tag-feature">Feature</span></div>
+        <div class="entry-desc">Erweiterung um Pipeline-Übersicht, Wiedervorlagen, Nachfass-E-Mails mit Kontextwissen, Status-Tracking (Neu → Kontaktiert → Antwort → Gewonnen) und Notizen pro Lead.</div>
+      </div>
+    </div>
+
+    <div class="entry done">
+      <div class="entry-icon">🔍</div>
+      <div class="entry-body">
+        <div class="entry-title">12 echte DACH-Leads recherchiert <span class="tag tag-done">Umgesetzt</span></div>
+        <div class="entry-desc">Websuche nach realen Unternehmen für alle 3 Zielgruppen. Gefunden u.a.: Freihoff-Gruppe (Langenfeld), Securitas Technology, SPIE GfT GmbH, Apleona Group, Strabag PFS, WISAG, Dussmann, Labor Strauss.</div>
+      </div>
+    </div>
+
+    <div class="entry done">
+      <div class="entry-icon">✉️</div>
+      <div class="entry-body">
+        <div class="entry-title">7 personalisierte E-Mails versendet <span class="tag tag-done">Umgesetzt</span></div>
+        <div class="entry-desc">Direktversand über Gmail an Freihoff (info@freihoff-gruppe.de), Securitas (subunternehmen@securitas.de), SPIE GfT (tim.groeblinghoff@spie.com), WISAG (einkauf@wisag.de), SPIE Lück (roger.buss@spie.com), Freihoff Nord und Labor Strauss.</div>
+        <div class="entry-code">Alle mit vollständiger Signatur: Volkhard Engelstädter · Geschäftsführer · Viva Home GmbH · An der Ringmauer 16 · 51492 Overath</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num" style="background:rgba(29,158,117,0.2);color:#1d9e75">2</div>
+      <div class="phase-title">Website vivahome.de — Aufbau</div>
+      <div class="phase-date">24.03.2026</div>
+    </div>
+
+    <div class="entry feature">
+      <div class="entry-icon">🌐</div>
+      <div class="entry-body">
+        <div class="entry-title">Neue Website gebaut (index.html) <span class="tag tag-feature">Feature</span></div>
+        <div class="entry-desc">Vollständige One-Page-Website basierend auf Inhalten der alten Seite (n1649220.websitebuilder.online). Dark-Theme, goldene Akzente. Sektionen: Hero, Stats, Leistungen (6 Karten), Über uns, Galerie, Kontakt, Impressum, Footer.</div>
+        <div class="file-list">
+          <span class="file-chip">index.html</span>
+          <span class="file-chip">datenschutz.html</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry feature">
+      <div class="entry-icon">🎨</div>
+      <div class="entry-body">
+        <div class="entry-title">Animierter Hintergrund — Netzwerk-Mesh <span class="tag tag-feature">Feature</span></div>
+        <div class="entry-desc">Ursprünglich Three.js Partikelkugel. Ersetzt durch strukturierte Netzwerk-Topologie (reines Canvas 2D): 1 Gateway-Knoten, 5 farbige Hub-Cluster (CORE/NET/CAM/SEC/SRV) mit je 5 Spoke-Knoten. Bunte Datenpunkte mit Pfeilspitzen laufen bidirektional entlang der Kanten. Maus-Interaktion.</div>
+      </div>
+    </div>
+
+    <div class="entry done">
+      <div class="entry-icon">📊</div>
+      <div class="entry-body">
+        <div class="entry-title">Kennzahlen aktualisiert <span class="tag tag-done">Umgesetzt</span></div>
+        <div class="entry-desc">Stats-Leiste: 160+ Zufriedene Kunden · 800+ Projekte realisiert · 7.600+ Kameras installiert · 9 Jahre Erfahrung</div>
+      </div>
+    </div>
+
+    <div class="entry done">
+      <div class="entry-icon">🎯</div>
+      <div class="entry-body">
+        <div class="entry-title">Farbige Icons für Leistungskarten <span class="tag tag-done">Umgesetzt</span></div>
+        <div class="entry-desc">Jede der 6 Leistungskarten hat ein farbiges Icon: CCTV (Blau), EMA (Rot), BMA (Amber), Netzwerk (Türkis), IT-Support (Lila), Subunternehmer (Gold). Grid-Fix: repeat(3,1fr) statt auto-fill — kein graues Leerfeld mehr.</div>
+      </div>
+    </div>
+
+    <div class="entry done">
+      <div class="entry-icon">🖼</div>
+      <div class="entry-body">
+        <div class="entry-title">Galerie mit 6 Originalbildern <span class="tag tag-done">Umgesetzt</span></div>
+        <div class="entry-desc">Alle Bilder von der alten Website gezogen (n1649220.websitebuilder.online) — keine Doppelungen, keine externen Placeholder. Über-uns: 2 Bilder. Galerie: 6 verschiedene Projekte.</div>
+      </div>
+    </div>
+
+    <div class="entry feature">
+      <div class="entry-icon">⚖️</div>
+      <div class="entry-body">
+        <div class="entry-title">Datenschutzerklärung (DSGVO-konform) <span class="tag tag-feature">Feature</span></div>
+        <div class="entry-desc">Separate Seite datenschutz.html mit allen Pflichtangaben: Verantwortlicher, Rechtsgrundlagen (Art. 6 DSGVO), Hosting (IONOS SE), Cookies, Betroffenenrechte, Aufsichtsbehörde LDI NRW.</div>
+        <div class="file-list"><span class="file-chip">datenschutz.html</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 3 -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num" style="background:rgba(139,92,246,0.2);color:#8b5cf6">3</div>
+      <div class="phase-title">Server-Konfiguration (IONOS VPS)</div>
+      <div class="phase-date">24.03.2026</div>
+    </div>
+
+    <div class="entry server">
+      <div class="entry-icon">🐧</div>
+      <div class="entry-body">
+        <div class="entry-title">PHP 8.3 + Nginx konfiguriert <span class="tag tag-server">Server</span></div>
+        <div class="entry-desc">Ubuntu-Server (sweet-jemison). PHP 8.3-FPM war bereits installiert aber nicht in Nginx eingebunden. Nginx-Konfiguration für vivahome.de erweitert um PHP-FPM FastCGI-Block.</div>
+        <div class="entry-code">location ~ \.php$ {
+    include snippets/fastcgi-php.conf;
+    fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    include fastcgi_params;
+}</div>
+      </div>
+    </div>
+
+    <div class="entry server">
+      <div class="entry-icon">📦</div>
+      <div class="entry-body">
+        <div class="entry-title">PHPMailer installiert <span class="tag tag-server">Server</span></div>
+        <div class="entry-desc">PHPMailer-Repository geklont nach /var/www/vivahome/public/phpmailer/. Dateien liegen in src/: PHPMailer.php, SMTP.php, Exception.php.</div>
+        <div class="entry-code">/var/www/vivahome/public/phpmailer/src/PHPMailer.php
+/var/www/vivahome/public/phpmailer/src/SMTP.php
+/var/www/vivahome/public/phpmailer/src/Exception.php</div>
+      </div>
+    </div>
+
+    <div class="entry config">
+      <div class="entry-icon">⚙️</div>
+      <div class="entry-body">
+        <div class="entry-title">SMTP-Konfiguration (IONOS) <span class="tag tag-feature">Config</span></div>
+        <div class="entry-desc">Kontaktformular sendet über IONOS SMTP-Server. Zwei Mails pro Anfrage: Eingehende Anfrage an ve@vivahome.de + automatische Bestätigung mit Leistungsübersicht an den Kunden.</div>
+        <div class="entry-code">Host: smtp.ionos.de · Port: 587 (STARTTLS)
+Absender: info@vivahome.de
+Empfänger intern: ve@vivahome.de</div>
+        <div class="file-list">
+          <span class="file-chip">mail.php</span>
+          <span class="file-chip">config.php</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry fix">
+      <div class="entry-icon">🔧</div>
+      <div class="entry-body">
+        <div class="entry-title">Formular-Fix: EmailJS → PHP <span class="tag tag-fix">Bugfix</span></div>
+        <div class="entry-desc">Das auf dem Server liegende index.html verwendete noch EmailJS (ungültige Public Key). submitForm-Funktion direkt per Python auf dem Server ersetzt — fetch('/mail.php') statt window.location.href mailto:.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 4 -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num" style="background:rgba(216,90,48,0.2);color:#d85a30">4</div>
+      <div class="phase-title">Korrekturen & Feinschliff</div>
+      <div class="phase-date">24.03.2026</div>
+    </div>
+
+    <div class="entry fix">
+      <div class="entry-icon">🔳</div>
+      <div class="entry-body">
+        <div class="entry-title">Graues Leerfeld in Leistungsgrid behoben <span class="tag tag-fix">Bugfix</span></div>
+        <div class="entry-desc">auto-fill erzeugte bei 6 Karten ein leeres 7. Feld. Ersetzt durch repeat(3,1fr) mit responsiven Breakpoints: 2 Spalten ab 1100px, 1 Spalte ab 640px.</div>
+      </div>
+    </div>
+
+    <div class="entry fix">
+      <div class="entry-icon">🖼</div>
+      <div class="entry-body">
+        <div class="entry-title">Kaputte Bilder ersetzt <span class="tag tag-fix">Bugfix</span></div>
+        <div class="entry-desc">Websitebuilder-Bilder luden nicht mehr zuverlässig. Alle Bilder durch funktionierende URLs von der alten Seite ersetzt, keine Dopplungen.</div>
+      </div>
+    </div>
+
+    <div class="entry done">
+      <div class="entry-icon">🗑</div>
+      <div class="entry-body">
+        <div class="entry-title">Bereinigungen <span class="tag tag-done">Umgesetzt</span></div>
+        <div class="entry-desc">Entfernt: "NRW" aus allen Textstellen, "9 Jahre Erfahrung" Badge (doppelt mit Stats-Leiste), Three.js-Dependency, EmailJS-Script-Tag. Datenschutz-Link an 4 Stellen verankert.</div>
+      </div>
+    </div>
+
+    <div class="entry done">
+      <div class="entry-icon">🔑</div>
+      <div class="entry-body">
+        <div class="entry-title">Sicherheitshinweis offen <span class="tag tag-fix">Offen</span></div>
+        <div class="entry-desc">SMTP-Passwort wurde während der Session im Chat genannt. Bitte zeitnah in IONOS unter E-Mail → info@vivahome.de → Passwort ändern, danach config.php auf dem Server aktualisieren.</div>
+        <div class="entry-code">nano /var/www/vivahome/public/config.php
+# define('SMTP_PASS', 'NEUES_PASSWORT');</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dateistruktur -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-num" style="background:rgba(200,169,110,0.2);color:#c8a96e">5</div>
+      <div class="phase-title">Dateistruktur auf dem Server</div>
+    </div>
+    <div class="entry config">
+      <div class="entry-icon">📁</div>
+      <div class="entry-body">
+        <div class="entry-title">Aktuelle Verzeichnisstruktur <span class="tag tag-feature">Server</span></div>
+        <div class="entry-code">/var/www/vivahome/public/
+├── index.html            ← Hauptseite
+├── datenschutz.html      ← Datenschutzerklärung
+├── mail.php              ← SMTP Mail-Handler
+├── config.php            ← SMTP-Zugangsdaten (chmod 600)
+├── .htaccess             ← Schutz config.php
+└── phpmailer/
+    └── src/
+        ├── PHPMailer.php
+        ├── SMTP.php
+        └── Exception.php</div>
+        <div class="entry-code">Server: Ubuntu · Nginx · PHP 8.3-FPM
+Domain: vivahome.de + www.vivahome.de
+SSL: Let's Encrypt (Certbot)
+SMTP: smtp.ionos.de:587 (STARTTLS)</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <p>© 2026 Viva Home GmbH · Entwicklungsdokumentation · Session 24.03.2026</p>
+  <a href="/">← Zur Website</a>
+</footer>
+
+</body>
+</html>

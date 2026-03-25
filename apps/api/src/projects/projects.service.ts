@@ -75,6 +75,13 @@ export class ProjectsService {
       );
     }
 
+    const existing = await this.prisma.project.findFirst({
+      where: { projectNumber: dto.projectNumber, deletedAt: null },
+    });
+    if (existing) {
+      throw new BadRequestException('Projektnummer bereits vergeben.');
+    }
+
     return this.prisma.project.create({
       data: {
         projectNumber: dto.projectNumber,
@@ -115,6 +122,15 @@ export class ProjectsService {
 
   async update(id: string, dto: SaveProjectDto) {
     await this.getById(id);
+
+    if (dto.projectNumber) {
+      const existing = await this.prisma.project.findFirst({
+        where: { projectNumber: dto.projectNumber, deletedAt: null, NOT: { id } },
+      });
+      if (existing) {
+        throw new BadRequestException('Projektnummer bereits vergeben.');
+      }
+    }
 
     return this.prisma.project.update({
       where: { id },

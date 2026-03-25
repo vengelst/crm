@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { hash } from 'bcryptjs';
+import { compare, hash } from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { SaveWorkerDto } from './dto/save-worker.dto';
 
@@ -69,6 +69,15 @@ export class WorkersService {
       );
     }
 
+    const existing = await this.prisma.worker.findUnique({
+      where: { workerNumber: dto.workerNumber },
+    });
+    if (existing) {
+      throw new BadRequestException('Monteurnummer bereits vergeben.');
+    }
+
+    await this.ensureActivePinIsUnique(dto.pin);
+
     const pinHash = await hash(dto.pin, 10);
 
     return this.prisma.worker.create({
@@ -109,6 +118,15 @@ export class WorkersService {
   async update(id: string, dto: SaveWorkerDto) {
     await this.getById(id);
 
+    if (dto.workerNumber) {
+      const existing = await this.prisma.worker.findFirst({
+        where: { workerNumber: dto.workerNumber, NOT: { id } },
+      });
+      if (existing) {
+        throw new BadRequestException('Monteurnummer bereits vergeben.');
+      }
+    }
+
     const worker = await this.prisma.worker.update({
       where: { id },
       data: {
@@ -144,6 +162,7 @@ export class WorkersService {
     }
 
     await this.getById(id);
+    await this.ensureActivePinIsUnique(pin, id);
 
     const pinHash = await hash(pin, 10);
 
@@ -177,5 +196,45 @@ export class WorkersService {
         active: false,
       },
     });
+  }
+
+  private async ensureActivePinIsUnique(pin: string, excludeWorkerId?: string) {
+    const workers = await this.prisma.worker.findMany({
+      where: {
+        active: true,
+        ...(excludeWorkerId
+          ? {
+              NOT: {
+                id: excludeWorkerId,
+              },
+            }
+          : {}),
+      },
+      include: {
+        pins: {
+          where: {
+            isActive: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+          take: 1,
+        },
+      },
+    });
+
+    for (const worker of workers) {
+      const [activePin] = worker.pins;
+      if (!activePin) {
+        continue;
+      }
+
+      const matches = await compare(pin, activePin.pinHash);
+      if (matches) {
+        throw new BadRequestException(
+          'PIN bereits vergeben. Bitte anderen PIN waehlen.',
+        );
+      }
+    }
   }
 }

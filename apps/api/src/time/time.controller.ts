@@ -32,6 +32,34 @@ export class TimeController {
     return this.timeService.clockOut(dto);
   }
 
+  @Get('status')
+  async getStatus(
+    @Query('workerId') workerId: string | undefined,
+    @Req() request: RequestWithUser,
+  ) {
+    const resolvedWorkerId = request.user?.workerId ?? workerId;
+    if (!resolvedWorkerId) {
+      throw new BadRequestException('workerId fehlt.');
+    }
+
+    const openEntry = await this.timeService.findOpenClockIn(resolvedWorkerId);
+    return {
+      hasOpenWork: !!openEntry,
+      openEntry: openEntry
+        ? {
+            id: openEntry.id,
+            projectId: openEntry.projectId,
+            projectTitle: openEntry.project.title,
+            projectNumber: openEntry.project.projectNumber,
+            startedAt: openEntry.occurredAtClient.toISOString(),
+            latitude: openEntry.latitude,
+            longitude: openEntry.longitude,
+            locationSource: openEntry.locationSource,
+          }
+        : null,
+    };
+  }
+
   @Get('my-entries')
   listMyEntries(
     @Query('workerId') workerId: string | undefined,

@@ -25,6 +25,10 @@ export class ClockEntryDto {
 
   @IsOptional()
   @IsString()
+  locationSource?: string;
+
+  @IsOptional()
+  @IsString()
   comment?: string;
 
   @IsOptional()

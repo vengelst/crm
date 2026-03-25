@@ -1,10 +1,39 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { RoleCode } from '@prisma/client';
+import { Prisma, RoleCode } from '@prisma/client';
 import { compare } from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { KioskLoginDto } from './dto/kiosk-login.dto';
 import { PinLoginDto } from './dto/pin-login.dto';
+
+const workerAuthInclude = {
+  assignments: {
+    where: {
+      active: true,
+    },
+    include: {
+      project: true,
+    },
+  },
+  pins: {
+    where: {
+      isActive: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    take: 1,
+  },
+} satisfies Prisma.WorkerInclude;
+
+type WorkerAuthData = Prisma.WorkerGetPayload<{
+  include: typeof workerAuthInclude;
+}>;
 
 @Injectable()
 export class AuthService {
@@ -57,25 +86,7 @@ export class AuthService {
   async pinLogin(dto: PinLoginDto) {
     const worker = await this.prisma.worker.findUnique({
       where: { workerNumber: dto.workerNumber },
-      include: {
-        assignments: {
-          where: {
-            active: true,
-          },
-          include: {
-            project: true,
-          },
-        },
-        pins: {
-          where: {
-            isActive: true,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-          take: 1,
-        },
-      },
+      include: workerAuthInclude,
     });
 
     if (!worker || !worker.active || worker.pins.length === 0) {
@@ -86,6 +97,49 @@ export class AuthService {
     const pinMatches = await compare(dto.pin, pinRecord.pinHash);
 
     if (!pinMatches) {
+      throw new UnauthorizedException('PIN-Anmeldung fehlgeschlagen.');
+    }
+
+    return this.createWorkerLoginResponse(worker);
+  }
+
+  async kioskLogin(dto: KioskLoginDto) {
+    const workers = await this.prisma.worker.findMany({
+      where: {
+        active: true,
+      },
+      include: workerAuthInclude,
+    });
+
+    const matches: WorkerAuthData[] = [];
+
+    for (const worker of workers) {
+      const [pinRecord] = worker.pins;
+      if (!pinRecord) {
+        continue;
+      }
+
+      const pinMatches = await compare(dto.pin, pinRecord.pinHash);
+      if (pinMatches) {
+        matches.push(worker);
+      }
+    }
+
+    if (matches.length === 0) {
+      throw new UnauthorizedException('PIN-Anmeldung fehlgeschlagen.');
+    }
+
+    if (matches.length > 1) {
+      throw new BadRequestException(
+        'PIN ist nicht eindeutig. Bitte einen eindeutigen PIN vergeben oder die Monteurnummer verwenden.',
+      );
+    }
+
+    return this.createWorkerLoginResponse(matches[0]);
+  }
+
+  private async createWorkerLoginResponse(worker: WorkerAuthData) {
+    if (!worker.active || worker.pins.length === 0) {
       throw new UnauthorizedException('PIN-Anmeldung fehlgeschlagen.');
     }
 

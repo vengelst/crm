@@ -1,0 +1,16 @@
+# ── Viva Home GmbH – Sicherheitskonfiguration ──
+
+# config.php vor direktem Zugriff schützen
+<Files "config.php">
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+# phpmailer Ordner schützen
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^phpmailer/ - [F,L]
+</IfModule>
+
+# PHP Fehler nicht im Browser anzeigen
+php_flag display_errors Off
