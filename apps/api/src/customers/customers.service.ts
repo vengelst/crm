@@ -403,16 +403,30 @@ export class CustomersService {
     };
   }
 
-  async archive(id: string) {
+  async remove(id: string) {
     await this.getById(id);
 
-    return this.prisma.customer.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-        status: 'INACTIVE',
-      },
+    // Pruefen ob Projekte existieren
+    const projectCount = await this.prisma.project.count({
+      where: { customerId: id, deletedAt: null },
     });
+    if (projectCount > 0) {
+      throw new BadRequestException(
+        `Kunde kann nicht geloescht werden, da noch ${projectCount} Projekt(e) zugeordnet sind. Bitte zuerst die Projekte entfernen.`,
+      );
+    }
+
+    // Abhaengige Daten loeschen (Branches, Contacts, DocumentLinks)
+    await this.prisma.$transaction(async (tx) => {
+      await tx.documentLink.deleteMany({
+        where: { entityType: 'CUSTOMER', entityId: id },
+      });
+      await tx.customerContact.deleteMany({ where: { customerId: id } });
+      await tx.customerBranch.deleteMany({ where: { customerId: id } });
+      await tx.customer.delete({ where: { id } });
+    });
+
+    return { deleted: true };
   }
 }
 

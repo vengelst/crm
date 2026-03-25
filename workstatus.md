@@ -251,3 +251,85 @@
 
 - Offene Punkte:
   - Das naechste neue Arbeitspaket wird wieder als klare Claude-Aufgabe formuliert und erst danach von Codex abgenommen.
+
+## 2026-03-24
+
+### Einheitliche Detailansichten, echtes Loeschen und Dark-Theme-Kontrast
+
+- Ausgangslage:
+  - Es sollte geprueft werden, ob Dashboard-Detailaufrufe und Bereichsdetailseiten wirklich dieselben Detailansichten verwenden.
+  - Kunden und Monteure sollten echt loeschbar sein, jeweils mit Rueckfrage und klarer Fehlermeldung bei blockierenden Abhaengigkeiten.
+  - Der Dark-Theme-Textkontrast sollte weicher werden, ohne die Lesbarkeit der aktiven Navigation zu verschlechtern.
+
+- Geplante Aufgabe:
+  - Einheitlichkeit der Detailansichten bestaetigen.
+  - Delete-Flow fuer Kunden und Monteure pruefen.
+  - Header-/Dark-Theme-Kontrast gegen den Code- und Build-Stand abgleichen.
+
+- Umsetzung durch Claude:
+  - Dashboard und Bereichsseiten verwenden dieselben Detailpfade fuer `Kunden`, `Projekte` und `Monteure`.
+  - Echtes Loeschen fuer `Kunden` und `Monteure` implementiert, jeweils mit `window.confirm`.
+  - Klare Backend-Meldungen bei blockiertem Loeschen umgesetzt.
+  - Dark-Theme-Basistext auf weichere Kontraststufe angepasst.
+
+- Pruefung durch Codex:
+  - `pnpm --filter api build` gruen.
+  - `pnpm --filter web build` gruen.
+  - Detailseiten in `customers/[id]`, `projects/[id]` und `workers/[id]` rendern jeweils dieselbe `CrmApp`-Sektion wie die Bereichsseiten.
+  - Frontend-Rueckfrage vor echtem Loeschen in `crm-app.tsx` bestaetigt.
+  - Backend-Loeschlogik in `customers.service.ts` und `workers.service.ts` bestaetigt:
+    - echte Delete-Transaktionen
+    - klare Blockiermeldungen bei Projekten bzw. Zeitbuchungen
+  - Aktive Navigation ist im Code kontrastiert, kein offensichtlicher weisser Text auf weissem Hintergrund.
+  - Hauptcontainer verwenden nun `dark:text-slate-200`.
+
+- Ergebnis / Entscheidung:
+  - Codex-Abnahme fuer Detailansichten, echtes Loeschen und Dark-Theme-Kontrast: **Teilweise**.
+  - Code- und Build-Stand sind stimmig, ohne erkennbare strukturelle Abweichung zur Anforderung.
+
+- Offene Punkte:
+  - Der echte Laufzeittest fuer das Loeschen wurde in dieser Pruefrunde nicht erneut mit frischen Wegwerf-Testdaten durchgespielt.
+
+## 2026-03-24
+
+### Dashboard-Status, Projekt-Hinweise und Bereich Auswertung
+
+- Ausgangslage:
+  - Das Dashboard sollte bei Monteuren klare Arbeitsstatus anzeigen.
+  - Projekte sollten bereits in der Dashboard-Uebersicht einen kompakten Hinweis auf Teams oder Monteure erhalten.
+  - Fuer Stundenzeiten, Zettel und Kennzahlen sollte ein eigener Hauptbereich `Auswertung` entstehen.
+
+- Geplante Aufgabe:
+  - Statusdarstellung fuer Monteure im Dashboard ergaenzen.
+  - Team-/Monteur-Hinweise in der Projektliste des Dashboards ergaenzen.
+  - Neuen Navigationspunkt `Auswertung` mit eigener Seite schaffen.
+
+- Umsetzung durch Claude:
+  - Monteure im Dashboard mit drei Stati umgesetzt:
+    - `arbeitet`
+    - `nicht gestartet`
+    - `kein Projekt`
+  - Projektkarten im Dashboard zeigen nun Teamname, Monteurnamen oder einen Leerhinweis.
+  - Neuer Bereich `Auswertung` unter `/reports` mit eigener Seite und eigener Navigation umgesetzt.
+
+- Pruefung durch Codex:
+  - `pnpm --filter web build` gruen.
+  - `/reports` ist als Route vorhanden und unter `http://localhost:3800/reports` erreichbar.
+  - `Auswertung` ist als eigener `NavLink` in der Hauptnavigation bestaetigt.
+  - Dashboard-Monteurstatus in `crm-app.tsx` bestaetigt:
+    - `bg-emerald-500` fuer `arbeitet`
+    - `bg-red-500` fuer `nicht gestartet`
+    - `bg-amber-500` fuer `kein Projekt`
+  - Projekt-Hinweise im Dashboard bestaetigt:
+    - Teamname bei passendem Team
+    - bis zu drei Monteurnamen
+    - sonst `X Monteure zugeordnet`
+    - oder `Keine Monteure zugeordnet`
+  - Auswertungsseite enthaelt Kennzahlen, Kunden-Umsatzuebersicht und Monteur-Statusliste.
+
+- Ergebnis / Entscheidung:
+  - Codex-Abnahme fuer Dashboard-Status, Projekt-Hinweise und `Auswertung`: **Gruen**.
+  - Die Erweiterung ist technisch bestaetigt und im Dev-Stand erreichbar.
+
+- Offene Punkte:
+  - Der Dashboard-Monteurstatus leitet `arbeitet` aktuell aus dem letzten `timeEntry` ab; das ist fuer den aktuellen Stand akzeptiert, spaeter aber eventuell noch durch eine explizitere Open-Work-Logik ersetzbar.

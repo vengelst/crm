@@ -43,7 +43,7 @@ export class CustomersController {
   }
 
   @Delete(':id')
-  archive(@Param('id') id: string) {
-    return this.customersService.archive(id);
+  remove(@Param('id') id: string) {
+    return this.customersService.remove(id);
   }
 }

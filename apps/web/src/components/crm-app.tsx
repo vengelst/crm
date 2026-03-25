@@ -13,6 +13,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { ThemeToggle } from "./theme-toggle";
@@ -22,6 +23,7 @@ type AppSection =
   | "customers"
   | "projects"
   | "workers"
+  | "reports"
   | "settings"
   | "users";
 
@@ -58,6 +60,8 @@ type AuthState = {
     status: string;
     startDate: string;
     endDate: string | null;
+    siteLatitude: number | null;
+    siteLongitude: number | null;
   }[];
   futureProjects?: {
     id: string;
@@ -66,6 +70,8 @@ type AuthState = {
     status: string;
     startDate: string;
     endDate: string | null;
+    siteLatitude: number | null;
+    siteLongitude: number | null;
   }[];
 };
 
@@ -182,6 +188,12 @@ type Worker = {
   notes?: string | null;
   active?: boolean;
   internalHourlyRate?: number | null;
+  timeEntries?: {
+    id: string;
+    entryType: string;
+    occurredAtServer: string;
+    projectId: string;
+  }[];
   assignments?: {
     id: string;
     startDate: string;
@@ -1061,13 +1073,20 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     });
   }
 
-  async function handleDelete(path: string, label: string) {
+  async function handleDelete(path: string, label: string, confirm = false) {
+    if (confirm) {
+      const ok = window.confirm(
+        `Soll ${label === "Kunde" ? "dieser Kunde" : label === "Monteur" ? "dieser Monteur" : label} wirklich endgueltig geloescht werden?\n\nDieser Vorgang kann nicht rueckgaengig gemacht werden.`,
+      );
+      if (!ok) return;
+    }
+
     await runMutation(async () => {
       await apiFetch(path, {
         method: "DELETE",
       });
       await loadData();
-      setSuccess(`${label} entfernt.`);
+      setSuccess(`${label} geloescht.`);
     });
   }
 
@@ -1216,7 +1235,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
   if (!auth) {
     return (
-      <div className="min-h-screen bg-slate-100 px-4 py-10 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <div className="min-h-screen bg-slate-100 px-4 py-10 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
         <div className="mx-auto flex max-w-5xl flex-col gap-6">
           <div className="flex items-center justify-between rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
             <div>
@@ -1348,7 +1367,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6">
         <div className="flex flex-col gap-4 rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -1370,6 +1389,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
             </NavLink>
             <NavLink href="/workers" active={section === "workers"}>
               Monteure
+            </NavLink>
+            <NavLink href="/reports" active={section === "reports"}>
+              Auswertung
             </NavLink>
             {canManageSettings ? (
               <IconNavLink
@@ -1395,6 +1417,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
             customers={customers}
             projects={projects}
             workers={workers}
+            teams={teams}
           />
         ) : null}
 
@@ -1434,7 +1457,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   editLabel="Bearbeiten"
                   deleteLabel="Loeschen"
                   onEdit={(item) => setCustomerForm(mapCustomerToForm(item))}
-                  onDelete={(item) => void handleDelete(`/customers/${item.id}`, "Kunde")}
+                  onDelete={(item) => void handleDelete(`/customers/${item.id}`, "Kunde", true)}
                 />
               )}
             </SectionCard>
@@ -2111,9 +2134,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 subtitle={(item) => item.workerNumber}
                 href={(item) => `/workers/${item.id}`}
                 editLabel="Bearbeiten"
-                deleteLabel="Deaktivieren"
+                deleteLabel="Loeschen"
                 onEdit={(item) => setWorkerForm(mapWorkerToForm(item))}
-                onDelete={(item) => void handleDelete(`/workers/${item.id}`, "Monteur")}
+                onDelete={(item) => void handleDelete(`/workers/${item.id}`, "Monteur", true)}
               />
             </SectionCard>
 
@@ -2394,6 +2417,15 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
           </>
         ) : null}
 
+        {section === "reports" ? (
+          <ReportsSection
+            customers={customers}
+            projects={projects}
+            workers={workers}
+            apiFetch={apiFetch}
+          />
+        ) : null}
+
         {section === "settings" ? (
           canManageSettings ? (
             <div className="grid gap-6">
@@ -2644,6 +2676,7 @@ function WorkerTimeView({
 }) {
   const [status, setStatus] = useState<WorkerTimeStatus | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [viewingProjectId, setViewingProjectId] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [workerError, setWorkerError] = useState<string | null>(null);
   const [workerSuccess, setWorkerSuccess] = useState<string | null>(null);
@@ -2673,12 +2706,23 @@ function WorkerTimeView({
     locationSource: string;
   };
 
+  // Letzter bekannter Standort (bleibt ueber die Komponenten-Lebensdauer)
+  const lastKnownRef = useRef<{ latitude: number; longitude: number; accuracy?: number; timestamp: number } | null>(null);
+  const LAST_KNOWN_MAX_AGE_MS = 10 * 60 * 1000; // 10 Minuten
+
   function getLocation(projectId?: string): Promise<LocationResult> {
     return new Promise((resolve) => {
       // 1. Live-Standort versuchen
       if (typeof navigator !== "undefined" && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
+            // Live erfolgreich → auch als last_known merken
+            lastKnownRef.current = {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+              timestamp: Date.now(),
+            };
             resolve({
               latitude: pos.coords.latitude,
               longitude: pos.coords.longitude,
@@ -2687,25 +2731,47 @@ function WorkerTimeView({
             });
           },
           () => {
-            // Live fehlgeschlagen → Fallback 2: Projekt-Standort
-            resolve(getProjectFallback(projectId));
+            // Live fehlgeschlagen → Fallback 2: last_known
+            resolve(getLastKnownOrFallback(projectId));
           },
           { timeout: 8000, enableHighAccuracy: true },
         );
         return;
       }
 
-      // Kein Geolocation → direkt Projekt-Fallback
-      resolve(getProjectFallback(projectId));
+      // Kein Geolocation API → Fallback-Kette
+      resolve(getLastKnownOrFallback(projectId));
     });
   }
 
-  function getProjectFallback(projectId?: string): LocationResult {
-    // Projektadresse als Fallback suchen (aus auth.currentProjects)
-    // Koordinaten haben wir nicht direkt, aber wir kennzeichnen die Herkunft
-    if (projectId) {
-      return { locationSource: "project_fallback" };
+  function getLastKnownOrFallback(projectId?: string): LocationResult {
+    // 2. Letzter bekannter Standort (max 10 Minuten alt)
+    const lk = lastKnownRef.current;
+    if (lk && Date.now() - lk.timestamp < LAST_KNOWN_MAX_AGE_MS) {
+      return {
+        latitude: lk.latitude,
+        longitude: lk.longitude,
+        accuracy: lk.accuracy,
+        locationSource: "last_known",
+      };
     }
+
+    // 3. Projekt-Fallback mit echten Koordinaten
+    return getProjectFallback(projectId);
+  }
+
+  function getProjectFallback(projectId?: string): LocationResult {
+    if (projectId) {
+      const project = currentProjects.find((p) => p.id === projectId);
+      if (project?.siteLatitude != null && project?.siteLongitude != null) {
+        return {
+          latitude: project.siteLatitude,
+          longitude: project.siteLongitude,
+          locationSource: "project_fallback",
+        };
+      }
+    }
+    // 4. Gar nichts verfuegbar
     return { locationSource: "none" };
   }
 
@@ -2770,9 +2836,56 @@ function WorkerTimeView({
   }
 
   const openWork = status?.openEntry;
+  const allProjects = [...currentProjects, ...futureProjects];
+  const viewingProject = viewingProjectId ? allProjects.find((p) => p.id === viewingProjectId) ?? null : null;
 
+  // ── Projektdetail-Ansicht ─────────────────────────
+  if (viewingProject) {
+    return (
+      <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
+        <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
+          <div className="flex flex-col gap-4 rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Projektdetail</p>
+              <h1 className="text-2xl font-semibold">{viewingProject.title}</h1>
+              <p className="text-sm text-slate-500">{viewingProject.projectNumber}</p>
+            </div>
+            <SecondaryButton onClick={() => setViewingProjectId(null)}>Zurueck</SecondaryButton>
+          </div>
+
+          <div className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
+            <div className="grid gap-3 text-sm">
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
+                <span className="text-slate-500">Projektnummer</span>
+                <span className="font-mono">{viewingProject.projectNumber}</span>
+                <span className="text-slate-500">Status</span>
+                <span>{viewingProject.status}</span>
+                <span className="text-slate-500">Zeitraum</span>
+                <span>{viewingProject.startDate.slice(0, 10)} bis {viewingProject.endDate?.slice(0, 10) ?? "offen"}</span>
+                {viewingProject.siteLatitude != null && viewingProject.siteLongitude != null ? (
+                  <>
+                    <span className="text-slate-500">Standort</span>
+                    <span className="font-mono">{viewingProject.siteLatitude.toFixed(5)}, {viewingProject.siteLongitude.toFixed(5)}</span>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          {openWork && openWork.projectId === viewingProject.id ? (
+            <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50/60 p-4 dark:border-emerald-500/40 dark:bg-emerald-500/5">
+              <div className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Laufende Arbeit auf diesem Projekt</div>
+              <div className="mt-1 text-sm">Gestartet: <span className="font-mono">{new Date(openWork.startedAt).toLocaleString("de-DE")}</span></div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Hauptansicht ──────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
       <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
         {/* Header */}
         <div className="flex flex-col gap-4 rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80 lg:flex-row lg:items-center lg:justify-between">
@@ -2803,7 +2916,7 @@ function WorkerTimeView({
                 <div className="text-slate-500">Standort: {openWork.latitude.toFixed(5)}, {openWork.longitude.toFixed(5)}</div>
               ) : null}
             </div>
-            <div className="mt-4">
+            <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
                 disabled={working}
@@ -2812,6 +2925,9 @@ function WorkerTimeView({
               >
                 {working ? "Beende Arbeit ..." : "Arbeit beenden"}
               </button>
+              <SecondaryButton onClick={() => setViewingProjectId(openWork.projectId)}>
+                Projekt oeffnen
+              </SecondaryButton>
             </div>
           </div>
         ) : null}
@@ -2830,36 +2946,43 @@ function WorkerTimeView({
             {currentProjects.length > 0 ? (
               <div className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
                 <h2 className="mb-4 text-lg font-semibold">Arbeit beginnen</h2>
-                <div className="grid gap-4">
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">Projekt waehlen</label>
-                    <div className="grid gap-2">
-                      {currentProjects.map((p) => (
-                        <label
-                          key={p.id}
-                          className={cx(
-                            "flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition",
-                            selectedProjectId === p.id
-                              ? "border-slate-900 bg-slate-900/5 dark:border-slate-100 dark:bg-slate-100/5"
-                              : "border-black/10 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800",
-                          )}
-                        >
-                          <input
-                            type="radio"
-                            name="project"
-                            value={p.id}
-                            checked={selectedProjectId === p.id}
-                            onChange={() => setSelectedProjectId(p.id)}
-                            className="accent-slate-900 dark:accent-slate-100"
-                          />
-                          <div>
-                            <div className="font-medium">{p.title}</div>
-                            <div className="text-sm text-slate-500">{p.projectNumber}</div>
-                          </div>
-                        </label>
-                      ))}
+                <div className="grid gap-3">
+                  {currentProjects.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => setSelectedProjectId(p.id)}
+                      className={cx(
+                        "flex cursor-pointer items-center justify-between rounded-xl border p-4 transition",
+                        selectedProjectId === p.id
+                          ? "border-slate-900 bg-slate-900/5 ring-2 ring-slate-900/20 dark:border-slate-100 dark:bg-slate-100/5 dark:ring-slate-100/20"
+                          : "border-black/10 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800",
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cx(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
+                          selectedProjectId === p.id
+                            ? "border-slate-900 dark:border-slate-100"
+                            : "border-slate-300 dark:border-slate-600",
+                        )}>
+                          {selectedProjectId === p.id ? (
+                            <div className="h-2.5 w-2.5 rounded-full bg-slate-900 dark:bg-slate-100" />
+                          ) : null}
+                        </div>
+                        <div>
+                          <div className="font-medium">{p.title}</div>
+                          <div className="text-sm text-slate-500">{p.projectNumber}</div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setViewingProjectId(p.id); }}
+                        className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+                      >
+                        Projekt oeffnen
+                      </button>
                     </div>
-                  </div>
+                  ))}
                   <button
                     type="button"
                     disabled={working || !selectedProjectId}
@@ -2884,15 +3007,154 @@ function WorkerTimeView({
           <SectionCard title="Zukuenftige Projekte">
             <div className="grid gap-3">
               {futureProjects.map((p) => (
-                <div key={p.id} className="rounded-2xl border border-black/10 p-4 dark:border-white/10">
-                  <div className="font-semibold">{p.title}</div>
-                  <p className="text-sm text-slate-500">{p.projectNumber} · ab {p.startDate.slice(0, 10)}</p>
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between rounded-2xl border border-black/10 p-4 dark:border-white/10"
+                >
+                  <div>
+                    <div className="font-semibold">{p.title}</div>
+                    <p className="text-sm text-slate-500">{p.projectNumber} · ab {p.startDate.slice(0, 10)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setViewingProjectId(p.id)}
+                    className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+                  >
+                    Projekt oeffnen
+                  </button>
                 </div>
               ))}
             </div>
           </SectionCard>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function ReportsSection({
+  customers,
+  projects,
+  workers,
+  apiFetch,
+}: {
+  customers: Customer[];
+  projects: Project[];
+  workers: Worker[];
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+}) {
+  const [customerFinancials, setCustomerFinancials] = useState<Record<string, { totalRevenue: number; totalCosts: number; margin: number; totalHours: number }>>({});
+  const [loadingFinancials, setLoadingFinancials] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingFinancials(true);
+
+    async function loadAll() {
+      const results: Record<string, { totalRevenue: number; totalCosts: number; margin: number; totalHours: number }> = {};
+      for (const c of customers) {
+        try {
+          const f = await apiFetch<{ totalRevenue: number; totalCosts: number; margin: number; totalHours: number }>(`/customers/${c.id}/financials`);
+          results[c.id] = f;
+        } catch {
+          // skip
+        }
+      }
+      if (!cancelled) {
+        setCustomerFinancials(results);
+        setLoadingFinancials(false);
+      }
+    }
+
+    void loadAll();
+    return () => { cancelled = true; };
+  }, [apiFetch, customers]);
+
+  const activeWorkers = workers.filter((w) => w.active !== false);
+
+  // Arbeitsstatus pro Monteur
+  function workerIsWorking(w: Worker): boolean {
+    return w.timeEntries?.[0]?.entryType === "CLOCK_IN";
+  }
+
+  const workingCount = activeWorkers.filter(workerIsWorking).length;
+
+  return (
+    <div className="grid gap-6">
+      {/* Kennzahlen */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <MiniStat title="Aktive Monteure" value={activeWorkers.length} />
+        <MiniStat title="Arbeiten gerade" value={workingCount} />
+        <MiniStat title="Aktive Projekte" value={projects.filter((p) => p.status === "ACTIVE").length} />
+        <MiniStat title="Kunden" value={customers.length} />
+      </div>
+
+      {/* Umsatzuebersicht pro Kunde */}
+      <SectionCard title="Umsatz pro Kunde" subtitle="Basierend auf erfassten Stunden und Projektpreisen">
+        {loadingFinancials ? (
+          <p className="text-sm text-slate-500">Lade Auswertungsdaten ...</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
+                  <th className="pb-2 pr-3">Kunde</th>
+                  <th className="pb-2 pr-3 text-right">Stunden</th>
+                  <th className="pb-2 pr-3 text-right">Umsatz</th>
+                  <th className="pb-2 pr-3 text-right">Kosten</th>
+                  <th className="pb-2 text-right">Marge</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((c) => {
+                  const f = customerFinancials[c.id];
+                  return (
+                    <tr key={c.id} className="border-b border-black/5 last:border-0 dark:border-white/5">
+                      <td className="py-2 pr-3">
+                        <Link href={`/customers/${c.id}`} className="font-medium hover:underline">{c.companyName}</Link>
+                        <div className="text-xs text-slate-500">{c.customerNumber}</div>
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono">{f ? `${f.totalHours} h` : "-"}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{f ? `${f.totalRevenue.toFixed(2)}` : "-"}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{f ? `${f.totalCosts.toFixed(2)}` : "-"}</td>
+                      <td className={cx("py-2 text-right font-mono", f && f.margin >= 0 ? "text-emerald-600 dark:text-emerald-400" : f ? "text-red-600 dark:text-red-400" : "")}>
+                        {f ? `${f.margin.toFixed(2)}` : "-"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
+
+      {/* Monteur-Arbeitsstatus */}
+      <SectionCard title="Monteur-Status" subtitle="Aktueller Arbeitsstatus aller aktiven Monteure">
+        <div className="grid gap-2">
+          {activeWorkers.map((w) => {
+            const isWorking = workerIsWorking(w);
+            const hasProject = (w.assignments ?? []).length > 0;
+            const statusColor = isWorking ? "bg-emerald-500" : hasProject ? "bg-red-500" : "bg-amber-500";
+            const statusLabel = isWorking ? "arbeitet" : hasProject ? "nicht gestartet" : "kein Projekt";
+            return (
+              <div key={w.id} className="flex items-center justify-between rounded-xl border border-black/10 px-4 py-2 dark:border-white/10">
+                <div>
+                  <span className="font-medium">{w.firstName} {w.lastName}</span>
+                  <span className="ml-2 text-sm text-slate-500">{w.workerNumber}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={cx("inline-block h-2.5 w-2.5 rounded-full", statusColor)} />
+                  <span className="text-xs text-slate-500">{statusLabel}</span>
+                  {w.internalHourlyRate != null ? (
+                    <span className="ml-2 text-xs font-mono text-slate-400">{w.internalHourlyRate.toFixed(2)} EUR/h</span>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SectionCard>
     </div>
   );
 }
@@ -2907,6 +3169,8 @@ function sectionTitle(section: AppSection) {
       return "Projekte";
     case "workers":
       return "Monteure";
+    case "reports":
+      return "Auswertung";
     case "settings":
       return "Einstellungen";
     case "users":
@@ -3208,12 +3472,45 @@ function DashboardSection({
   customers,
   projects,
   workers,
+  teams,
 }: {
   summary: Summary | null;
   customers: Customer[];
   projects: Project[];
   workers: Worker[];
+  teams: TeamItem[];
 }) {
+  function workerStatus(w: Worker): { label: string; color: string } {
+    const lastEntry = w.timeEntries?.[0];
+    if (lastEntry?.entryType === "CLOCK_IN") {
+      return { label: "arbeitet", color: "bg-emerald-500" };
+    }
+    const hasAssignment = (w.assignments ?? []).length > 0;
+    if (hasAssignment) {
+      return { label: "nicht gestartet", color: "bg-red-500" };
+    }
+    return { label: "kein Projekt", color: "bg-amber-500" };
+  }
+
+  function projectTeamHint(p: Project): string {
+    const assignedWorkers = (p.assignments ?? []).map((a) => a.worker);
+    if (assignedWorkers.length === 0) return "Keine Monteure zugeordnet";
+
+    // Pruefen ob ein Team alle zugeordneten Monteure abdeckt
+    const workerIds = new Set(assignedWorkers.map((w) => w.id));
+    for (const team of teams) {
+      const teamWorkerIds = new Set(team.members.map((m) => m.worker.id));
+      if (workerIds.size > 0 && [...workerIds].every((id) => teamWorkerIds.has(id))) {
+        return team.name;
+      }
+    }
+
+    if (assignedWorkers.length <= 3) {
+      return assignedWorkers.map((w) => `${w.firstName} ${w.lastName}`).join(", ");
+    }
+    return `${assignedWorkers.length} Monteure zugeordnet`;
+  }
+
   return (
     <div className="grid gap-6">
       {summary ? (
@@ -3235,21 +3532,45 @@ function DashboardSection({
       </SectionCard>
 
       <SectionCard title="Projekte">
-        <DashboardList
-          items={projects}
-          href={(item) => `/projects/${item.id}`}
-          primary={(item) => item.title}
-          secondary={(item) => item.projectNumber}
-        />
+        <div className="grid gap-2">
+          {projects.map((p) => (
+            <Link
+              key={p.id}
+              href={`/projects/${p.id}`}
+              className="flex items-center justify-between rounded-2xl border border-black/10 px-4 py-3 transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
+            >
+              <div>
+                <div className="font-medium">{p.title}</div>
+                <div className="text-sm text-slate-500">{p.projectNumber}</div>
+              </div>
+              <div className="text-right text-xs text-slate-500">{projectTeamHint(p)}</div>
+            </Link>
+          ))}
+        </div>
       </SectionCard>
 
       <SectionCard title="Monteure">
-        <DashboardList
-          items={workers}
-          href={(item) => `/workers/${item.id}`}
-          primary={(item) => `${item.firstName} ${item.lastName}`}
-          secondary={(item) => item.workerNumber}
-        />
+        <div className="grid gap-2">
+          {workers.filter((w) => w.active !== false).map((w) => {
+            const st = workerStatus(w);
+            return (
+              <Link
+                key={w.id}
+                href={`/workers/${w.id}`}
+                className="flex items-center justify-between rounded-2xl border border-black/10 px-4 py-3 transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
+              >
+                <div>
+                  <div className="font-medium">{w.firstName} {w.lastName}</div>
+                  <div className="text-sm text-slate-500">{w.workerNumber}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={cx("inline-block h-2.5 w-2.5 rounded-full", st.color)} />
+                  <span className="text-xs text-slate-500">{st.label}</span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       </SectionCard>
     </div>
   );

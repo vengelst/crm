@@ -62,6 +62,14 @@ export class SaveProjectDto {
   siteCountry?: string;
 
   @IsOptional()
+  @IsNumber()
+  siteLatitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  siteLongitude?: number;
+
+  @IsOptional()
   @IsString()
   accommodationAddress?: string;
 

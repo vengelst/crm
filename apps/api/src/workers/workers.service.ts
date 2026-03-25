@@ -24,6 +24,10 @@ export class WorkersService {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
+        timeEntries: {
+          orderBy: { occurredAtServer: 'desc' },
+          take: 1,
+        },
       },
       orderBy: {
         lastName: 'asc',
@@ -190,12 +194,27 @@ export class WorkersService {
   async remove(id: string) {
     await this.getById(id);
 
-    return this.prisma.worker.update({
-      where: { id },
-      data: {
-        active: false,
-      },
+    // Pruefen ob offene Zeitbuchungen existieren
+    const openEntries = await this.prisma.timeEntry.count({
+      where: { workerId: id },
     });
+    if (openEntries > 0) {
+      throw new BadRequestException(
+        `Monteur kann nicht geloescht werden, da noch ${openEntries} Zeitbuchung(en) vorhanden sind.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.documentLink.deleteMany({
+        where: { entityType: 'WORKER', entityId: id },
+      });
+      await tx.workerTeamMember.deleteMany({ where: { workerId: id } });
+      await tx.projectAssignment.deleteMany({ where: { workerId: id } });
+      await tx.workerPin.deleteMany({ where: { workerId: id } });
+      await tx.worker.delete({ where: { id } });
+    });
+
+    return { deleted: true };
   }
 
   private async ensureActivePinIsUnique(pin: string, excludeWorkerId?: string) {

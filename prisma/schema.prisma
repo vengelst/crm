@@ -189,6 +189,8 @@ model Project {
   sitePostalCode               String?
   siteCity                     String?
   siteCountry                  String?
+  siteLatitude                 Float?
+  siteLongitude                Float?
   accommodationAddress         String?
   weeklyFlatRate               Float?
   includedHoursPerWeek         Float?

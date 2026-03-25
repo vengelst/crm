@@ -157,27 +157,24 @@ export class AuthService {
       );
     }
 
+    const mapProject = (a: (typeof relevantAssignments)[number]) => ({
+      id: a.project.id,
+      projectNumber: a.project.projectNumber,
+      title: a.project.title,
+      status: a.project.status,
+      startDate: a.startDate.toISOString(),
+      endDate: a.endDate?.toISOString() ?? null,
+      siteLatitude: a.project.siteLatitude ?? null,
+      siteLongitude: a.project.siteLongitude ?? null,
+    });
+
     const currentProjects = relevantAssignments
       .filter((a) => a.startDate <= now)
-      .map((a) => ({
-        id: a.project.id,
-        projectNumber: a.project.projectNumber,
-        title: a.project.title,
-        status: a.project.status,
-        startDate: a.startDate.toISOString(),
-        endDate: a.endDate?.toISOString() ?? null,
-      }));
+      .map(mapProject);
 
     const futureProjects = relevantAssignments
       .filter((a) => a.startDate > now)
-      .map((a) => ({
-        id: a.project.id,
-        projectNumber: a.project.projectNumber,
-        title: a.project.title,
-        status: a.project.status,
-        startDate: a.startDate.toISOString(),
-        endDate: a.endDate?.toISOString() ?? null,
-      }));
+      .map(mapProject);
 
     const accessToken = await this.jwtService.signAsync({
       sub: worker.id,
