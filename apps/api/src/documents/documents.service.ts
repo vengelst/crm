@@ -68,9 +68,12 @@ export class DocumentsService {
       });
       allowedProjectIds = assignments.map((a) => a.projectId);
     } else {
-      // kiosk-user: alle Projekte sichtbar (Rolle PROJECT_MANAGER)
+      // kiosk-user: nur Projekte, die diesem Benutzer als Projektleiter zugeordnet sind
       const projects = await this.prisma.project.findMany({
-        where: { deletedAt: null },
+        where: {
+          deletedAt: null,
+          internalProjectManagerUserId: userId,
+        },
         select: { id: true },
       });
       allowedProjectIds = projects.map((p) => p.id);
@@ -193,8 +196,24 @@ export class DocumentsService {
       if (!hasAccess) {
         throw new NotFoundException('Dokument nicht gefunden.');
       }
+    } else if (userType === 'kiosk-user') {
+      // kiosk-user: nur Dokumente von Projekten, die diesem Benutzer zugeordnet sind
+      const managedProjects = await this.prisma.project.findMany({
+        where: {
+          deletedAt: null,
+          internalProjectManagerUserId: userId,
+        },
+        select: { id: true },
+      });
+      const managedIds = new Set(managedProjects.map((p) => p.id));
+      const hasAccess = document.links.some(
+        (link) =>
+          link.entityType === 'PROJECT' && managedIds.has(link.entityId),
+      );
+      if (!hasAccess) {
+        throw new NotFoundException('Dokument nicht gefunden.');
+      }
     }
-    // kiosk-user mit PROJECT_MANAGER sieht alle Projektdokumente
   }
 
   async getById(id: string) {

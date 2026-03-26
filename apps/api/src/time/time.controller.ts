@@ -16,7 +16,7 @@ type RequestWithUser = Request & {
   user?: {
     sub: string;
     workerId?: string;
-    type: 'user' | 'worker';
+    type: 'user' | 'worker' | 'kiosk-user';
   };
 };
 
@@ -26,12 +26,14 @@ export class TimeController {
 
   @Post('clock-in')
   clockIn(@Body() dto: ClockEntryDto, @Req() request: RequestWithUser) {
+    this.rejectKioskUser(request);
     this.enforceWorkerIdentity(request, dto);
     return this.timeService.clockIn(dto);
   }
 
   @Post('clock-out')
   clockOut(@Body() dto: ClockEntryDto, @Req() request: RequestWithUser) {
+    this.rejectKioskUser(request);
     this.enforceWorkerIdentity(request, dto);
     return this.timeService.clockOut(dto);
   }
@@ -41,6 +43,7 @@ export class TimeController {
     @Query('workerId') workerId: string | undefined,
     @Req() request: RequestWithUser,
   ) {
+    this.rejectKioskUser(request);
     const resolvedWorkerId = this.resolveWorkerId(request, workerId);
 
     const [openEntry, todayStats] = await Promise.all([
@@ -71,15 +74,19 @@ export class TimeController {
     @Query('workerId') workerId: string | undefined,
     @Req() request: RequestWithUser,
   ) {
+    this.rejectKioskUser(request);
     const resolvedWorkerId = this.resolveWorkerId(request, workerId);
     return this.timeService.listEntries(resolvedWorkerId);
   }
 
-  /**
-   * Wenn der eingeloggte User ein Worker ist, darf er nur
-   * fuer sich selbst buchen. Der Body-workerId wird gegen
-   * den JWT-workerId validiert.
-   */
+  private rejectKioskUser(request: RequestWithUser) {
+    if (request.user?.type === 'kiosk-user') {
+      throw new ForbiddenException(
+        'Zeiterfassung ist fuer Kiosk-Benutzer nicht verfuegbar.',
+      );
+    }
+  }
+
   private enforceWorkerIdentity(request: RequestWithUser, dto: ClockEntryDto) {
     if (request.user?.type === 'worker') {
       const jwtWorkerId = request.user.workerId ?? request.user.sub;

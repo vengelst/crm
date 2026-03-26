@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -86,8 +87,13 @@ export class DocumentsController {
     @Body() dto: UploadDocumentDto,
     @Req() request: RequestWithUser,
   ) {
-    // Worker duerfen nur fuer ihre Projekte hochladen
-    if (request.user?.type === 'worker' && dto.entityType === 'PROJECT' && dto.entityId) {
+    // Worker: nur Projekt-Dokumente fuer zugewiesene Projekte
+    if (request.user?.type === 'worker') {
+      if (dto.entityType !== 'PROJECT' || !dto.entityId) {
+        throw new BadRequestException(
+          'Monteure duerfen nur Projektdokumente hochladen.',
+        );
+      }
       await this.documentsService.assertProjectAssignment(
         request.user.sub,
         dto.entityId,

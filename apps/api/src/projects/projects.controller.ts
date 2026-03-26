@@ -7,15 +7,23 @@ import {
   Patch,
   Post,
   Put,
+  Req,
   Res,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { RoleCode } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { KioskAllowed } from '../common/decorators/kiosk-allowed.decorator';
 import { AssignWorkerDto } from './dto/assign-worker.dto';
 import { SaveProjectDto } from './dto/save-project.dto';
 import { ProjectsService } from './projects.service';
+
+type RequestWithUser = Request & {
+  user?: {
+    sub: string;
+    type: 'user' | 'worker' | 'kiosk-user';
+  };
+};
 
 @Controller('projects')
 @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER)
@@ -24,7 +32,10 @@ export class ProjectsController {
 
   @Get()
   @KioskAllowed()
-  list() {
+  list(@Req() request: RequestWithUser) {
+    if (request.user?.type === 'kiosk-user') {
+      return this.projectsService.listForManager(request.user.sub);
+    }
     return this.projectsService.list();
   }
 

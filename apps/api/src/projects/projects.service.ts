@@ -31,6 +31,27 @@ export class ProjectsService {
     });
   }
 
+  listForManager(userId: string) {
+    return this.prisma.project.findMany({
+      where: {
+        deletedAt: null,
+        internalProjectManagerUserId: userId,
+      },
+      include: {
+        customer: true,
+        branch: true,
+        assignments: {
+          include: {
+            worker: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+  }
+
   async getById(id: string) {
     const project = await this.prisma.project.findFirst({
       where: {
