@@ -38,6 +38,11 @@ export class TimesheetsController {
     @Req() request?: RequestWithUser,
   ) {
     this.rejectKioskUser(request);
+    // Worker: nur eigene Stundenzettel
+    if (request?.user?.type === 'worker') {
+      const ownId = request.user.workerId ?? request.user.sub;
+      return this.timesheetsService.list(ownId, projectId);
+    }
     return this.timesheetsService.list(workerId, projectId);
   }
 
@@ -48,12 +53,15 @@ export class TimesheetsController {
   }
 
   @Post(':id/worker-sign')
-  signWorker(
+  async signWorker(
     @Param('id') id: string,
     @Body() dto: SignTimesheetDto,
     @Req() request: RequestWithUser,
   ) {
     this.rejectKioskUser(request);
+    if (request.user?.type === 'worker') {
+      await this.assertWorkerOwnership(request, id);
+    }
     return this.timesheetsService.signWorker(id, dto, request.ip);
   }
 
@@ -68,13 +76,18 @@ export class TimesheetsController {
   }
 
   @Get(':id/pdf')
-  downloadPdf(
+  async downloadPdf(
     @Param('id') id: string,
+    @Query('lang') lang: string | undefined,
     @Res() response: Response,
     @Req() request: RequestWithUser,
   ) {
     this.rejectKioskUser(request);
-    return this.timesheetsService.renderPdf(id).then((pdf) => {
+    if (request.user?.type === 'worker') {
+      await this.assertWorkerOwnership(request, id);
+    }
+    const pdfLang = lang === 'en' ? 'en' : undefined;
+    return this.timesheetsService.renderPdf(id, pdfLang).then((pdf) => {
       response.setHeader('Content-Type', 'application/pdf');
       response.setHeader(
         'Content-Disposition',
@@ -88,6 +101,33 @@ export class TimesheetsController {
   @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER)
   sendEmail(@Param('id') id: string, @Body() dto: SendTimesheetEmailDto) {
     return this.timesheetsService.sendEmail(id, dto);
+  }
+
+  @Post(':id/approve')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE)
+  approve(
+    @Param('id') id: string,
+    @Body() body: { comment?: string },
+    @Req() request: RequestWithUser,
+  ) {
+    return this.timesheetsService.approve(id, {
+      comment: body.comment,
+      userId: request.user!.sub,
+    });
+  }
+
+  @Post(':id/mark-billed')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE)
+  markBilled(@Param('id') id: string, @Req() request: RequestWithUser) {
+    return this.timesheetsService.markBilled(id, request.user!.sub);
+  }
+
+  private async assertWorkerOwnership(request: RequestWithUser, timesheetId: string) {
+    const ownId = request.user?.workerId ?? request.user?.sub;
+    const sheet = await this.timesheetsService.getById(timesheetId);
+    if (sheet.workerId !== ownId) {
+      throw new ForbiddenException('Zugriff nur auf eigene Stundenzettel erlaubt.');
+    }
   }
 
   private rejectKioskUser(request?: RequestWithUser) {

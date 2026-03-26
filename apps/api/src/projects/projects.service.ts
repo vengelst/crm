@@ -4,12 +4,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AssignWorkerDto } from './dto/assign-worker.dto';
 import { SaveProjectDto } from './dto/save-project.dto';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   list() {
     return this.prisma.project.findMany({
@@ -235,7 +239,7 @@ export class ProjectsService {
       }
     }
 
-    return this.prisma.projectAssignment.create({
+    const assignment = await this.prisma.projectAssignment.create({
       data: {
         projectId,
         workerId: dto.workerId,
@@ -249,6 +253,15 @@ export class ProjectsService {
         project: true,
       },
     });
+
+    void this.notifications.onProjectAssignment(
+      dto.workerId,
+      assignment.project.projectNumber,
+      assignment.project.title,
+      projectId,
+    );
+
+    return assignment;
   }
 
   async setAssignments(
@@ -320,7 +333,12 @@ export class ProjectsService {
       }
     }
 
-    // 3. Neue Worker anlegen (ohne Metadaten)
+    // 3. Neue Worker anlegen (ohne Metadaten) + Benachrichtigung
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { projectNumber: true, title: true },
+    });
+
     for (const workerId of data.workerIds) {
       if (!currentWorkerIds.has(workerId)) {
         await this.prisma.projectAssignment.create({
@@ -331,6 +349,14 @@ export class ProjectsService {
             endDate: newEnd ?? undefined,
           },
         });
+        if (project) {
+          void this.notifications.onProjectAssignment(
+            workerId,
+            project.projectNumber,
+            project.title,
+            projectId,
+          );
+        }
       }
     }
 
@@ -356,7 +382,8 @@ export class ProjectsService {
 
     // ── 1. Stunden aus CLOCK_IN / CLOCK_OUT-Paaren berechnen ──
     const workerHoursMap = new Map<string, number>();
-    const weeklyHoursMap = new Map<string, number>(); // "YYYY-WW" → hours
+    // Schluessel: "workerId|YYYY-WW" → Stunden je Monteur je Woche
+    const workerWeekHoursMap = new Map<string, number>();
 
     // Gruppiere nach Worker, paare IN/OUT
     const entriesByWorker = new Map<string, typeof project.timeEntries>();
@@ -382,9 +409,10 @@ export class ProjectsService {
               (workerHoursMap.get(workerId) ?? 0) + hours,
             );
             const weekKey = isoWeekKey(pendingClockIn);
-            weeklyHoursMap.set(
-              weekKey,
-              (weeklyHoursMap.get(weekKey) ?? 0) + hours,
+            const compositeKey = `${workerId}|${weekKey}`;
+            workerWeekHoursMap.set(
+              compositeKey,
+              (workerWeekHoursMap.get(compositeKey) ?? 0) + hours,
             );
           }
           pendingClockIn = null;
@@ -397,7 +425,7 @@ export class ProjectsService {
       0,
     );
 
-    // ── 2. Umsatz berechnen (wochenweise) ─────────────────────
+    // ── 2. Umsatz berechnen (je Monteur je Woche) ────────────
     let baseRevenue = 0;
     let overtimeRevenue = 0;
     let overtimeHours = 0;
@@ -407,32 +435,27 @@ export class ProjectsService {
     const hourlyRate = project.hourlyRateUpTo40h ?? 0;
     const overtimeRate = project.overtimeRate ?? 0;
 
-    const sortedWeeks = [...weeklyHoursMap.entries()].sort(([a], [b]) =>
-      a.localeCompare(b),
-    );
+    // Aggregiere pro Woche fuer die weeklyBreakdown-Response
+    const weekAgg = new Map<
+      string,
+      { hours: number; overtimeHours: number; baseRevenue: number; overtimeRevenue: number }
+    >();
 
-    const weeklyBreakdown: {
-      week: string;
-      hours: number;
-      overtimeHours: number;
-      baseRevenue: number;
-      overtimeRevenue: number;
-    }[] = [];
-
-    for (const [week, weekHours] of sortedWeeks) {
+    for (const [compositeKey, wHours] of workerWeekHoursMap) {
+      const week = compositeKey.split('|')[1];
       let wBase = 0;
       let wOvertime = 0;
       let wOvertimeHours = 0;
 
       if (weeklyFlatRate !== null) {
-        // Wochenpauschale: inklusiv bis Grenze, darueber Ueberstundensatz
+        // Wochenpauschale je Monteur
         wBase = weeklyFlatRate;
-        wOvertimeHours = Math.max(0, weekHours - includedHours);
+        wOvertimeHours = Math.max(0, wHours - includedHours);
         wOvertime = wOvertimeHours * overtimeRate;
       } else {
-        // Kein Pauschale: Stunden bis 40h x Stundensatz, darueber Ueberstundensatz
-        const regularHours = Math.min(weekHours, 40);
-        wOvertimeHours = Math.max(0, weekHours - 40);
+        // Stundensatz je Monteur: bis 40h regulaer, darueber Ueberstunden
+        const regularHours = Math.min(wHours, 40);
+        wOvertimeHours = Math.max(0, wHours - 40);
         wBase = regularHours * hourlyRate;
         wOvertime = wOvertimeHours * overtimeRate;
       }
@@ -441,14 +464,28 @@ export class ProjectsService {
       overtimeRevenue += wOvertime;
       overtimeHours += wOvertimeHours;
 
-      weeklyBreakdown.push({
-        week,
-        hours: Math.round(weekHours * 100) / 100,
-        overtimeHours: Math.round(wOvertimeHours * 100) / 100,
-        baseRevenue: Math.round(wBase * 100) / 100,
-        overtimeRevenue: Math.round(wOvertime * 100) / 100,
-      });
+      const agg = weekAgg.get(week) ?? {
+        hours: 0,
+        overtimeHours: 0,
+        baseRevenue: 0,
+        overtimeRevenue: 0,
+      };
+      agg.hours += wHours;
+      agg.overtimeHours += wOvertimeHours;
+      agg.baseRevenue += wBase;
+      agg.overtimeRevenue += wOvertime;
+      weekAgg.set(week, agg);
     }
+
+    const weeklyBreakdown = [...weekAgg.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([week, agg]) => ({
+        week,
+        hours: Math.round(agg.hours * 100) / 100,
+        overtimeHours: Math.round(agg.overtimeHours * 100) / 100,
+        baseRevenue: Math.round(agg.baseRevenue * 100) / 100,
+        overtimeRevenue: Math.round(agg.overtimeRevenue * 100) / 100,
+      }));
 
     const totalRevenue =
       Math.round((baseRevenue + overtimeRevenue) * 100) / 100;
@@ -492,6 +529,36 @@ export class ProjectsService {
       weeklyBreakdown,
       pricingModel: weeklyFlatRate !== null ? 'WEEKLY_FLAT_RATE' : 'HOURLY',
     };
+  }
+
+  async setBillingReady(
+    id: string,
+    data: { ready: boolean; comment?: string; userId: string },
+  ) {
+    const existing = await this.getById(id);
+    const result = await this.prisma.project.update({
+      where: { id },
+      data: {
+        billingReady: data.ready,
+        billingReadyAt: data.ready ? new Date() : null,
+        billingReadyByUserId: data.ready ? data.userId : null,
+        billingReadyComment: data.comment ?? null,
+      },
+      include: {
+        customer: true,
+        branch: true,
+      },
+    });
+
+    if (data.ready) {
+      void this.notifications.onBillingReady(
+        id,
+        existing.projectNumber,
+        existing.title,
+      );
+    }
+
+    return result;
   }
 
   async remove(id: string) {

@@ -15,6 +15,10 @@ import { SettingsModule } from './settings/settings.module';
 import { UsersModule } from './users/users.module';
 import { TeamsModule } from './teams/teams.module';
 import { DevicesModule } from './devices/devices.module';
+import { ChecklistsModule } from './checklists/checklists.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { RemindersModule } from './reminders/reminders.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -35,6 +39,10 @@ import { DevicesModule } from './devices/devices.module';
     SettingsModule,
     UsersModule,
     DevicesModule,
+    ChecklistsModule,
+    NotificationsModule,
+    RemindersModule,
+    ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Impressum – Viva Home GmbH</title>
+  <meta name="robots" content="index,follow" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="network.js" defer></script>
+  <style>
+    #particle-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.65;
+      margin: 0;
+      background: transparent;
+      color: #ffffff;
+      min-height: 100vh;
+    }
+
+    main {
+      position: relative;
+      z-index: 10;
+      width: min(900px, calc(100% - 32px));
+      margin: 40px auto;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      padding: 32px;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+
+    h1, h2 {
+      margin-top: 0;
+      color: #ffffff;
+    }
+
+    p, li, strong {
+      color: rgba(255,255,255,0.92);
+    }
+
+    a {
+      color: var(--gold-light, #d4b06a);
+    }
+
+    .back {
+      margin-bottom: 18px;
+      display: inline-block;
+    }
+
+    .hint {
+      margin-top: 24px;
+      padding: 14px 16px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="particle-canvas"></canvas>
+  <main>
+    <a class="back" href="/index.html">← Zur Startseite</a>
+    <h1>Impressum</h1>
+
+    <p>
+      <strong>Viva Home GmbH</strong><br />
+      An Ringbauer 16<br />
+      51491 Overath<br />
+      Deutschland
+    </p>
+
+    <p>
+      Telefon: <strong>+49-172-8848478</strong><br />
+      E-Mail: <a href="mailto:info@vivahome.de">info@vivahome.de</a>
+    </p>
+
+    <p>
+      Vertreten durch den Geschäftsführer:<br />
+      <strong>Volkhard Engelstäder</strong>
+    </p>
+
+    <p>
+      Registergericht: <strong>Amtsgericht Köln</strong><br />
+      Handelsregisternummer: <strong>HRB 95035</strong>
+    </p>
+
+    <p>
+      Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG:<br />
+      <strong>DE295199745</strong>
+    </p>
+
+    <h2>Verbraucherstreitbeilegung</h2>
+    <p>
+      Wir sind nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren
+      vor einer Verbraucherschlichtungsstelle teilzunehmen.
+    </p>
+  </main>
+</body>
+</html>

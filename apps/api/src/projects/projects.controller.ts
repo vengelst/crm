@@ -73,6 +73,19 @@ export class ProjectsController {
     return this.projectsService.setAssignments(id, body);
   }
 
+  @Post(':id/billing-ready')
+  setBillingReady(
+    @Param('id') id: string,
+    @Body() body: { ready: boolean; comment?: string },
+    @Req() request: RequestWithUser,
+  ) {
+    return this.projectsService.setBillingReady(id, {
+      ready: body.ready,
+      comment: body.comment,
+      userId: request.user!.sub,
+    });
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.projectsService.remove(id);

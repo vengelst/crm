@@ -132,18 +132,11 @@ export class AuthService {
       }
     }
 
-    // 2. User-KioskCodes pruefen (PROJECT_MANAGER als Kiosk-Benutzer)
+    // 2. User-KioskCodes pruefen (alle Benutzer mit kioskCodeHash)
     const kioskUsers = await this.prisma.user.findMany({
       where: {
         isActive: true,
         kioskCodeHash: { not: null },
-        roles: {
-          some: {
-            role: {
-              code: { in: [RoleCode.PROJECT_MANAGER] },
-            },
-          },
-        },
       },
       include: {
         roles: { include: { role: true } },
@@ -199,7 +192,7 @@ export class AuthService {
       };
     }
 
-    // 3b. User-Match → Kiosk-User-Session
+    // 3b. User-Match
     const kioskUser = userMatches[0];
     const deviceCheck = await this.devicesService.checkDevice(
       'login',
@@ -208,16 +201,24 @@ export class AuthService {
     );
 
     const roles = kioskUser.roles.map((entry) => entry.role.code);
+
+    // Backend-Rollen (SUPERADMIN, OFFICE) → normaler Backend-Login
+    const isBackendUser = roles.includes(RoleCode.SUPERADMIN) ||
+      roles.includes(RoleCode.OFFICE);
+
+    const tokenType = isBackendUser ? 'user' : 'kiosk-user';
+    const loginType = isBackendUser ? 'user' : 'kiosk-user';
+
     const accessToken = await this.jwtService.signAsync({
       sub: kioskUser.id,
       email: kioskUser.email,
       roles,
-      type: 'kiosk-user',
+      type: tokenType,
     });
 
     return {
       accessToken,
-      loginType: 'kiosk-user' as const,
+      loginType: loginType as 'user' | 'kiosk-user',
       user: {
         id: kioskUser.id,
         email: kioskUser.email,

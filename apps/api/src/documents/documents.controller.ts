@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -150,6 +151,86 @@ export class DocumentsController {
     );
 
     return response.sendFile(absolutePath);
+  }
+
+  @Put(':id/replace')
+  @KioskAllowed()
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (_request, _file, callback) => {
+          const uploadDir = resolve(process.cwd(), 'storage', 'uploads');
+          if (!existsSync(uploadDir)) {
+            mkdirSync(uploadDir, { recursive: true });
+          }
+          callback(null, uploadDir);
+        },
+        filename: (_request, file, callback) => {
+          callback(
+            null,
+            `${Date.now()}-${randomUUID()}${extname(file.originalname)}`,
+          );
+        },
+      }),
+    }),
+  )
+  async replaceFile(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() request: RequestWithUser,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Datei fehlt.');
+    }
+
+    // Scope-Pruefung fuer Worker und kiosk-user
+    if (
+      request.user?.type === 'worker' ||
+      request.user?.type === 'kiosk-user'
+    ) {
+      await this.documentsService.assertKioskAccess(
+        id,
+        request.user.sub,
+        request.user.type,
+      );
+    }
+
+    return this.documentsService.replaceFile(id, file);
+  }
+
+  @Post(':id/submit')
+  @KioskAllowed()
+  async submit(@Param('id') id: string, @Req() request: RequestWithUser) {
+    if (request.user?.type === 'worker' || request.user?.type === 'kiosk-user') {
+      await this.documentsService.assertKioskAccess(id, request.user.sub, request.user.type);
+    }
+    return this.documentsService.setApprovalStatus(id, 'SUBMITTED');
+  }
+
+  @Post(':id/approve')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER)
+  approve(
+    @Param('id') id: string,
+    @Body() body: { comment?: string },
+    @Req() request: RequestWithUser,
+  ) {
+    return this.documentsService.setApprovalStatus(id, 'APPROVED', request.user?.sub, body.comment);
+  }
+
+  @Post(':id/reject')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER)
+  reject(
+    @Param('id') id: string,
+    @Body() body: { comment?: string },
+    @Req() request: RequestWithUser,
+  ) {
+    return this.documentsService.setApprovalStatus(id, 'REJECTED', request.user?.sub, body.comment);
+  }
+
+  @Post(':id/archive')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE)
+  archive(@Param('id') id: string) {
+    return this.documentsService.setApprovalStatus(id, 'ARCHIVED');
   }
 
   @Delete(':id')

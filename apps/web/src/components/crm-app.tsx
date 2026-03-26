@@ -32,6 +32,8 @@ import type {
   TimesheetItem, WorkerTimeStatus,
   PermissionItem, SmtpFormState,
   KioskDevice, DeviceBindingConfig,
+  Checklist, ChecklistTemplate,
+  NotificationItem,
 } from "./crm-app/types";
 import { API_ROOT, AUTH_STORAGE_KEY } from "./crm-app/types";
 import {
@@ -42,6 +44,7 @@ import {
   PrintButton, openPrintWindow,
 } from "./crm-app/shared";
 import { KioskLoginScreen } from "./crm-app/login";
+import { t, type SupportedLang } from "../i18n";
 
 // Re-export types for page files that import CrmAppProps
 export type { CrmAppProps } from "./crm-app/types";
@@ -432,7 +435,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     try {
       const response = await apiFetch<{
         accessToken: string;
-        loginType: "worker" | "kiosk-user";
+        loginType: "worker" | "kiosk-user" | "user";
         worker: { id: string; workerNumber: string; name: string } | null;
         user: { id: string; email: string; displayName: string; roles: string[] } | null;
         currentProjects: AuthState["currentProjects"];
@@ -449,7 +452,14 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       });
 
       let nextAuth: AuthState;
-      if (response.loginType === "kiosk-user" && response.user) {
+      if (response.loginType === "user" && response.user) {
+        // Admin/App-Verwalter per Kiosk-Code → normale Backend-App
+        nextAuth = {
+          accessToken: response.accessToken,
+          type: "user",
+          user: response.user,
+        };
+      } else if (response.loginType === "kiosk-user" && response.user) {
         nextAuth = {
           accessToken: response.accessToken,
           type: "kiosk-user",
@@ -704,9 +714,12 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     event.preventDefault();
     await runMutation(async () => {
       const payload = sanitizeForApi({
-        ...userForm,
+        email: userForm.email,
+        displayName: userForm.displayName,
         password: userForm.password || undefined,
         kioskCode: userForm.kioskCode || undefined,
+        roleCodes: userForm.roleCodes,
+        isActive: userForm.isActive,
       });
 
       if (userForm.id) {
@@ -998,6 +1011,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 <SettingsIcon className="h-4 w-4" />
               </IconNavLink>
             ) : null}
+            <NotificationBell apiFetch={apiFetch} />
             <ThemeToggle />
             <SecondaryButton onClick={logout}>Abmelden</SecondaryButton>
           </div>
@@ -2165,8 +2179,37 @@ function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }: {
   }
 
   const statusLabel = (s: string) => {
-    switch (s) { case "DRAFT": return "Entwurf"; case "WORKER_SIGNED": return "Monteur signiert"; case "CUSTOMER_SIGNED": return "Kunde signiert"; case "COMPLETED": return "Fertig"; case "LOCKED": return "Gesperrt"; default: return s; }
+    switch (s) { case "DRAFT": return "Entwurf"; case "WORKER_SIGNED": return "Monteur signiert"; case "CUSTOMER_SIGNED": return "Kunde signiert"; case "COMPLETED": return "Fertig"; case "APPROVED": return "Freigegeben"; case "BILLED": return "Abgerechnet"; case "LOCKED": return "Gesperrt"; default: return s; }
   };
+
+  const statusColor = (s: string) => {
+    switch (s) {
+      case "DRAFT": return "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
+      case "WORKER_SIGNED": return "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400";
+      case "CUSTOMER_SIGNED": return "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400";
+      case "COMPLETED": return "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400";
+      case "APPROVED": return "bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400";
+      case "BILLED": return "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400";
+      case "LOCKED": return "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400";
+      default: return "bg-slate-100 text-slate-600";
+    }
+  };
+
+  async function approveTs(tsId: string) {
+    setTsMsg(null);
+    try {
+      await apiFetch(`/timesheets/${tsId}/approve`, { method: "POST", body: JSON.stringify({}) });
+      setTsMsg("Stundenzettel freigegeben.");
+    } catch (e) { setTsMsg(e instanceof Error ? e.message : "Fehler"); }
+  }
+
+  async function markBilledTs(tsId: string) {
+    setTsMsg(null);
+    try {
+      await apiFetch(`/timesheets/${tsId}/mark-billed`, { method: "POST", body: JSON.stringify({}) });
+      setTsMsg("Stundenzettel als abgerechnet markiert.");
+    } catch (e) { setTsMsg(e instanceof Error ? e.message : "Fehler"); }
+  }
 
   return (
     <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
@@ -2195,12 +2238,22 @@ function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }: {
                   <td className="py-2 pr-2 text-xs">{ts.worker ? `${ts.worker.firstName} ${ts.worker.lastName}` : "-"}</td>
                   <td className="py-2 pr-2 text-xs">{ts.project.projectNumber}</td>
                   <td className="py-2 pr-2 text-right font-mono text-xs">{Math.floor(ts.totalMinutesNet / 60)}h {ts.totalMinutesNet % 60}m</td>
-                  <td className="py-2 pr-2 text-xs">{statusLabel(ts.status)}</td>
+                  <td className="py-2 pr-2 text-xs">
+                    <span className={cx("inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold", statusColor(ts.status))}>
+                      {statusLabel(ts.status)}
+                    </span>
+                  </td>
                   <td className="py-2 pr-2 text-xs">{ts.signatures.length > 0 ? `${ts.signatures.length}x` : "-"}</td>
                   <td className="py-2 text-xs">
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
                       <button type="button" onClick={() => void downloadPdf(ts.id)} className="rounded border border-black/10 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 dark:border-white/10">PDF</button>
                       <button type="button" onClick={() => { setEmailTsId(ts.id); setEmailRecipient(""); }} className="rounded border border-blue-300 px-1.5 py-0.5 text-[10px] text-blue-700 hover:bg-blue-50 dark:border-blue-500/30 dark:text-blue-400">Mail</button>
+                      {(ts.status === "COMPLETED" || ts.status === "CUSTOMER_SIGNED") ? (
+                        <button type="button" onClick={() => void approveTs(ts.id)} className="rounded border border-green-300 px-1.5 py-0.5 text-[10px] text-green-700 hover:bg-green-50 dark:border-green-500/30 dark:text-green-400">Freigeben</button>
+                      ) : null}
+                      {ts.status === "APPROVED" ? (
+                        <button type="button" onClick={() => void markBilledTs(ts.id)} className="rounded border border-purple-300 px-1.5 py-0.5 text-[10px] text-purple-700 hover:bg-purple-50 dark:border-purple-500/30 dark:text-purple-400">Abgerechnet</button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -2655,6 +2708,7 @@ function KioskProjectView({ project, timesheets, apiFetch, workerId, authToken }
           onUpload={() => void uploadDoc()}
           allowDelete={false}
           uploadLabel={uploading ? "Hochladen..." : "Dokument hochladen"}
+          onSubmitDocument={(docId) => void apiFetch(`/documents/${docId}/submit`, { method: "POST", body: JSON.stringify({}) }).then(() => { setDocMsg("Dokument eingereicht."); }).catch(() => { setDocMsg("Fehler beim Einreichen."); })}
         />
       </div>
 
@@ -2675,6 +2729,9 @@ function KioskProjectView({ project, timesheets, apiFetch, workerId, authToken }
           </div>
         </div>
       ) : null}
+      {/* Checklisten (Monteur-Sicht) */}
+      <ProjectChecklistSection projectId={project.id} apiFetch={apiFetch} isAdmin={false} />
+
       {documentPreview ? (
         <DocumentPreviewModal
           preview={documentPreview}
@@ -2908,6 +2965,10 @@ function WorkerTimeView({
   deviceWarning: string | null;
   setDeviceWarning: Dispatch<SetStateAction<string | null>>;
 }) {
+  // Sprache aus Worker-Profil oder Fallback de
+  const lang: SupportedLang = (auth.worker as { languageCode?: string } | undefined)?.languageCode === "en" ? "en" : "de";
+  const l = (key: string) => t(key, lang);
+
   const [status, setStatus] = useState<WorkerTimeStatus | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [viewingProjectId, setViewingProjectId] = useState<string | null>(null);
@@ -3012,7 +3073,7 @@ function WorkerTimeView({
 
   async function handleClockIn() {
     if (!selectedProjectId) {
-      setWorkerError("Bitte zuerst ein Projekt waehlen.");
+      setWorkerError(l("worker.selectProject"));
       return;
     }
     setWorking(true);
@@ -3036,7 +3097,7 @@ function WorkerTimeView({
       if (result.deviceWarning) {
         setDeviceWarning(result.deviceWarning);
       }
-      setWorkerSuccess("Arbeit gestartet.");
+      setWorkerSuccess(l("worker.started"));
       setSelectedProjectId("");
       await loadStatus();
     } catch (err) {
@@ -3069,7 +3130,7 @@ function WorkerTimeView({
       if (result.deviceWarning) {
         setDeviceWarning(result.deviceWarning);
       }
-      setWorkerSuccess("Arbeit beendet.");
+      setWorkerSuccess(l("worker.stopped"));
       await loadStatus();
     } catch (err) {
       setWorkerError(err instanceof Error ? err.message : "Fehler beim Beenden.");
@@ -3128,7 +3189,7 @@ function WorkerTimeView({
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <SecondaryButton onClick={onLogout}>Abmelden</SecondaryButton>
+            <SecondaryButton onClick={onLogout}>{l("worker.logout")}</SecondaryButton>
           </div>
         </div>
 
@@ -3167,7 +3228,7 @@ function WorkerTimeView({
 
             {currentProjects.length > 0 ? (
               <div className="rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
-                <h2 className="mb-4 text-lg font-semibold">Arbeit beginnen</h2>
+                <h2 className="mb-4 text-lg font-semibold">{l("worker.startWork")}</h2>
                 <div className="grid gap-3">
                   {currentProjects.map((p) => (
                     <div
@@ -3614,7 +3675,7 @@ function SettingsPanel({
   error: string | null;
   success: string | null;
 }) {
-  const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "company" | "pdfconfig" | "smtp" | "backup" | "gcal" | "devices">("general");
+  const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "company" | "pdfconfig" | "smtp" | "backup" | "gcal" | "devices" | "templates" | "reminders">("general");
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [rolePermissionIds, setRolePermissionIds] = useState<string[]>([]);
@@ -3723,6 +3784,8 @@ function SettingsPanel({
     { key: "backup", label: "Backup" },
     { key: "gcal" as const, label: "Google Kalender" },
     { key: "devices" as const, label: "Kiosk-Geraete" },
+    { key: "templates" as const, label: "Vorlagen" },
+    { key: "reminders" as const, label: "Erinnerungen" },
   ];
 
   const permissionsByCategory = permissions.reduce<Record<string, PermissionItem[]>>((acc, p) => {
@@ -3746,11 +3809,11 @@ function SettingsPanel({
       <MessageBar error={panelError ?? error} success={panelSuccess ?? success} />
 
       {settingsTab === "general" ? (
-        <SectionCard title="Allgemeine Einstellungen" subtitle="Passwort, Kiosk-Code, Theme">
+        <SectionCard title="Allgemeine Einstellungen" subtitle="Passwort, Kiosk-PIN, Theme">
           <form className="grid gap-4 md:max-w-2xl" onSubmit={onSettingsSubmit}>
             <FormRow>
               <Field label="Minimale Passwortlaenge" type="number" value={String(settingsForm.passwordMinLength)} onChange={(e) => setSettingsForm((c) => ({ ...c, passwordMinLength: Number(e.target.value || 0) }))} />
-              <Field label="Kiosk-Code Laenge" type="number" value={String(settingsForm.kioskCodeLength)} onChange={(e) => setSettingsForm((c) => ({ ...c, kioskCodeLength: Number(e.target.value || 0) }))} />
+              <Field label="Kiosk-PIN Laenge" type="number" value={String(settingsForm.kioskCodeLength)} onChange={(e) => setSettingsForm((c) => ({ ...c, kioskCodeLength: Number(e.target.value || 0) }))} />
             </FormRow>
             <SelectField label="Standard Theme" value={settingsForm.defaultTheme} onChange={(e) => setSettingsForm((c) => ({ ...c, defaultTheme: e.target.value as AppSettings["defaultTheme"] }))} options={[{ value: "dark", label: "Dunkel" }, { value: "light", label: "Hell" }]} />
             <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "Einstellungen speichern"}</PrimaryButton>
@@ -3767,13 +3830,13 @@ function SettingsPanel({
               onEdit={(i) => setUserForm({ id: i.id, email: i.email, displayName: i.displayName, password: "", kioskCode: "", roleCodes: i.roles.map((r) => r.role.code), isActive: i.isActive })}
               onDelete={(i) => onDeleteUser(i.id)} />
           </SectionCard>
-          <SectionCard title={userForm.id ? "Benutzer bearbeiten" : "Benutzer anlegen"} subtitle="Login, Passwort, Kiosk-Code und Rollen.">
+          <SectionCard title={userForm.id ? "Benutzer bearbeiten" : "Benutzer anlegen"} subtitle="Login, Passwort, Kiosk-PIN und Rollen. Die Kiosk-PIN ermoeglicht eine schnelle Anmeldung am Kiosk-Terminal.">
             <form className="grid gap-4" onSubmit={onUserSubmit}>
               <Field label="Anzeigename" value={userForm.displayName} onChange={(e) => setUserForm((c) => ({ ...c, displayName: e.target.value }))} />
               <Field label="E-Mail" value={userForm.email} onChange={(e) => setUserForm((c) => ({ ...c, email: e.target.value }))} />
               <FormRow>
                 <Field label="Passwort" type="password" autoComplete="new-password" value={userForm.password} onChange={(e) => setUserForm((c) => ({ ...c, password: e.target.value }))} />
-                <Field label="Sicherheitscode (intern)" type="password" autoComplete="new-password" value={userForm.kioskCode} onChange={(e) => setUserForm((c) => ({ ...c, kioskCode: e.target.value }))} />
+                <Field label="Kiosk-PIN (fuer Kiosk-Anmeldung)" type="password" autoComplete="new-password" value={userForm.kioskCode} onChange={(e) => setUserForm((c) => ({ ...c, kioskCode: e.target.value }))} />
               </FormRow>
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Rollen</label>
@@ -3886,6 +3949,231 @@ function SettingsPanel({
       {settingsTab === "devices" ? (
         <KioskDeviceSettings apiFetch={apiFetch} workers={workers} users={users} setPanelSuccess={setPanelSuccess} setPanelError={setPanelError} />
       ) : null}
+
+      {settingsTab === "templates" ? (
+        <ChecklistTemplateSettings apiFetch={apiFetch} setPanelSuccess={setPanelSuccess} setPanelError={setPanelError} />
+      ) : null}
+
+      {settingsTab === "reminders" ? (
+        <ReminderSettings apiFetch={apiFetch} setPanelSuccess={setPanelSuccess} setPanelError={setPanelError} />
+      ) : null}
+    </div>
+  );
+}
+
+function ChecklistTemplateSettings({ apiFetch, setPanelSuccess, setPanelError }: {
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  setPanelSuccess: Dispatch<SetStateAction<string | null>>;
+  setPanelError: Dispatch<SetStateAction<string | null>>;
+}) {
+  const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
+  const [newName, setNewName] = useState("");
+  const [newItemTitle, setNewItemTitle] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [editTpl, setEditTpl] = useState<string | null>(null);
+  const [editTplForm, setEditTplForm] = useState({ name: "", description: "" });
+  const [editTplItem, setEditTplItem] = useState<string | null>(null);
+  const [editTplItemForm, setEditTplItemForm] = useState({ title: "", description: "", sortOrder: 0 });
+
+  const load = useCallback(async () => {
+    const data = await apiFetch<ChecklistTemplate[]>("/checklists/templates").catch(() => []);
+    setTemplates(data);
+    setLoading(false);
+  }, [apiFetch]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function createTemplate() {
+    if (!newName.trim()) return;
+    setPanelError(null);
+    try {
+      await apiFetch("/checklists/templates", { method: "POST", body: JSON.stringify({ name: newName.trim() }) });
+      setNewName("");
+      setPanelSuccess("Vorlage erstellt.");
+      await load();
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+  }
+
+  async function saveTpl(id: string) {
+    await apiFetch(`/checklists/templates/${id}`, { method: "PATCH", body: JSON.stringify(editTplForm) }).catch(() => {});
+    setEditTpl(null);
+    setPanelSuccess("Vorlage aktualisiert.");
+    await load();
+  }
+
+  async function saveTplItem(id: string) {
+    await apiFetch(`/checklists/templates/items/${id}`, { method: "PATCH", body: JSON.stringify(editTplItemForm) }).catch(() => {});
+    setEditTplItem(null);
+    await load();
+  }
+
+  async function removeTemplate(id: string) {
+    if (!window.confirm("Vorlage wirklich loeschen?")) return;
+    await apiFetch(`/checklists/templates/${id}`, { method: "DELETE" }).catch(() => {});
+    setPanelSuccess("Vorlage geloescht.");
+    await load();
+  }
+
+  async function addItem(templateId: string) {
+    const title = (newItemTitle[templateId] ?? "").trim();
+    if (!title) return;
+    await apiFetch(`/checklists/templates/${templateId}/items`, { method: "POST", body: JSON.stringify({ title }) }).catch(() => {});
+    setNewItemTitle((c) => ({ ...c, [templateId]: "" }));
+    await load();
+  }
+
+  async function removeItem(id: string) {
+    await apiFetch(`/checklists/templates/items/${id}`, { method: "DELETE" }).catch(() => {});
+    await load();
+  }
+
+  if (loading) return <SectionCard title="Checklisten-Vorlagen"><p className="text-sm text-slate-500">Laden...</p></SectionCard>;
+
+  return (
+    <div className="grid gap-6">
+      <SectionCard title="Checklisten-Vorlagen" subtitle="Wiederverwendbare Checklisten fuer Projekte. Dokument- und PDF-Vorlagen werden ueber die globale PDF-Konfiguration (Tab PDF) gepflegt.">
+        {templates.length === 0 ? (
+          <p className="text-sm text-slate-500">Keine Vorlagen vorhanden.</p>
+        ) : (
+          <div className="grid gap-4">
+            {templates.map((t) => (
+              <div key={t.id} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+                <div className="mb-2 flex items-center justify-between">
+                  {editTpl === t.id ? (
+                    <div className="flex flex-1 gap-2">
+                      <input type="text" value={editTplForm.name} onChange={(e) => setEditTplForm((c) => ({ ...c, name: e.target.value }))}
+                        className="flex-1 rounded border border-black/10 px-2 py-0.5 text-sm dark:border-white/10 dark:bg-slate-900" />
+                      <input type="text" placeholder="Beschreibung" value={editTplForm.description} onChange={(e) => setEditTplForm((c) => ({ ...c, description: e.target.value }))}
+                        className="flex-1 rounded border border-black/10 px-2 py-0.5 text-xs dark:border-white/10 dark:bg-slate-900" />
+                      <button type="button" onClick={() => void saveTpl(t.id)} className="text-xs text-emerald-600 hover:underline">OK</button>
+                      <button type="button" onClick={() => setEditTpl(null)} className="text-xs text-slate-400 hover:underline">Abbrechen</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <span className="font-semibold">{t.name}</span>
+                        {t.description ? <span className="ml-2 text-xs text-slate-500">{t.description}</span> : null}
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => { setEditTpl(t.id); setEditTplForm({ name: t.name, description: t.description ?? "" }); }} className="text-xs text-blue-500 hover:underline">Bearbeiten</button>
+                        <button type="button" onClick={() => void removeTemplate(t.id)} className="text-xs text-red-500 hover:underline">Loeschen</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="grid gap-1">
+                  {t.items.map((item, idx) => (
+                    <div key={item.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-2 py-1 text-sm dark:bg-slate-800">
+                      {editTplItem === item.id ? (
+                        <div className="flex flex-1 gap-2">
+                          <input type="text" value={editTplItemForm.title} onChange={(e) => setEditTplItemForm((c) => ({ ...c, title: e.target.value }))}
+                            className="flex-1 rounded border border-black/10 px-1 py-0.5 text-sm dark:border-white/10 dark:bg-slate-900" />
+                          <input type="number" value={editTplItemForm.sortOrder} onChange={(e) => setEditTplItemForm((c) => ({ ...c, sortOrder: Number(e.target.value) }))}
+                            className="w-12 rounded border border-black/10 px-1 py-0.5 text-xs dark:border-white/10 dark:bg-slate-900" />
+                          <button type="button" onClick={() => void saveTplItem(item.id)} className="text-xs text-emerald-600">OK</button>
+                          <button type="button" onClick={() => setEditTplItem(null)} className="text-xs text-slate-400">X</button>
+                        </div>
+                      ) : (
+                        <>
+                          <span>{idx + 1}. {item.title}</span>
+                          <div className="flex gap-1">
+                            <button type="button" onClick={() => { setEditTplItem(item.id); setEditTplItemForm({ title: item.title, description: item.description ?? "", sortOrder: item.sortOrder }); }} className="text-xs text-blue-400">Bearbeiten</button>
+                            <button type="button" onClick={() => void removeItem(item.id)} className="text-xs text-red-400 hover:text-red-600">x</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <input type="text" placeholder="Neuer Punkt..." value={newItemTitle[t.id] ?? ""}
+                    onChange={(e) => setNewItemTitle((c) => ({ ...c, [t.id]: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter") void addItem(t.id); }}
+                    className="flex-1 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-slate-900"
+                  />
+                  <SecondaryButton onClick={() => void addItem(t.id)}>Hinzufuegen</SecondaryButton>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-4 flex gap-2">
+          <input type="text" placeholder="Neue Vorlage..." value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void createTemplate(); }}
+            className="flex-1 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-slate-900"
+          />
+          <SecondaryButton onClick={() => void createTemplate()}>Vorlage erstellen</SecondaryButton>
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+function ReminderSettings({ apiFetch, setPanelSuccess, setPanelError }: {
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  setPanelSuccess: Dispatch<SetStateAction<string | null>>;
+  setPanelError: Dispatch<SetStateAction<string | null>>;
+}) {
+  const [config, setConfig] = useState({ enabled: false, missingTime: false, openSignatures: false, openApprovals: false, projectStart: false, emailEnabled: false, intervalHours: 24 });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    void apiFetch<typeof config>("/reminders/config").then(setConfig).catch(() => {}).finally(() => setLoading(false));
+  }, [apiFetch]);
+
+  async function save() {
+    setSaving(true); setPanelError(null);
+    try {
+      const updated = await apiFetch<typeof config>("/reminders/config", { method: "PUT", body: JSON.stringify(config) });
+      setConfig(updated);
+      setPanelSuccess("Erinnerungs-Konfiguration gespeichert.");
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+    setSaving(false);
+  }
+
+  async function runNow() {
+    setRunning(true); setPanelError(null);
+    try {
+      const result = await apiFetch<{ results: string[] }>("/reminders/run", { method: "POST" });
+      setPanelSuccess("Erinnerungen ausgefuehrt: " + result.results.join(", "));
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+    setRunning(false);
+  }
+
+  const toggle = (key: keyof typeof config) => setConfig((c) => ({ ...c, [key]: !c[key] }));
+
+  if (loading) return <SectionCard title="Erinnerungen"><p className="text-sm text-slate-500">Laden...</p></SectionCard>;
+
+  return (
+    <div className="grid gap-6">
+      <SectionCard title="Automatische Erinnerungen" subtitle="E-Mail- und In-App-Erinnerungen fuer offene Vorgaenge.">
+        <div className="grid gap-3 md:max-w-2xl">
+          <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={config.enabled} onChange={() => toggle("enabled")} /> Erinnerungen aktiviert</label>
+          <div className="ml-6 grid gap-2">
+            <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={config.missingTime} onChange={() => toggle("missingTime")} disabled={!config.enabled} /> Fehlende Zeiten</label>
+            <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={config.openSignatures} onChange={() => toggle("openSignatures")} disabled={!config.enabled} /> Offene Signaturen</label>
+            <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={config.openApprovals} onChange={() => toggle("openApprovals")} disabled={!config.enabled} /> Offene Freigaben</label>
+            <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={config.projectStart} onChange={() => toggle("projectStart")} disabled={!config.enabled} /> Projektstart-Erinnerung</label>
+          </div>
+          <div className="mt-2 border-t border-black/10 pt-3 dark:border-white/10">
+            <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={config.emailEnabled} onChange={() => toggle("emailEnabled")} disabled={!config.enabled} /> E-Mail-Versand aktiv (ueber SMTP)</label>
+            <p className="ml-6 mt-1 text-xs text-slate-500">SMS und Push werden vorbereitet und sind in einer spaeteren Version verfuegbar.</p>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button type="button" disabled={saving} onClick={() => void save()}
+              className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">
+              {saving ? "Speichert..." : "Konfiguration speichern"}
+            </button>
+            <button type="button" onClick={() => void runNow()} disabled={running || !config.enabled}
+              className="rounded-xl border border-black/10 px-4 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:hover:bg-slate-800">
+              {running ? "Laeuft..." : "Jetzt ausfuehren"}
+            </button>
+          </div>
+        </div>
+      </SectionCard>
     </div>
   );
 }
@@ -4661,6 +4949,108 @@ function ReportsSection({
         </div>
         <TimesheetList timesheets={filteredTimesheets} apiFetch={apiFetch} title={`${filteredTimesheets.length} Stundenzettel`} />
       </SectionCard>
+    </div>
+  );
+}
+
+function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, init?: RequestInit) => Promise<T> }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [unread, setUnread] = useState(0);
+
+  const loadCount = useCallback(async () => {
+    const data = await apiFetch<{ count: number }>("/notifications/unread-count").catch(() => ({ count: 0 }));
+    setUnread(data.count);
+  }, [apiFetch]);
+
+  useEffect(() => {
+    void loadCount();
+    const interval = setInterval(() => void loadCount(), 60000);
+    return () => clearInterval(interval);
+  }, [loadCount]);
+
+  async function openPanel() {
+    const data = await apiFetch<NotificationItem[]>("/notifications").catch(() => []);
+    setItems(data);
+    setOpen(true);
+  }
+
+  async function markRead(id: string) {
+    await apiFetch(`/notifications/${id}/read`, { method: "POST" }).catch(() => {});
+    setItems((c) => c.map((n) => n.id === id ? { ...n, read: true } : n));
+    setUnread((c) => Math.max(0, c - 1));
+  }
+
+  async function markAllRead() {
+    await apiFetch("/notifications/read-all", { method: "POST" }).catch(() => {});
+    setItems((c) => c.map((n) => ({ ...n, read: true })));
+    setUnread(0);
+  }
+
+  const typeIcon = (type: string) => {
+    switch (type) {
+      case "ASSIGNMENT": return "Zuordnung";
+      case "SIGNATURE": return "Signatur";
+      case "APPROVAL": return "Freigabe";
+      case "MISSING_TIME": return "Fehlzeit";
+      default: return "Info";
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => open ? setOpen(false) : void openPanel()}
+        className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-black/10 transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
+        title="Benachrichtigungen">
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        {unread > 0 ? (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{unread > 99 ? "99+" : unread}</span>
+        ) : null}
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-full z-50 mt-2 w-80 max-h-96 overflow-auto rounded-2xl border border-black/10 bg-white shadow-xl dark:border-white/10 dark:bg-slate-900">
+          <div className="flex items-center justify-between border-b border-black/10 px-4 py-3 dark:border-white/10">
+            <span className="text-sm font-semibold">Benachrichtigungen</span>
+            {items.some((n) => !n.read) ? (
+              <button type="button" onClick={() => void markAllRead()} className="text-xs text-blue-600 hover:underline dark:text-blue-400">Alle gelesen</button>
+            ) : null}
+          </div>
+          {items.length === 0 ? (
+            <div className="px-4 py-6 text-center text-sm text-slate-400">Keine Benachrichtigungen.</div>
+          ) : (
+            <div className="divide-y divide-black/5 dark:divide-white/5">
+              {items.map((n) => (
+                <button key={n.id} type="button" onClick={() => {
+                  if (!n.read) void markRead(n.id);
+                  if (n.linkType && n.linkId) {
+                    const path = n.linkType === "PROJECT" && n.linkId ? `/projects/${n.linkId}` : null;
+                    if (path) { setOpen(false); router.push(path); }
+                  }
+                }}
+                  className={cx("w-full px-4 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800", !n.read ? "bg-blue-50/50 dark:bg-blue-500/5" : "")}>
+                  <div className="flex items-start gap-2">
+                    <span className={cx("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase",
+                      n.type === "ASSIGNMENT" ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400" :
+                      n.type === "SIGNATURE" ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400" :
+                      n.type === "APPROVAL" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" :
+                      "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                    )}>{typeIcon(n.type)}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{n.title}</div>
+                      {n.body ? <div className="mt-0.5 text-xs text-slate-500">{n.body}</div> : null}
+                      <div className="mt-1 text-[10px] text-slate-400">{new Date(n.createdAt).toLocaleString("de-DE")}</div>
+                    </div>
+                    {!n.read ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-blue-500" /> : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -5564,6 +5954,32 @@ function ProjectDetailCard({
       {/* ── Stundenzettel ──────────────────────────────── */}
       <TimesheetList timesheets={timesheets} apiFetch={apiFetch} />
 
+      {/* ── Checklisten ────────────────────────────────── */}
+      <ProjectChecklistSection projectId={project.id} apiFetch={apiFetch} isAdmin={true} />
+
+      {/* ── Abrechnungsfreigabe ────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <div className="flex items-center justify-between">
+          <h4 className="text-base font-semibold">Abrechnungsfreigabe</h4>
+          {project.billingReady ? (
+            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
+              Abrechnungsbereit{project.billingReadyAt ? ` seit ${new Date(project.billingReadyAt).toLocaleDateString("de-DE")}` : ""}
+            </span>
+          ) : (
+            <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">Nicht freigegeben</span>
+          )}
+        </div>
+        {project.billingReadyComment ? <p className="mt-1 text-xs text-slate-500">{project.billingReadyComment}</p> : null}
+        <div className="mt-2">
+          <button type="button" onClick={() => void apiFetch(`/projects/${project.id}/billing-ready`, { method: "POST", body: JSON.stringify({ ready: !project.billingReady }) })}
+            className={cx("rounded-lg px-3 py-1.5 text-xs font-medium transition",
+              project.billingReady ? "border border-red-300 text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400" : "bg-emerald-600 text-white hover:bg-emerald-500"
+            )}>
+            {project.billingReady ? "Freigabe zuruecknehmen" : "Abrechnungsbereit markieren"}
+          </button>
+        </div>
+      </div>
+
       {/* ── Dokumente ───────────────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <DocumentPanel
@@ -5576,8 +5992,218 @@ function ProjectDetailCard({
           setDocumentForm={setDocumentForm}
           authToken={authToken}
           onUpload={onUpload}
+          onApproveDocument={(docId) => void apiFetch(`/documents/${docId}/approve`, { method: "POST", body: JSON.stringify({}) })}
+          onRejectDocument={(docId) => void apiFetch(`/documents/${docId}/reject`, { method: "POST", body: JSON.stringify({}) })}
         />
       </div>
+    </div>
+  );
+}
+
+function ProjectChecklistSection({ projectId, apiFetch, isAdmin, workerName }: {
+  projectId: string;
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  isAdmin: boolean;
+  workerName?: string;
+}) {
+  const [checklists, setChecklists] = useState<Checklist[]>([]);
+  const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
+  const [newChecklistName, setNewChecklistName] = useState("");
+  const [newItemTitle, setNewItemTitle] = useState<Record<string, string>>({});
+  const [msg, setMsg] = useState<string | null>(null);
+  const [editingCl, setEditingCl] = useState<string | null>(null);
+  const [editClForm, setEditClForm] = useState({ name: "", description: "" });
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editItemForm, setEditItemForm] = useState({ title: "", description: "", sortOrder: 0 });
+
+  const load = useCallback(async () => {
+    const data = await apiFetch<Checklist[]>(`/checklists/project/${projectId}`).catch(() => []);
+    setChecklists(data);
+  }, [apiFetch, projectId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      void apiFetch<ChecklistTemplate[]>("/checklists/templates").then(setTemplates).catch(() => {});
+    }
+  }, [apiFetch, isAdmin]);
+
+  async function addChecklist() {
+    if (!newChecklistName.trim()) return;
+    setMsg(null);
+    try {
+      await apiFetch(`/checklists/project/${projectId}`, { method: "POST", body: JSON.stringify({ name: newChecklistName.trim() }) });
+      setNewChecklistName("");
+      await load();
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+  }
+
+  async function removeChecklist(id: string) {
+    if (!window.confirm("Checkliste wirklich loeschen?")) return;
+    await apiFetch(`/checklists/${id}`, { method: "DELETE" }).catch(() => {});
+    await load();
+  }
+
+  async function addItem(checklistId: string) {
+    const title = (newItemTitle[checklistId] ?? "").trim();
+    if (!title) return;
+    await apiFetch(`/checklists/${checklistId}/items`, { method: "POST", body: JSON.stringify({ title }) }).catch(() => {});
+    setNewItemTitle((c) => ({ ...c, [checklistId]: "" }));
+    await load();
+  }
+
+  async function removeItem(id: string) {
+    await apiFetch(`/checklists/items/${id}`, { method: "DELETE" }).catch(() => {});
+    await load();
+  }
+
+  async function toggleItem(id: string, completed: boolean, comment?: string) {
+    await apiFetch(`/checklists/items/${id}/complete`, {
+      method: "POST",
+      body: JSON.stringify({ completed, comment }),
+    }).catch(() => {});
+    await load();
+  }
+
+  async function saveChecklist(id: string) {
+    await apiFetch(`/checklists/${id}`, { method: "PATCH", body: JSON.stringify(editClForm) }).catch((e) => setMsg(e instanceof Error ? e.message : "Fehler"));
+    setEditingCl(null);
+    await load();
+  }
+
+  async function saveItem(id: string) {
+    await apiFetch(`/checklists/items/${id}`, { method: "PATCH", body: JSON.stringify(editItemForm) }).catch((e) => setMsg(e instanceof Error ? e.message : "Fehler"));
+    setEditingItem(null);
+    await load();
+  }
+
+  async function applyTemplate(templateId: string) {
+    await apiFetch(`/checklists/templates/${templateId}/apply/${projectId}`, { method: "POST" }).catch(() => {});
+    await load();
+  }
+
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+      <div className="mb-3 flex items-center justify-between">
+        <h4 className="text-base font-semibold">Checklisten</h4>
+        {isAdmin && templates.length > 0 ? (
+          <select onChange={(e) => { if (e.target.value) void applyTemplate(e.target.value); e.target.value = ""; }}
+            className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-900">
+            <option value="">Vorlage anwenden...</option>
+            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        ) : null}
+      </div>
+      {msg ? <div className="mb-2 text-xs text-red-600">{msg}</div> : null}
+
+      {checklists.length === 0 ? (
+        <p className="text-sm text-slate-500">Keine Checklisten vorhanden.</p>
+      ) : (
+        <div className="grid gap-4">
+          {checklists.map((cl) => (
+            <div key={cl.id} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+              <div className="mb-2 flex items-center justify-between">
+                {editingCl === cl.id ? (
+                  <div className="flex flex-1 gap-2">
+                    <input type="text" value={editClForm.name} onChange={(e) => setEditClForm((c) => ({ ...c, name: e.target.value }))}
+                      className="flex-1 rounded-lg border border-black/10 bg-white px-2 py-1 text-sm dark:border-white/10 dark:bg-slate-900" />
+                    <button type="button" onClick={() => void saveChecklist(cl.id)} className="text-xs text-emerald-600 hover:underline">Speichern</button>
+                    <button type="button" onClick={() => setEditingCl(null)} className="text-xs text-slate-400 hover:underline">Abbrechen</button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-sm font-semibold">{cl.name}</span>
+                    {isAdmin ? (
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => { setEditingCl(cl.id); setEditClForm({ name: cl.name, description: cl.description ?? "" }); }} className="text-xs text-blue-500 hover:underline">Bearbeiten</button>
+                        <button type="button" onClick={() => void removeChecklist(cl.id)} className="text-xs text-red-500 hover:underline">Loeschen</button>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+              {editingCl === cl.id ? (
+                <input type="text" placeholder="Beschreibung..." value={editClForm.description} onChange={(e) => setEditClForm((c) => ({ ...c, description: e.target.value }))}
+                  className="mb-2 w-full rounded-lg border border-black/10 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-900" />
+              ) : cl.description ? <p className="mb-2 text-xs text-slate-500">{cl.description}</p> : null}
+              <div className="grid gap-1.5">
+                {cl.items.map((item) => (
+                  <div key={item.id} className={cx("flex items-start gap-2 rounded-lg px-2 py-1.5 text-sm", item.completed ? "bg-emerald-50 dark:bg-emerald-500/5" : "")}>
+                    <input type="checkbox" checked={item.completed}
+                      disabled={!isAdmin && item.completed}
+                      onChange={() => {
+                        if (!item.completed) {
+                          const comment = window.prompt("Optionaler Kommentar:");
+                          void toggleItem(item.id, true, comment ?? undefined);
+                        } else if (isAdmin) {
+                          void toggleItem(item.id, false);
+                        }
+                      }}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded disabled:opacity-50"
+                    />
+                    <div className="min-w-0 flex-1">
+                      {editingItem === item.id ? (
+                        <div className="grid gap-1">
+                          <input type="text" value={editItemForm.title} onChange={(e) => setEditItemForm((c) => ({ ...c, title: e.target.value }))}
+                            className="rounded border border-black/10 px-2 py-0.5 text-sm dark:border-white/10 dark:bg-slate-900" />
+                          <input type="text" placeholder="Beschreibung" value={editItemForm.description} onChange={(e) => setEditItemForm((c) => ({ ...c, description: e.target.value }))}
+                            className="rounded border border-black/10 px-2 py-0.5 text-xs dark:border-white/10 dark:bg-slate-900" />
+                          <div className="flex items-center gap-2">
+                            <label className="text-[10px] text-slate-500">Reihenfolge:</label>
+                            <input type="number" value={editItemForm.sortOrder} onChange={(e) => setEditItemForm((c) => ({ ...c, sortOrder: Number(e.target.value) }))}
+                              className="w-16 rounded border border-black/10 px-1 py-0.5 text-xs dark:border-white/10 dark:bg-slate-900" />
+                            <button type="button" onClick={() => void saveItem(item.id)} className="text-xs text-emerald-600 hover:underline">OK</button>
+                            <button type="button" onClick={() => setEditingItem(null)} className="text-xs text-slate-400 hover:underline">Abbrechen</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className={item.completed ? "line-through text-slate-400" : ""}>{item.title}</div>
+                          {item.description ? <div className="text-xs text-slate-400">{item.description}</div> : null}
+                          {item.completed && item.completedByName ? (
+                            <div className="text-[11px] text-emerald-600 dark:text-emerald-400">
+                              Erledigt von {item.completedByName}{item.completedAt ? ` am ${new Date(item.completedAt).toLocaleString("de-DE")}` : ""}
+                              {item.comment ? ` — ${item.comment}` : ""}
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                    {isAdmin && editingItem !== item.id ? (
+                      <div className="flex shrink-0 gap-1">
+                        <button type="button" onClick={() => { setEditingItem(item.id); setEditItemForm({ title: item.title, description: item.description ?? "", sortOrder: item.sortOrder }); }} className="text-xs text-blue-400 hover:text-blue-600">Bearbeiten</button>
+                        <button type="button" onClick={() => void removeItem(item.id)} className="text-xs text-red-400 hover:text-red-600">x</button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+              {isAdmin ? (
+                <div className="mt-2 flex gap-2">
+                  <input type="text" placeholder="Neuer Punkt..." value={newItemTitle[cl.id] ?? ""}
+                    onChange={(e) => setNewItemTitle((c) => ({ ...c, [cl.id]: e.target.value }))}
+                    onKeyDown={(e) => { if (e.key === "Enter") void addItem(cl.id); }}
+                    className="flex-1 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-slate-900"
+                  />
+                  <SecondaryButton onClick={() => void addItem(cl.id)}>Hinzufuegen</SecondaryButton>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isAdmin ? (
+        <div className="mt-3 flex gap-2">
+          <input type="text" placeholder="Neue Checkliste..." value={newChecklistName}
+            onChange={(e) => setNewChecklistName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void addChecklist(); }}
+            className="flex-1 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-slate-900"
+          />
+          <SecondaryButton onClick={() => void addChecklist()}>Checkliste anlegen</SecondaryButton>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -5983,6 +6609,9 @@ function DocumentPanel({
   onUpload,
   allowDelete = true,
   uploadLabel = "Datei / Bild hochladen",
+  onApproveDocument,
+  onRejectDocument,
+  onSubmitDocument,
 }: {
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
@@ -5995,12 +6624,16 @@ function DocumentPanel({
   onUpload: () => void;
   allowDelete?: boolean;
   uploadLabel?: string;
+  onApproveDocument?: (documentId: string) => void;
+  onRejectDocument?: (documentId: string) => void;
+  onSubmitDocument?: (documentId: string) => void;
 }) {
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
   const [thumbnailErrors, setThumbnailErrors] = useState<Record<string, string>>({});
   const [drawingDraft, setDrawingDraft] = useState<{
     title: string;
     sourceUrl?: string;
+    sourceDocumentId?: string;
     description?: string;
   } | null>(null);
 
@@ -6127,6 +6760,21 @@ function DocumentPanel({
                         Hochgeladen von: {uploaderLabel}
                       </div>
                     ) : null}
+                    {document.approvalStatus && document.approvalStatus !== "DRAFT" ? (
+                      <span className={cx("mt-0.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                        document.approvalStatus === "SUBMITTED" ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400" :
+                        document.approvalStatus === "APPROVED" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" :
+                        document.approvalStatus === "REJECTED" ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400" :
+                        document.approvalStatus === "ARCHIVED" ? "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400" :
+                        "bg-slate-100 text-slate-600"
+                      )}>
+                        {document.approvalStatus === "SUBMITTED" ? "Eingereicht" :
+                         document.approvalStatus === "APPROVED" ? "Freigegeben" :
+                         document.approvalStatus === "REJECTED" ? "Abgelehnt" :
+                         document.approvalStatus === "ARCHIVED" ? "Archiviert" :
+                         document.approvalStatus}
+                      </span>
+                    ) : null}
                     {fileError ? (
                       <div className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
                         {fileError}
@@ -6150,12 +6798,22 @@ function DocumentPanel({
                         setDrawingDraft({
                           title: `${document.title || document.originalFilename} - Anmerkung`,
                           sourceUrl: thumbnailUrls[document.id],
+                          sourceDocumentId: document.id,
                           description: `Anmerkung zu ${document.title || document.originalFilename}`,
                         })
                       }
                     >
                       Anmerken
                     </SecondaryButton>
+                  ) : null}
+                  {onSubmitDocument && (!document.approvalStatus || document.approvalStatus === "DRAFT" || document.approvalStatus === "REJECTED") ? (
+                    <SecondaryButton onClick={() => onSubmitDocument(document.id)}>Einreichen</SecondaryButton>
+                  ) : null}
+                  {onApproveDocument && document.approvalStatus === "SUBMITTED" ? (
+                    <SecondaryButton onClick={() => onApproveDocument(document.id)}>Freigeben</SecondaryButton>
+                  ) : null}
+                  {onRejectDocument && document.approvalStatus === "SUBMITTED" ? (
+                    <SecondaryButton onClick={() => onRejectDocument(document.id)}>Ablehnen</SecondaryButton>
                   ) : null}
                   {allowDelete ? (
                     <SecondaryButton onClick={() => onDeleteDocument(document.id)}>
@@ -6237,15 +6895,31 @@ function DocumentPanel({
         <DrawingEditorModal
           title={drawingDraft.title}
           sourceUrl={drawingDraft.sourceUrl}
+          sourceDocumentId={drawingDraft.sourceDocumentId}
           onClose={() => setDrawingDraft(null)}
-          onApply={(file) => {
-            setDocumentForm((current) => ({
-              ...current,
-              title: current.title || drawingDraft.title,
-              description: current.description || drawingDraft.description || "",
-              file,
-            }));
-            setDrawingDraft(null);
+          onSave={(file, mode) => {
+            if (mode === "replace" && drawingDraft.sourceDocumentId) {
+              // Original ersetzen: per fetch direkt an Backend
+              const fd = new FormData();
+              fd.append("file", file);
+              void fetch(`${API_ROOT}/api/documents/${drawingDraft.sourceDocumentId}/replace`, {
+                method: "PUT",
+                headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+                body: fd,
+              }).then(() => {
+                setDrawingDraft(null);
+                onUpload(); // Neu laden
+              });
+            } else {
+              // Als Kopie: in Formular uebernehmen
+              setDocumentForm((current) => ({
+                ...current,
+                title: current.title || drawingDraft.title,
+                description: current.description || drawingDraft.description || "",
+                file,
+              }));
+              setDrawingDraft(null);
+            }
           }}
         />
       ) : null}
@@ -6256,16 +6930,43 @@ function DocumentPanel({
 function DrawingEditorModal({
   title,
   sourceUrl,
+  sourceDocumentId,
   onClose,
-  onApply,
+  onSave,
 }: {
   title: string;
   sourceUrl?: string;
+  sourceDocumentId?: string;
   onClose: () => void;
-  onApply: (file: File) => void;
+  onSave: (file: File, mode: "copy" | "replace") => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const baseImageRef = useRef<HTMLImageElement | null>(null);
+  const [tool, setTool] = useState<"pen" | "eraser">("pen");
+  const [color, setColor] = useState("#dc2626");
+  const [lineWidth, setLineWidth] = useState(4);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const pendingFileRef = useRef<File | null>(null);
+
+  const colors = [
+    { value: "#dc2626", label: "Rot" },
+    { value: "#16a34a", label: "Gruen" },
+    { value: "#2563eb", label: "Blau" },
+    { value: "#000000", label: "Schwarz" },
+  ];
+  const widths = [
+    { value: 2, label: "Duenn" },
+    { value: 4, label: "Mittel" },
+    { value: 8, label: "Dick" },
+  ];
+
+  // Refs fuer aktuelle Tool-Einstellungen (damit der Effect nicht neu bindet)
+  const toolRef = useRef(tool);
+  const colorRef = useRef(color);
+  const lineWidthRef = useRef(lineWidth);
+  toolRef.current = tool;
+  colorRef.current = color;
+  lineWidthRef.current = lineWidth;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -6279,31 +6980,23 @@ function DrawingEditorModal({
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-
       const img = baseImageRef.current;
       if (img) {
         const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
-        const width = img.width * scale;
-        const height = img.height * scale;
-        const x = (canvas.width - width) / 2;
-        const y = (canvas.height - height) / 2;
-        ctx.drawImage(img, x, y, width, height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
       }
     };
 
-    const loadImage = async () => {
-      if (!sourceUrl) {
-        baseImageRef.current = null;
-        drawBase();
-        return;
-      }
+    if (sourceUrl) {
       const img = new window.Image();
-      img.onload = () => {
-        baseImageRef.current = img;
-        drawBase();
-      };
+      img.onload = () => { baseImageRef.current = img; drawBase(); };
       img.src = sourceUrl;
-    };
+    } else {
+      baseImageRef.current = null;
+      drawBase();
+    }
 
     const getPoint = (event: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -6313,90 +7006,199 @@ function DrawingEditorModal({
       };
     };
 
-    canvas.onpointerdown = (event) => {
+    const onDown = (event: PointerEvent) => {
       drawing = true;
-      const point = getPoint(event);
+      const p = getPoint(event);
       ctx.beginPath();
-      ctx.moveTo(point.x, point.y);
+      ctx.moveTo(p.x, p.y);
     };
-    canvas.onpointermove = (event) => {
+    const onMove = (event: PointerEvent) => {
       if (!drawing) return;
-      const point = getPoint(event);
-      ctx.lineTo(point.x, point.y);
-      ctx.strokeStyle = "#dc2626";
-      ctx.lineWidth = 4;
+      const p = getPoint(event);
+      ctx.lineTo(p.x, p.y);
+      if (toolRef.current === "eraser") {
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.strokeStyle = "rgba(0,0,0,1)";
+        ctx.lineWidth = lineWidthRef.current * 4;
+      } else {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.strokeStyle = colorRef.current;
+        ctx.lineWidth = lineWidthRef.current;
+      }
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.stroke();
     };
-    canvas.onpointerup = () => { drawing = false; };
-    canvas.onpointerleave = () => { drawing = false; };
+    const onUp = () => {
+      drawing = false;
+      ctx.globalCompositeOperation = "source-over";
+    };
 
-    void loadImage();
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointerup", onUp);
+    canvas.addEventListener("pointerleave", onUp);
 
     return () => {
-      canvas.onpointerdown = null;
-      canvas.onpointermove = null;
-      canvas.onpointerup = null;
-      canvas.onpointerleave = null;
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointermove", onMove);
+      canvas.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("pointerleave", onUp);
     };
   }, [sourceUrl]);
-
-  async function applyDrawing() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((result) => resolve(result), "image/png");
-    });
-    if (!blob) return;
-    const safeName = title.toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "zeichnung";
-    onApply(new File([blob], `${safeName}.png`, { type: "image/png" }));
-  }
 
   function clearDrawing() {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
+    ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const img = baseImageRef.current;
     if (img) {
       const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
-      const width = img.width * scale;
-      const height = img.height * scale;
-      const x = (canvas.width - width) / 2;
-      const y = (canvas.height - height) / 2;
-      ctx.drawImage(img, x, y, width, height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      ctx.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
     }
   }
 
+  async function createFile(): Promise<File | null> {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    // Fuer den Export: weissen Hintergrund unter die Zeichnung legen
+    const exportCanvas = window.document.createElement("canvas");
+    exportCanvas.width = canvas.width;
+    exportCanvas.height = canvas.height;
+    const ectx = exportCanvas.getContext("2d");
+    if (!ectx) return null;
+    ectx.fillStyle = "#ffffff";
+    ectx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    ectx.drawImage(canvas, 0, 0);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      exportCanvas.toBlob((result) => resolve(result), "image/png");
+    });
+    if (!blob) return null;
+    const safeName = title.toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "zeichnung";
+    return new File([blob], `${safeName}.png`, { type: "image/png" });
+  }
+
+  async function handleSave() {
+    const file = await createFile();
+    if (!file) return;
+    if (sourceDocumentId) {
+      // Bild-Anmerkung: Dialog zeigen
+      pendingFileRef.current = file;
+      setShowSaveDialog(true);
+    } else {
+      // Freie Zeichnung: direkt als Kopie
+      onSave(file, "copy");
+    }
+  }
+
+  function confirmSave(mode: "copy" | "replace") {
+    const file = pendingFileRef.current;
+    if (!file) return;
+    pendingFileRef.current = null;
+    setShowSaveDialog(false);
+    onSave(file, mode);
+  }
+
+  const toolBtn = (active: boolean) =>
+    cx("flex h-10 min-w-[2.5rem] items-center justify-center rounded-xl border text-sm font-medium transition",
+      active
+        ? "border-slate-900 bg-slate-900 !text-white dark:border-slate-200 dark:bg-slate-200 dark:!text-slate-950"
+        : "border-black/10 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:hover:bg-slate-700"
+    );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col gap-4 rounded-3xl bg-white p-4 shadow-2xl dark:bg-slate-900">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-semibold">{title}</h3>
-            <p className="text-sm text-slate-500">
-              Mit Maus oder Finger zeichnen. Das Ergebnis wird als PNG in den Upload uebernommen.
-            </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2">
+      <div className="flex max-h-[95vh] w-full max-w-5xl flex-col gap-3 rounded-3xl bg-white p-3 shadow-2xl dark:bg-slate-900 sm:p-4">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate text-lg font-semibold">{title}</h3>
+            <p className="text-xs text-slate-500">Mit Maus oder Finger zeichnen.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <SecondaryButton onClick={clearDrawing}>Leeren</SecondaryButton>
-            <SecondaryButton onClick={() => void applyDrawing()}>Als Datei uebernehmen</SecondaryButton>
-            <SecondaryButton onClick={onClose}>Schliessen</SecondaryButton>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" onClick={() => void handleSave()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500">Speichern</button>
+            <SecondaryButton onClick={onClose}>Abbrechen</SecondaryButton>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-black/10 bg-slate-50 p-2 dark:border-white/10 dark:bg-slate-950">
+
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-black/10 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-slate-950">
+          {/* Werkzeuge */}
+          <button type="button" onClick={() => setTool("pen")} className={toolBtn(tool === "pen")} title="Stift">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+          </button>
+          <button type="button" onClick={() => setTool("eraser")} className={toolBtn(tool === "eraser")} title="Radierer">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          </button>
+
+          <div className="mx-1 h-6 w-px bg-black/10 dark:bg-white/10" />
+
+          {/* Farben */}
+          {colors.map((c) => (
+            <button key={c.value} type="button" onClick={() => { setColor(c.value); setTool("pen"); }} title={c.label}
+              className={cx("h-8 w-8 rounded-full border-2 transition", color === c.value && tool === "pen" ? "border-slate-900 ring-2 ring-slate-900/30 dark:border-white dark:ring-white/30" : "border-black/20 dark:border-white/20")}
+              style={{ backgroundColor: c.value }}
+            />
+          ))}
+
+          <div className="mx-1 h-6 w-px bg-black/10 dark:bg-white/10" />
+
+          {/* Strichstaerke */}
+          {widths.map((w) => (
+            <button key={w.value} type="button" onClick={() => setLineWidth(w.value)} title={w.label}
+              className={toolBtn(lineWidth === w.value)}>
+              <span className="rounded-full bg-current" style={{ width: w.value * 2, height: w.value * 2 }} />
+            </button>
+          ))}
+
+          <div className="mx-1 h-6 w-px bg-black/10 dark:bg-white/10" />
+
+          <button type="button" onClick={clearDrawing} className={toolBtn(false)} title="Zuruecksetzen">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          </button>
+        </div>
+
+        {/* Canvas */}
+        <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-black/10 bg-slate-50 p-1 dark:border-white/10 dark:bg-slate-950">
           <canvas
             ref={canvasRef}
             width={1200}
             height={800}
-            className="mx-auto max-h-[72vh] w-full rounded-xl bg-white"
+            className="mx-auto max-h-[65vh] w-full rounded-xl bg-white"
             style={{ touchAction: "none" }}
           />
         </div>
       </div>
+
+      {/* Speicherdialog bei Bild-Anmerkung */}
+      {showSaveDialog ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+            <h3 className="mb-2 text-lg font-semibold">Anmerkung speichern</h3>
+            <p className="mb-5 text-sm text-slate-500">Soll das bestehende Bild mit der Anmerkung aktualisiert werden, oder soll eine Kopie angelegt werden?</p>
+            <div className="grid gap-3">
+              <button type="button" onClick={() => confirmSave("replace")}
+                className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">
+                Original aktualisieren
+              </button>
+              <button type="button" onClick={() => confirmSave("copy")}
+                className="rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:hover:bg-slate-700">
+                Als Kopie speichern
+              </button>
+              <button type="button" onClick={() => setShowSaveDialog(false)}
+                className="rounded-xl px-4 py-2 text-sm text-slate-500 transition hover:text-slate-700 dark:hover:text-slate-300">
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

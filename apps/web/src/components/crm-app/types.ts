@@ -137,6 +137,9 @@ export type Project = {
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   notes?: string | null;
+  billingReady?: boolean;
+  billingReadyAt?: string | null;
+  billingReadyComment?: string | null;
   customer?: { id: string; companyName: string };
   branch?: { id: string; name: string } | null;
   assignments?: ProjectAssignment[];
@@ -188,6 +191,8 @@ export type DocumentItem = {
   originalFilename: string;
   mimeType: string;
   createdAt: string;
+  approvalStatus?: string;
+  approvalComment?: string | null;
   links: { entityType: string; entityId: string }[];
   uploadedBy?: {
     id: string;
@@ -366,6 +371,9 @@ export type TimesheetItem = {
   worker?: { id: string; firstName: string; lastName: string; workerNumber: string };
   signatures: { signerType: string; signerName: string; signedAt: string }[];
   generatedAt?: string;
+  approvedAt?: string | null;
+  approvalComment?: string | null;
+  billedAt?: string | null;
 };
 
 export type WorkerTimeStatus = {
@@ -410,6 +418,51 @@ export type KioskDevice = {
 export type DeviceBindingConfig = {
   mode: 'off' | 'warn' | 'enforce';
   appliesTo: 'login' | 'time' | 'both';
+};
+
+export type ChecklistItem = {
+  id: string;
+  title: string;
+  description?: string | null;
+  sortOrder: number;
+  completed: boolean;
+  completedAt?: string | null;
+  completedByName?: string | null;
+  comment?: string | null;
+};
+
+export type Checklist = {
+  id: string;
+  projectId: string;
+  name: string;
+  description?: string | null;
+  sortOrder: number;
+  items: ChecklistItem[];
+};
+
+export type ChecklistTemplateItem = {
+  id: string;
+  title: string;
+  description?: string | null;
+  sortOrder: number;
+};
+
+export type ChecklistTemplate = {
+  id: string;
+  name: string;
+  description?: string | null;
+  items: ChecklistTemplateItem[];
+};
+
+export type NotificationItem = {
+  id: string;
+  type: string;
+  title: string;
+  body?: string | null;
+  linkType?: string | null;
+  linkId?: string | null;
+  read: boolean;
+  createdAt: string;
 };
 
 export const API_ROOT = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");

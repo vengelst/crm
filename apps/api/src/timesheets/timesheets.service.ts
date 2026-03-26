@@ -5,15 +5,20 @@ import {
 } from '@nestjs/common';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { GenerateTimesheetDto } from './dto/generate-timesheet.dto';
 import { SendTimesheetEmailDto } from './dto/send-timesheet-email.dto';
 import { SignTimesheetDto } from './dto/sign-timesheet.dto';
 import { SignerType, WeeklyTimesheetStatus } from '@prisma/client';
 import { createTransport } from 'nodemailer';
+import { t, type SupportedLang } from '../i18n';
 
 @Injectable()
 export class TimesheetsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   list(workerId?: string, projectId?: string) {
     return this.prisma.weeklyTimesheet.findMany({
@@ -170,10 +175,12 @@ export class TimesheetsService {
         },
       });
 
-      // Gesperrter Zettel darf nicht neu generiert werden
+      // Gesperrter/freigegebener/abgerechneter Zettel darf nicht neu generiert werden
       if (
         existing &&
         (existing.status === WeeklyTimesheetStatus.COMPLETED ||
+          existing.status === WeeklyTimesheetStatus.APPROVED ||
+          existing.status === WeeklyTimesheetStatus.BILLED ||
           existing.status === WeeklyTimesheetStatus.LOCKED)
       ) {
         throw new BadRequestException(
@@ -262,8 +269,15 @@ export class TimesheetsService {
     );
   }
 
-  async renderPdf(id: string) {
+  async renderPdf(id: string, lang?: SupportedLang) {
     const sheet = await this.getById(id);
+    // Sprache: aus Worker-Profil oder Parameter
+    const workerLang =
+      lang ??
+      ((sheet.worker as { languageCode?: string }).languageCode === 'en'
+        ? 'en'
+        : 'de');
+    const l = (key: string) => t(key, workerLang);
 
     // Lade Firmen- und PDF-Einstellungen
     const companyRows = await this.prisma.setting.findMany({
@@ -375,7 +389,7 @@ export class TimesheetsService {
     }
 
     // ── Titel ──────────────────────────────────────
-    text('Wochen-Stundenzettel', margin, 16, boldFont);
+    text(l('pdf.weeklyTimesheet'), margin, 16, boldFont);
     y -= 8;
     text(`KW ${sheet.weekNumber} / ${sheet.weekYear}`, margin + 250, 12);
     y -= 26;
@@ -384,8 +398,8 @@ export class TimesheetsService {
 
     // ── Firma ──────────────────────────────────────
     if (company.name) {
-      text('Auftraggeber', margin, 9, boldFont);
-      text('Kunde', pageWidth / 2, 9, boldFont);
+      text(l('pdf.client'), margin, 9, boldFont);
+      text(l('pdf.customer'), pageWidth / 2, 9, boldFont);
       y -= 14;
       text(company.name, margin, 10);
       text(
@@ -416,8 +430,8 @@ export class TimesheetsService {
     }
 
     // ── Projekt / Monteur ──────────────────────────
-    text('Projekt', margin, 9, boldFont);
-    text('Monteur', pageWidth / 2, 9, boldFont);
+    text(l('pdf.project'), margin, 9, boldFont);
+    text(l('pdf.worker'), pageWidth / 2, 9, boldFont);
     y -= 14;
     text(`${sheet.project.projectNumber} - ${sheet.project.title}`, margin, 10);
     text(
@@ -448,7 +462,7 @@ export class TimesheetsService {
 
     // Tabellenkopf
     const cols = [margin, 120, 190, 260, 340, 420];
-    const headers = ['Datum', 'Beginn', 'Ende', 'Brutto', 'Pause', 'Netto'];
+    const headers = [l('pdf.date'), l('pdf.start'), l('pdf.end'), l('pdf.total'), l('pdf.break'), l('pdf.net')];
     for (let i = 0; i < headers.length; i++) {
       text(headers[i], cols[i], 9, boldFont);
     }
@@ -490,7 +504,7 @@ export class TimesheetsService {
     // ── Signaturen ─────────────────────────────────
     hLine();
     y -= 16;
-    text('Unterschriften', margin, 12, boldFont);
+    text(l('pdf.workerSignature').split(' ')[0] + ' / ' + l('pdf.customerSignature').split(' ')[0], margin, 12, boldFont);
     y -= 18;
 
     const workerSig = sheet.signatures.find((s) => s.signerType === 'WORKER');
@@ -498,8 +512,8 @@ export class TimesheetsService {
       (s) => s.signerType === 'CUSTOMER',
     );
 
-    text('Monteur:', margin, 9, boldFont);
-    text('Kunde:', pageWidth / 2, 9, boldFont);
+    text(l('pdf.worker') + ':', margin, 9, boldFont);
+    text(l('pdf.customer') + ':', pageWidth / 2, 9, boldFont);
     y -= 14;
 
     if (workerSig) {
@@ -644,9 +658,11 @@ export class TimesheetsService {
   ) {
     const sheet = await this.getById(id);
 
-    // Gesperrter Zettel darf nicht mehr signiert werden
+    // Gesperrter/freigegebener/abgerechneter Zettel darf nicht mehr signiert werden
     if (
       sheet.status === WeeklyTimesheetStatus.COMPLETED ||
+      sheet.status === WeeklyTimesheetStatus.APPROVED ||
+      sheet.status === WeeklyTimesheetStatus.BILLED ||
       sheet.status === WeeklyTimesheetStatus.LOCKED
     ) {
       throw new BadRequestException(
@@ -681,7 +697,7 @@ export class TimesheetsService {
         ? WeeklyTimesheetStatus.COMPLETED
         : nextStatus;
 
-    return this.prisma.weeklyTimesheet.update({
+    const result = await this.prisma.weeklyTimesheet.update({
       where: { id },
       data: {
         status: finalStatus,
@@ -692,7 +708,78 @@ export class TimesheetsService {
       include: {
         days: true,
         signatures: true,
+        project: { select: { projectNumber: true } },
       },
+    });
+
+    void this.notifications.onTimesheetSigned(
+      sheet.projectId,
+      signerType,
+      dto.signerName,
+      result.project.projectNumber,
+      `KW${sheet.weekNumber}/${sheet.weekYear}`,
+    );
+
+    return result;
+  }
+
+  async approve(
+    id: string,
+    data: { comment?: string; userId: string },
+  ) {
+    const sheet = await this.getById(id);
+    if (
+      sheet.status !== WeeklyTimesheetStatus.COMPLETED &&
+      sheet.status !== WeeklyTimesheetStatus.CUSTOMER_SIGNED
+    ) {
+      throw new BadRequestException(
+        'Stundenzettel muss mindestens den Status CUSTOMER_SIGNED oder COMPLETED haben.',
+      );
+    }
+
+    const result = await this.prisma.weeklyTimesheet.update({
+      where: { id },
+      data: {
+        status: WeeklyTimesheetStatus.APPROVED,
+        approvedAt: new Date(),
+        approvedByUserId: data.userId,
+        approvalComment: data.comment,
+        lockedAt: sheet.lockedAt ?? new Date(),
+      },
+      include: {
+        days: true,
+        signatures: true,
+        project: { select: { projectNumber: true } },
+      },
+    });
+
+    void this.notifications.onTimesheetApproved(
+      sheet.projectId,
+      result.project.projectNumber,
+      `KW${sheet.weekNumber}/${sheet.weekYear}`,
+      sheet.workerId,
+    );
+
+    return result;
+  }
+
+  async markBilled(id: string, userId: string) {
+    const sheet = await this.getById(id);
+    if (sheet.status !== WeeklyTimesheetStatus.APPROVED) {
+      throw new BadRequestException(
+        'Stundenzettel muss zuerst freigegeben (APPROVED) sein, bevor er als abgerechnet markiert werden kann.',
+      );
+    }
+
+    return this.prisma.weeklyTimesheet.update({
+      where: { id },
+      data: {
+        status: WeeklyTimesheetStatus.BILLED,
+        billedAt: new Date(),
+        billedByUserId: userId,
+        lockedAt: sheet.lockedAt ?? new Date(),
+      },
+      include: { days: true, signatures: true },
     });
   }
 }

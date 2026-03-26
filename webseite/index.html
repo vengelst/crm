@@ -1,149 +1,465 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Viva Home GmbH</title>
-  <meta name="description" content="Viva Home GmbH – Leistungen, Kontakt sowie rechtlich saubere Verlinkung zu Impressum und Datenschutz." />
-  <style>
-    :root {
-      --bg: #0f172a;
-      --panel: #111827;
-      --text: #e5e7eb;
-      --muted: #94a3b8;
-      --line: #334155;
-      --accent: #38bdf8;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
-      color: var(--text);
-      line-height: 1.6;
-    }
-    header, main, footer {
-      width: min(1100px, calc(100% - 32px));
-      margin: 0 auto;
-    }
-    header { padding: 48px 0 24px; }
-    .hero {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 32px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-    }
-    h1, h2 { margin-top: 0; }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    .grid {
-      display: grid;
-      gap: 24px;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      margin: 28px 0;
-    }
-    .card {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 24px;
-    }
-    form { display: grid; gap: 14px; }
-    label { display: grid; gap: 6px; font-weight: bold; }
-    input, textarea {
-      width: 100%;
-      padding: 12px 14px;
-      border-radius: 10px;
-      border: 1px solid var(--line);
-      background: #0b1220;
-      color: var(--text);
-      font: inherit;
-    }
-    textarea { min-height: 140px; resize: vertical; }
-    button {
-      width: fit-content;
-      padding: 12px 18px;
-      border: 0;
-      border-radius: 10px;
-      background: var(--accent);
-      color: #001018;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    .form-privacy-note, .muted { color: var(--muted); font-size: 0.95rem; }
-    footer { padding: 28px 0 44px; color: var(--muted); }
-    .footer-links {
-      display: flex;
-      gap: 18px;
-      flex-wrap: wrap;
-      margin-top: 8px;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Viva Home GmbH – Ihr Montagepartner für Sicherheit und Technologie</title>
+<meta name="description" content="Viva Home GmbH bietet professionelle Installation von Videoüberwachungsanlagen, Einbruchmeldeanlagen, Brandmeldeanlagen und Netzwerken in ganz Deutschland.">
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="network.js" defer></script>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
-    <div class="hero">
-      <h1>Viva Home GmbH</h1>
-      <p>Beispiel-Startseite mit rechtskonformer Grundstruktur: klare Anbieterkennzeichnung, eigene Seiten für Impressum und Datenschutz sowie ein datenschutzsauber formulierter Kontaktbereich.</p>
-      <p class="muted">Hinweis: Diese Datei ist als Vorlage gedacht. Inhalte, Kontaktdaten und Technik bitte vor Liveschaltung mit deiner echten Website abgleichen.</p>
+
+<!-- ── NAVIGATION ── -->
+<nav id="navbar">
+  <a href="#hero" class="nav-logo">Viva <span>Home</span> GmbH</a>
+  <ul class="nav-links">
+    <li><a href="#leistungen">Leistungen</a></li>
+    <li><a href="#ueber-uns">Über uns</a></li>
+    <li><a href="#galerie">Referenzen</a></li>
+    <li><a href="#kontakt">Kontakt</a></li>
+    <li><a href="/datenschutz.html">Datenschutz</a></li>
+    <!-- <li><a href="#impressum">Impressum</a></li>  -->
+    <li><a href="/impressum.html">Impressum</a></li>
+    <li><a href="#kontakt" class="nav-cta">Anfrage stellen</a></li>
+  </ul>
+  <div class="hamburger" onclick="toggleMenu()">
+    <span></span><span></span><span></span>
+  </div>
+</nav>
+
+<!-- ── HERO ── -->
+<section id="hero">
+  <canvas id="particle-canvas"></canvas>
+  <div class="hero-content">
+    <p class="hero-label">Viva Home GmbH</p>
+    <h1 class="hero-title">Ihr Montagepartner für<br>Sicherheit &amp; Technologie</h1>
+    <p class="hero-sub">Professionelle Elektriker-Teams für CCTV, Netzwerke,<br>Einbruchmeldetechnik und Brandmeldeanlagen – bundesweit.</p>
+    <div class="hero-badges">
+      <span class="hero-badge">Videoüberwachung</span>
+      <span class="hero-badge">EMA · BMA</span>
+      <span class="hero-badge">Netzwerktechnik</span>
+      <span class="hero-badge">IT-Support</span>
     </div>
-  </header>
+    <a href="#kontakt" class="btn-primary">Jetzt anfragen</a>
+    <a href="#leistungen" class="btn-secondary">Leistungen ansehen</a>
+  </div>
+  <div class="scroll-hint">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M8 3v10M3 9l5 5 5-5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Scroll
+  </div>
+</section>
 
-  <main>
-    <section class="grid">
-      <article class="card">
-        <h2>Leistungen</h2>
-        <p>Hier kannst du deine Leistungen, Referenzen, Einsatzgebiete und Kontaktmöglichkeiten darstellen.</p>
-      </article>
+<!-- ── STATS ── -->
+<div class="stats-bar">
+  <div class="stat-item">
+    <div class="stat-num">160+</div>
+    <div class="stat-label">Zufriedene Kunden</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">9</div>
+    <div class="stat-label">Jahre Erfahrung</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num">500+</div>
+    <div class="stat-label">Installierte Systeme</div>
+  </div>
+</div>
 
-      <article class="card">
-        <h2>Kontakt</h2>
-        <p>E-Mail: <a href="mailto:info@vivahome.de">info@vivahome.de</a><br />
-        Telefon: <strong>BITTE EINTRAGEN</strong></p>
-      </article>
-    </section>
-
-    <section class="card">
-      <h2>Kontaktformular</h2>
-      <form action="#" method="post">
-        <label>
-          Name
-          <input type="text" name="name" autocomplete="name" />
-        </label>
-
-        <label>
-          E-Mail
-          <input type="email" name="email" autocomplete="email" />
-        </label>
-
-        <label>
-          Telefon
-          <input type="tel" name="phone" autocomplete="tel" />
-        </label>
-
-        <label>
-          Nachricht
-          <textarea name="message"></textarea>
-        </label>
-
-        <p class="form-privacy-note">
-          Ihre Angaben verwenden wir ausschließlich zur Bearbeitung Ihrer Anfrage.
-          Weitere Informationen finden Sie in unserer
-          <a href="/datenschutz.html">Datenschutzerklärung</a>.
-        </p>
-
-        <button type="submit">Nachricht senden</button>
-      </form>
-    </section>
-  </main>
-
-  <footer>
-    <div>© Viva Home GmbH</div>
-    <div class="footer-links">
-      <a href="/impressum.html">Impressum</a>
-      <a href="/datenschutz.html">Datenschutz</a>
+<!-- ── LEISTUNGEN ── -->
+<section id="leistungen">
+  <div class="leistungen-header">
+    <div>
+      <p class="section-label">Was wir tun</p>
+      <h2 class="section-title">Unsere Leistungen</h2>
+      <p class="section-intro">Erfahrene Elektriker-Zweierteams mit eigenem Fahrzeug und Werkzeug – spezialisiert auf sicherheitstechnische Gewerke. Wir arbeiten als zuverlässiger Subunternehmer nach Ihren Vorgaben.</p>
     </div>
-  </footer>
+  </div>
+  <div class="services-grid">
+
+    <div class="service-card">
+      <div class="service-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+        </svg>
+      </div>
+      <h3>IP-Videoüberwachung (CCTV)</h3>
+      <p>Planung, Installation und Inbetriebnahme professioneller IP-Kamerasysteme für Innen- und Außenbereiche. Hochauflösend, skalierbar und fernzugriffsfähig.</p>
+      <div class="service-tags">
+        <span class="service-tag">IP-Kameras</span>
+        <span class="service-tag">NVR/DVR</span>
+        <span class="service-tag">PTZ-Systeme</span>
+        <span class="service-tag">Wartung</span>
+      </div>
+    </div>
+
+    <div class="service-card">
+      <div class="service-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </div>
+      <h3>Einbruchmeldeanlagen (EMA)</h3>
+      <p>Montage und Inbetriebnahme von EMA-Systemen. Bewegungsmelder, Magnetkontakte, Glasbruchsensoren – kabelgebunden und Funk.</p>
+      <div class="service-tags">
+        <span class="service-tag">DIN VDE 0833</span>
+        <span class="service-tag">Erfahrung mit VdS-nahen Anforderungen</span>
+        <span class="service-tag">Funk & Kabel</span>
+        <span class="service-tag">Aufschaltung</span>
+      </div>
+    </div>
+
+    <div class="service-card">
+      <div class="service-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+      <h3>Brandmeldeanlagen (BMA)</h3>
+      <p>Installation und Wartung von BMA-Anlagen. Von Rauchmeldern bis zur Feuerwehraufschaltung – fachgerecht nach Kundenvorgaben und geltenden technischen Standards.</p>
+      <div class="service-tags">
+        <span class="service-tag">DIN 14675</span>
+        <span class="service-tag">Feuerwehranbindung</span>
+        <span class="service-tag">Rauchmelder</span>
+        <span class="service-tag">Instandhaltung</span>
+      </div>
+    </div>
+
+    <div class="service-card">
+      <div class="service-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+        </svg>
+      </div>
+      <h3>Netzwerktechnik &amp; LAN</h3>
+      <p>Strukturierte Verkabelung, Kabelzug, Aufbau von Teilnetzen, Glasfaserinstallation und Inbetriebnahme von Netzwerkinfrastruktur.</p>
+      <div class="service-tags">
+        <span class="service-tag">Cat6/Cat7</span>
+        <span class="service-tag">Glasfaser LWL</span>
+        <span class="service-tag">Serverinstallation</span>
+        <span class="service-tag">WLAN</span>
+      </div>
+    </div>
+
+    <div class="service-card">
+      <div class="service-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+      </div>
+      <h3>IT-Support &amp; Service</h3>
+      <p>Vor-Ort-Service für EDV-Anlagen, Computerinstallation, Einrichtung von Netzwerkkomponenten und technischer Support für Gewerbe und Industrie.</p>
+      <div class="service-tags">
+        <span class="service-tag">EDV-Aufbau</span>
+        <span class="service-tag">Vor-Ort-Service</span>
+        <span class="service-tag">Entstörung</span>
+        <span class="service-tag">IT-Infrastruktur</span>
+      </div>
+    </div>
+
+    <div class="service-card">
+      <div class="service-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <h3>Subunternehmer-Leistungen</h3>
+      <p>Wir stellen qualifizierte Zweierteams mit eigenem Fahrzeug und Werkzeug für Ihre Projekte bereit – flexibel abrufbar, kurzfristig verfügbar und DACH-weit im Einsatz.</p>
+      <div class="service-tags">
+        <span class="service-tag">Zweierteams</span>
+        <span class="service-tag">Eigenes Fahrzeug</span>
+        <span class="service-tag">NRW &amp; bundesweit</span>
+        <span class="service-tag">Kurzfristig</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ── ÜBER UNS ── -->
+<section id="ueber-uns">
+  <div class="about-image-stack">
+    <img class="about-img about-img-1"
+      src="https://n1649220.websitebuilder.online/wp-content/uploads/go-x/u/266cae87-7f52-421c-9610-1114d216a3e7/l107,t0,w1707,h1280/image-768x576.jpg"
+      alt="Viva Home GmbH – Netzwerkinstallation">
+    <img class="about-img about-img-2"
+      src="https://n1649220.websitebuilder.online/wp-content/uploads/go-x/u/5cb57c64-4a80-44ed-bfe5-b8318975a9eb/l0,t421,w1134,h851/image-768x576.jpg"
+      alt="Viva Home GmbH – Sicherheitstechnik">
+    <div class="about-badge">
+      <strong>9</strong>
+      Jahre Erfahrung
+    </div>
+  </div>
+
+  <div class="about-text">
+    <p class="section-label">Wer wir sind</p>
+    <h2 class="section-title">Innovation trifft auf Erfahrung</h2>
+    <p class="section-intro">Viva Home GmbH ist ein erfahrener Dienstleister für sicherheitstechnische Installationen. Unser Team besteht aus ausgebildeten Elektroinstallateuren und IT-Fachleuten.</p>
+    <ul>
+      <li>Professionelle Zweierteams mit eigenem Fahrzeug und Werkzeug – sofort einsetzbar</li>
+      <li>Durchführung als Nachunternehmer nach Ihren Vorgaben und Qualitätsstandards</li>
+      <li>Spezialisiert auf CCTV, EMA, BMA, Netzwerk und IT-Support</li>
+      <li>Schwerpunkt NRW – aktiv in ganz Deutschland und europäisch</li>
+      <li>Über 160 zufriedene Kunden und 500+ erfolgreich installierte Systeme</li>
+    </ul>
+    <div class="coverage-grid">
+      <div class="coverage-item"><strong>NRW</strong>Schwerpunkt</div>
+      <div class="coverage-item"><strong>DACH</strong>Bundesweit</div>
+      <div class="coverage-item"><strong>EU</strong>Europäisch</div>
+    </div>
+    <br>
+    <a href="#kontakt" class="btn-primary">Jetzt anfragen</a>
+  </div>
+</section>
+
+<!-- ── GALERIE ── -->
+<section id="galerie">
+  <p class="section-label">Unsere Arbeit</p>
+  <h2 class="section-title">Referenz-Galerie</h2>
+  <p class="section-intro" style="margin-bottom:2.5rem">Einblicke in ausgewählte Installationsprojekte – von Videoüberwachung über Netzwerktechnik bis hin zu integrierten Sicherheitssystemen.</p>
+  <div class="gallery-grid">
+    <div class="gallery-item">
+      <img src="https://n1649220.websitebuilder.online/wp-content/uploads/go-x/u/93c3192c-36a3-4290-9a2d-dc70b145f3f8/l320,t0,w1280,h1280/image-768x768.jpg"
+           alt="CCTV Installation">
+      <div class="gallery-label">Videoüberwachung · Gewerbe</div>
+    </div>
+    <div class="gallery-item">
+      <img src="https://n1649220.websitebuilder.online/wp-content/uploads/go-x/u/266cae87-7f52-421c-9610-1114d216a3e7/l107,t0,w1707,h1280/image-768x576.jpg"
+           alt="Netzwerkinstallation">
+      <div class="gallery-label">Netzwerktechnik · Strukturverkabelung</div>
+    </div>
+    <div class="gallery-item">
+      <img src="https://n1649220.websitebuilder.online/wp-content/uploads/go-x/u/5cb57c64-4a80-44ed-bfe5-b8318975a9eb/l0,t421,w1134,h851/image-768x576.jpg"
+           alt="Sicherheitstechnik">
+      <div class="gallery-label">Sicherheitstechnik · EMA/BMA</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── KONTAKT ── -->
+<section id="kontakt">
+  <div class="contact-info">
+    <p class="section-label">Sprechen Sie uns an</p>
+    <h2 class="section-title">Kontakt aufnehmen</h2>
+    <p style="color:var(--text-muted);font-size:0.9rem;line-height:1.7;margin-bottom:2.5rem">Ob Anfrage als Auftraggeber, Nachunternehmer-Anfrage oder Fachfrage – wir antworten schnell und unkompliziert.</p>
+
+    <div class="contact-detail">
+      <div class="contact-detail-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.41 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6.18 6.18l.95-.95a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.78 17z"/>
+        </svg>
+      </div>
+      <div class="contact-detail-text">
+        <div class="contact-detail-label">Telefon</div>
+        <div class="contact-detail-value"><a href="tel:+491728848478">+49 172 88 48 478</a></div>
+      </div>
+    </div>
+
+    <div class="contact-detail">
+      <div class="contact-detail-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+        </svg>
+      </div>
+      <div class="contact-detail-text">
+        <div class="contact-detail-label">E-Mail</div>
+        <div class="contact-detail-value"><a href="/cdn-cgi/l/email-protection#4f392a0f3926392e2720222a612b2a"><span class="__cf_email__" data-cfemail="45332005332c33242d2a28206b2120">[email&#160;protected]</span></a></div>
+      </div>
+    </div>
+
+    <div class="contact-detail">
+      <div class="contact-detail-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+        </svg>
+      </div>
+      <div class="contact-detail-text">
+        <div class="contact-detail-label">Adresse</div>
+        <div class="contact-detail-value">Viva Home GmbH<br>An der Ringmauer 16<br>51491 Overath, Deutschland</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="contact-form">
+    <form onsubmit="submitForm(event)">
+      <div class="form-grid">
+        <div class="form-row">
+          <label>Vorname *</label>
+          <input type="text" name="vorname" required placeholder="Max">
+        </div>
+        <div class="form-row">
+          <label>Nachname *</label>
+          <input type="text" name="nachname" required placeholder="Mustermann">
+        </div>
+      </div>
+      <div class="form-row">
+        <label>E-Mail *</label>
+        <input type="email" name="email" required placeholder="ihre@email.de">
+      </div>
+      <div class="form-row">
+        <label>Betreff</label>
+        <select name="betreff">
+          <option value="">Bitte wählen...</option>
+          <option>Monteure Videoüberwachung</option>
+          <option>Monteure Netzwerke</option>
+          <option>Monteure Alarmanlagen (EMA/BMA)</option>
+          <option>Support &amp; Service</option>
+          <option>Subunternehmer-Anfrage</option>
+          <option>Sonstiges</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Nachricht</label>
+        <textarea name="nachricht" placeholder="Beschreiben Sie Ihr Projekt oder Ihre Anfrage..."></textarea>
+      </div>
+      <div class="form-check">
+        <input type="checkbox" id="datenschutz" required>
+        <label for="datenschutz">Ich bin damit einverstanden, dass meine Daten zum Zwecke der Kontaktaufnahme gespeichert und verarbeitet werden. Die <a href="/datenschutz.html" style="color:var(--gold)">Datenschutzerklärung</a> habe ich zur Kenntnis genommen. *</label>
+      </div>
+      <button type="submit" class="btn-submit">Nachricht senden</button>
+      <p id="form-msg" style="margin-top:0.75rem;font-size:0.82rem;display:none"></p>
+    </form>
+  </div>
+</section>
+
+<!-- ── IMPRESSUM ── -->
+<section id="impressum">
+  <p class="section-label">Rechtliches</p>
+  <h2 class="section-title" style="margin-bottom:2rem">Impressum</h2>
+  <div class="impressum-grid">
+    <div class="impressum-block">
+      <h4>Unternehmen</h4>
+      <p>
+        Viva Home GmbH<br>
+        An der Ringmauer 16<br>
+        51491 Overath<br>
+        Deutschland
+      </p>
+    </div>
+    <div class="impressum-block">
+      <h4>Kontakt</h4>
+      <p>
+        Tel.: <a href="tel:+491728848478">+49 172 88 48 478</a><br>
+        E-Mail: <a href="/cdn-cgi/l/email-protection#e39586a3958a95828b8c8e86cd8786"><span class="__cf_email__" data-cfemail="b5c3d0f5c3dcc3d4dddad8d09bd1d0">[email&#160;protected]</span></a>
+      </p>
+    </div>
+    <div class="impressum-block">
+      <h4>Registrierung</h4>
+      <p>
+        Registergericht: Amtsgericht Köln<br>
+        Registernummer: HRB 95035<br>
+        USt-IdNr.: DE285199745
+      </p>
+    </div>
+    <div class="impressum-block">
+      <h4>Geschäftsführer</h4>
+      <p>
+        Volkhard Engelstädter<br><br>
+        Wir sind zur Teilnahme an einem Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle weder verpflichtet noch bereit.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="footer-brand">
+    <div class="footer-logo">Viva <span>Home</span> GmbH</div>
+    <p class="footer-tagline">Ihr professioneller Montagepartner für Sicherheit und Technologie – bundesweit im Einsatz.</p>
+  </div>
+  <div class="footer-links">
+    <h4>Navigation</h4>
+    <ul>
+      <li><a href="#leistungen">Leistungen</a></li>
+      <li><a href="#ueber-uns">Über uns</a></li>
+      <li><a href="#galerie">Referenzen</a></li>
+      <li><a href="#kontakt">Kontakt</a></li>
+      <li><a href="/impressum.html">Impressum</a></li>
+      <li><a href="/datenschutz.html">Datenschutz</a></li>
+    </ul>
+  </div>
+  <div class="footer-legal">
+    <h4>Leistungsbereiche</h4>
+    <p>
+      CCTV · IP-Videoüberwachung<br>
+      Einbruchmeldeanlagen (EMA)<br>
+      Brandmeldeanlagen (BMA)<br>
+      Netzwerktechnik · LAN · Glasfaser<br>
+      IT-Support · EDV
+    </p>
+  </div>
+</footer>
+<div class="footer-bottom">
+  <p>© 2026 Viva Home GmbH · Overath · HRB 95035 Amtsgericht Köln</p>
+  <div style="display:flex;gap:1.5rem">
+    <a href="/#impressum">Impressum</a>
+    <a href="/datenschutz.html">Datenschutz</a>
+  </div>
+</div>
+
+<!-- ── SCRIPTS ── -->
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+
+
+// ── Navbar scroll effect ──
+window.addEventListener('scroll', () => {
+  const nav = document.getElementById('navbar');
+  if (window.scrollY > 80) {
+    nav.style.padding = '0.75rem 4rem';
+  } else {
+    nav.style.padding = '1.25rem 4rem';
+  }
+});
+
+// ── Mobile menu ──
+function toggleMenu() {
+  const links = document.querySelector('.nav-links');
+  if (links.style.display === 'flex') {
+    links.style.display = 'none';
+  } else {
+    links.style.display = 'flex';
+    links.style.flexDirection = 'column';
+    links.style.position = 'absolute';
+    links.style.top = '60px';
+    links.style.left = '0';
+    links.style.right = '0';
+    links.style.background = 'rgba(0,0,0,0.97)';
+    links.style.padding = '1.5rem 2rem';
+    links.style.gap = '1.5rem';
+  }
+}
+
+// ── Contact form – mailto ──
+function submitForm(e) {
+  e.preventDefault();
+  const f = e.target;
+  const vorname   = f.querySelector('[name=vorname]').value.trim();
+  const nachname  = f.querySelector('[name=nachname]').value.trim();
+  const email     = f.querySelector('[name=email]').value.trim();
+  const betreff   = f.querySelector('[name=betreff]').value;
+  const nachricht = f.querySelector('[name=nachricht]').value.trim();
+
+  const to      = 've@vivahome.de';
+  const subject = encodeURIComponent((betreff || 'Kontaktanfrage') + ' – Viva Home GmbH');
+  const body    = encodeURIComponent(
+    'Von: ' + vorname + ' ' + nachname + '\n' +
+    'E-Mail: ' + email + '\n' +
+    'Betreff: ' + (betreff || '–') + '\n\n' +
+    'Nachricht:\n' + nachricht
+  );
+
+  window.location.href = 'mailto:' + to + '?subject=' + subject + '&body=' + body;
+
+  const msg = document.getElementById('form-msg');
+  msg.style.display = 'block';
+  msg.style.color = '#c8a96e';
+  msg.textContent = '✓ Ihr E-Mail-Programm wird geöffnet – bitte senden Sie die vorbereitete Nachricht ab.';
+  setTimeout(() => { msg.style.display = 'none'; }, 8000);
+}
+</script>
 </body>
 </html>

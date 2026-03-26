@@ -3,206 +3,471 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Datenschutzerklärung – Viva Home GmbH</title>
-  <meta name="robots" content="index,follow" />
+  <title>Datenschutz – Viva Home GmbH</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="network.js" defer></script>
   <style>
+    #particle-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      pointer-events: none;
+    }
+
     body {
-      font-family: Arial, Helvetica, sans-serif;
-      line-height: 1.7;
-      margin: 0;
-      background: #f8fafc;
-      color: #0f172a;
+      background: var(--black);
+      min-height: 100vh;
     }
-    main {
-      width: min(980px, calc(100% - 32px));
-      margin: 40px auto;
-      background: white;
-      border: 1px solid #e2e8f0;
-      border-radius: 18px;
+
+    .legal-page {
+      position: relative;
+      z-index: 10;
+      padding: 120px 16px 80px;
+    }
+
+    .legal-shell {
+      width: min(1080px, calc(100% - 32px));
+      margin: 0 auto;
+      background: transparent;
+      border: none;
+      border-radius: 0;
       padding: 32px;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      color: #ffffff;
     }
-    h1, h2, h3 { margin-top: 0; }
-    h2 { margin-top: 28px; }
-    a { color: #0369a1; }
-    .back { margin-bottom: 18px; display: inline-block; }
-    .hint {
+
+    .legal-shell h1, .legal-shell h2, .legal-shell h3, .legal-shell h4 {
+      color: #ffffff;
+      margin-top: 0;
+    }
+
+    .legal-shell h2 {
+      margin-top: 34px;
+    }
+
+    .legal-shell h3 {
+      margin-top: 24px;
+    }
+
+    .legal-shell p, .legal-shell li {
+      color: rgba(255,255,255,0.9);
+      line-height: 1.8;
+    }
+
+    .legal-shell ul {
+      padding-left: 22px;
+    }
+
+    .legal-shell a {
+      color: var(--gold-light);
+    }
+
+    .legal-back {
+      display: inline-block;
+      margin-bottom: 22px;
+      text-decoration: none;
+      color: var(--gold-light);
+    }
+
+    .legal-note, .legal-warning {
       margin-top: 28px;
-      padding: 14px 16px;
-      background: #fff7ed;
-      border: 1px solid #fdba74;
-      border-radius: 12px;
+      padding: 16px 18px;
+      border-radius: 10px;
+    }
+
+    .legal-note {
+      background: rgba(200,169,110,0.10);
+      border: 1px solid rgba(200,169,110,0.28);
+    }
+
+    .legal-warning {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+
+    .legal-shell strong {
+      color: #ffffff;
+    }
+
+    @media (max-width: 768px) {
+      .legal-page {
+        padding-top: 96px;
+      }
+      .legal-shell {
+        padding: 22px;
+      }
     }
   </style>
 </head>
 <body>
-  <main>
-    <a class="back" href="/index.html">← Zur Startseite</a>
-    <h1>Datenschutzerklärung</h1>
+  <canvas id="particle-canvas"></canvas>
 
-    <h2>1. Verantwortlicher</h2>
-    <p>
-      Verantwortlich für die Datenverarbeitung auf dieser Website ist:
-    </p>
-    <p>
-      <strong>Viva Home GmbH</strong><br />
-      An derRingmauer 16<br />
-      51491 Overath<br />
-      Deutschland
-    </p>
-    <p>
-      Telefon: <strong>+49-172-8848478</strong><br />
-      E-Mail: <a href="mailto:info@vivahome.de">info@vivahome.de</a>
-    </p>
-    <p>
-      Vertreten durch den Geschäftsführer: <strong>Volker Engelstäder</strong>
-    </p>
-
-    <h2>2. Allgemeine Hinweise zur Datenverarbeitung</h2>
-    <p>
-      Wir verarbeiten personenbezogene Daten der Nutzer dieser Website nur, soweit dies
-      zur Bereitstellung einer funktionsfähigen Website sowie unserer Inhalte und Leistungen
-      erforderlich ist.
-    </p>
-    <p>
-      Die Verarbeitung personenbezogener Daten erfolgt regelmäßig nur auf Grundlage einer
-      gesetzlichen Erlaubnis. Soweit in dieser Datenschutzerklärung nichts anderes angegeben
-      ist, erfolgt die Verarbeitung auf Grundlage der Datenschutz-Grundverordnung (DSGVO).
-    </p>
-
-    <h2>3. Hosting und Server-Logfiles</h2>
-    <p>
-      Beim Aufruf unserer Website erfasst unser Hostinganbieter automatisch Informationen in
-      sogenannten Server-Logfiles. Dies sind insbesondere:
-    </p>
-    <ul>
-      <li>IP-Adresse des anfragenden Geräts</li>
-      <li>Datum und Uhrzeit des Zugriffs</li>
-      <li>aufgerufene Seite oder Datei</li>
-      <li>übertragene Datenmenge</li>
-      <li>Meldung über erfolgreichen Abruf</li>
-      <li>Browsertyp und Browserversion</li>
-      <li>verwendetes Betriebssystem</li>
-      <li>Referrer-URL</li>
-      <li>Hostname des zugreifenden Rechners</li>
+  <nav id="navbar">
+    <a href="index.html#hero" class="nav-logo">Viva <span>Home</span> GmbH</a>
+    <ul class="nav-links">
+      <li><a href="index.html#leistungen">Leistungen</a></li>
+      <li><a href="index.html#ueber-uns">Über uns</a></li>
+      <li><a href="index.html#galerie">Referenzen</a></li>
+      <li><a href="index.html#kontakt">Kontakt</a></li>
+      <li><a href="datenschutz.html">Datenschutz</a></li>
+      <li><a href="index.html#impressum">Impressum</a></li>
+      <li><a href="index.html#kontakt" class="nav-cta">Anfrage stellen</a></li>
     </ul>
-    <p>
-      Die Verarbeitung dieser Daten erfolgt zur Gewährleistung eines störungsfreien Betriebs
-      der Website, zur Sicherstellung der Systemsicherheit sowie zur Fehleranalyse.
-    </p>
-    <p>
-      <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. f DSGVO<br />
-      <strong>Berechtigtes Interesse:</strong> sichere, stabile und technisch fehlerfreie Bereitstellung unserer Website.
-    </p>
-    <p>
-      Sofern keine sicherheitsrelevante Aufbewahrung erforderlich ist, werden Server-Logfiles
-      nach spätestens <strong>8 Wochen</strong> gelöscht oder anonymisiert. Sofern eine weitere
-      Aufbewahrung aus Sicherheitsgründen erforderlich ist, erfolgt die Löschung nach Wegfall
-      des jeweiligen Zwecks.
-    </p>
-
-    <h2>4. Kontaktaufnahme per Kontaktformular, E-Mail oder Telefon</h2>
-    <p>
-      Wenn Sie uns per Kontaktformular, E-Mail oder telefonisch kontaktieren, verarbeiten wir
-      die von Ihnen mitgeteilten Angaben zur Bearbeitung Ihrer Anfrage und für den Fall von
-      Anschlussfragen.
-    </p>
-    <p>Dies betrifft insbesondere:</p>
-    <ul>
-      <li>Name</li>
-      <li>Firma</li>
-      <li>Telefonnummer</li>
-      <li>E-Mail-Adresse</li>
-      <li>Inhalt der Nachricht</li>
-    </ul>
-    <p>
-      <strong>Rechtsgrundlage:</strong><br />
-      – Art. 6 Abs. 1 lit. b DSGVO, soweit Ihre Anfrage auf den Abschluss oder die Durchführung
-      eines Vertrags gerichtet ist<br />
-      – Art. 6 Abs. 1 lit. f DSGVO bei sonstigen Anfragen
-    </p>
-    <p>
-      <strong>Berechtigtes Interesse:</strong> sachgerechte Bearbeitung von Anfragen, Kommunikation
-      mit Interessenten, Kunden und Geschäftspartnern.
-    </p>
-    <p>
-      Ihre Daten werden gelöscht, sobald Ihre Anfrage abschließend bearbeitet wurde und keine
-      gesetzlichen Aufbewahrungspflichten entgegenstehen. Bestehen gesetzliche Aufbewahrungspflichten,
-      erfolgt die Löschung nach Ablauf der jeweiligen Fristen.
-    </p>
-
-    <h2>5. Empfänger personenbezogener Daten</h2>
-    <p>
-      Eine Weitergabe Ihrer personenbezogenen Daten erfolgt nur, soweit dies gesetzlich erlaubt
-      ist oder Sie eingewilligt haben.
-    </p>
-    <p>Empfänger können insbesondere sein:</p>
-    <ul>
-      <li>Hosting-Dienstleister</li>
-      <li>IT-Dienstleister</li>
-      <li>E-Mail-Dienstleister</li>
-      <li>sonstige technische Dienstleister, die für den Betrieb dieser Website erforderlich sind</li>
-    </ul>
-    <p>
-      Sofern Dienstleister in unserem Auftrag tätig werden, erfolgt deren Einbindung auf Grundlage
-      eines Vertrags zur Auftragsverarbeitung gemäß Art. 28 DSGVO.
-    </p>
-
-    <h2>6. Cookies und lokale Speicherung</h2>
-    <p>
-      Unsere Website verwendet nur solche Cookies oder vergleichbare Technologien, die technisch
-      erforderlich sind, um die Website bereitzustellen und grundlegende Funktionen sicherzustellen.
-    </p>
-    <p>
-      <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. f DSGVO sowie § 25 Abs. 2 TDDDG,
-      soweit der Einsatz unbedingt erforderlich ist.
-    </p>
-    <p>
-      Sofern künftig nicht erforderliche Cookies oder vergleichbare Technologien eingesetzt werden,
-      erfolgt dies erst nach Ihrer ausdrücklichen Einwilligung über ein entsprechendes Consent-Banner.
-    </p>
-
-    <h2>7. Bereitstellungspflicht</h2>
-    <p>
-      Die Bereitstellung personenbezogener Daten ist gesetzlich nicht vorgeschrieben. Sie ist jedoch
-      erforderlich, wenn Sie uns über das Kontaktformular oder per E-Mail eine Anfrage senden möchten.
-      Ohne diese Angaben können wir Ihre Anfrage gegebenenfalls nicht oder nicht vollständig bearbeiten.
-    </p>
-
-    <h2>8. Ihre Rechte</h2>
-    <p>Sie haben nach Maßgabe der gesetzlichen Vorschriften insbesondere folgende Rechte:</p>
-    <ul>
-      <li>Recht auf Auskunft gemäß Art. 15 DSGVO</li>
-      <li>Recht auf Berichtigung gemäß Art. 16 DSGVO</li>
-      <li>Recht auf Löschung gemäß Art. 17 DSGVO</li>
-      <li>Recht auf Einschränkung der Verarbeitung gemäß Art. 18 DSGVO</li>
-      <li>Recht auf Datenübertragbarkeit gemäß Art. 20 DSGVO</li>
-      <li>Recht auf Widerspruch gemäß Art. 21 DSGVO</li>
-      <li>Recht auf Beschwerde bei einer Datenschutzaufsichtsbehörde gemäß Art. 77 DSGVO</li>
-    </ul>
-
-    <h3>Widerspruchsrecht</h3>
-    <p>
-      Soweit wir Ihre Daten auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO verarbeiten, haben Sie
-      das Recht, aus Gründen, die sich aus Ihrer besonderen Situation ergeben, jederzeit Widerspruch
-      gegen diese Verarbeitung einzulegen.
-    </p>
-
-    <h2>9. SSL- bzw. TLS-Verschlüsselung</h2>
-    <p>
-      Diese Website nutzt aus Sicherheitsgründen und zum Schutz der Übertragung vertraulicher Inhalte
-      eine SSL- bzw. TLS-Verschlüsselung.
-    </p>
-
-    <h2>10. Stand</h2>
-    <p>Stand dieser Datenschutzerklärung: <strong>26.03.2026</strong></p>
-
-    <div class="hint">
-      <strong>Wichtig:</strong> Diese Fassung passt für eine normale Firmenwebsite ohne Analyse-,
-      Marketing- oder Drittanbieter-Tools. Wenn du z. B. Google Analytics, Tag Manager, Meta Pixel,
-      YouTube, Google Maps, reCAPTCHA, externe Google Fonts, LinkedIn Insight Tag oder Chat-Widgets
-      einsetzt, muss diese Seite erweitert werden und es kann ein Consent-Banner nötig sein.
+    <div class="hamburger" onclick="toggleMenu()">
+      <span></span><span></span><span></span>
     </div>
-  </main>
+  </nav>
+
+  <section class="legal-page">
+    <div class="legal-shell">
+      <a class="legal-back" href="index.html">← Zur Startseite</a>
+
+      <h1>Datenschutzerklärung</h1>
+
+      <p>
+        Mit den nachfolgenden Hinweisen informieren wir Sie gemäß Art. 12 ff. DSGVO
+        transparent darüber, welche personenbezogenen Daten wir bei dem Besuch unserer Website,
+        bei der Kontaktaufnahme sowie im Zusammenhang mit der technischen Bereitstellung unseres
+        Online-Angebots verarbeiten.
+      </p>
+
+      <h2>1. Verantwortlicher</h2>
+      <p>
+        <strong>Viva Home GmbH</strong><br />
+        An der Ringmauer 16<br />
+        51491 Overath<br />
+        Deutschland
+      </p>
+      <p>
+        Telefon: <strong>+49 172 8848478</strong><br />
+        E-Mail: <a href="mailto:info@vivahome.de">info@vivahome.de</a><br />
+        Weitere Kontaktadresse: <a href="mailto:ve@vivahome.de">ve@vivahome.de</a>
+      </p>
+      <p>
+        Vertreten durch den Geschäftsführer: <strong>Volkhard Engelstädter</strong>
+      </p>
+
+      <div class="legal-note">
+        <strong>Hinweis zur finalen Prüfung:</strong> Bitte prüfen Sie vor Veröffentlichung noch einmal die
+        genaue Schreibweise des Geschäftsführers im Handelsregister sowie die tatsächlich verwendete
+        primäre Kontakt-E-Mail-Adresse. Diese Angaben müssen mit Impressum, Handelsregistereintrag und
+        realer Geschäftskommunikation identisch sein.
+      </div>
+
+      <h2>2. Kontaktdaten eines Datenschutzbeauftragten</h2>
+      <p>
+        Sofern für unser Unternehmen eine Pflicht zur Benennung eines Datenschutzbeauftragten besteht oder
+        freiwillig ein Datenschutzbeauftragter benannt wurde, werden dessen Kontaktdaten an dieser Stelle
+        veröffentlicht. Soweit derzeit kein Datenschutzbeauftragter benannt ist, wenden Sie sich bitte an
+        die unter Ziffer 1 genannten Kontaktdaten.
+      </p>
+
+      <h2>3. Zwecke und Rechtsgrundlagen der Verarbeitung</h2>
+      <p>
+        Wir verarbeiten personenbezogene Daten ausschließlich, soweit dies zur Bereitstellung einer
+        funktionsfähigen Website, zur Bearbeitung von Anfragen, zur Vertragsanbahnung oder Vertragsdurchführung,
+        zur IT-Sicherheit, zur Missbrauchsabwehr oder zur Erfüllung gesetzlicher Pflichten erforderlich ist.
+      </p>
+      <p>Je nach Verarbeitungsvorgang stützen wir die Verarbeitung insbesondere auf folgende Rechtsgrundlagen:</p>
+      <ul>
+        <li>Art. 6 Abs. 1 lit. a DSGVO – Einwilligung</li>
+        <li>Art. 6 Abs. 1 lit. b DSGVO – Vertragsanbahnung und Vertragserfüllung</li>
+        <li>Art. 6 Abs. 1 lit. c DSGVO – Erfüllung einer rechtlichen Verpflichtung</li>
+        <li>Art. 6 Abs. 1 lit. f DSGVO – berechtigte Interessen</li>
+        <li>§ 25 Abs. 2 TDDDG – soweit der Zugriff auf Informationen im Endgerät unbedingt erforderlich ist</li>
+      </ul>
+
+      <h2>4. Aufruf der Website / Hosting / Server-Logfiles</h2>
+      <p>
+        Bei jedem Aufruf unserer Website werden durch den Webserver und/oder den von uns eingesetzten
+        Hosting-Dienstleister technisch erforderliche Zugriffsdaten verarbeitet. Dies ist notwendig,
+        um die Website an Ihr Endgerät auszuliefern, die Stabilität und Sicherheit des Betriebs zu
+        gewährleisten sowie Angriffe oder Fehlfunktionen erkennen und abwehren zu können.
+      </p>
+      <p>Hierbei können insbesondere folgende Daten verarbeitet werden:</p>
+      <ul>
+        <li>IP-Adresse</li>
+        <li>Datum und Uhrzeit des Abrufs</li>
+        <li>aufgerufene Seite/Datei</li>
+        <li>übertragene Datenmenge</li>
+        <li>Statusmeldung des Servers</li>
+        <li>Browsertyp und Browserversion</li>
+        <li>verwendetes Betriebssystem</li>
+        <li>Referrer-URL</li>
+        <li>Hostname des zugreifenden Rechners</li>
+      </ul>
+      <p>
+        <strong>Zwecke:</strong> technische Bereitstellung des Online-Angebots, Systemsicherheit, Fehleranalyse,
+        Abwehr von Missbrauch und Angriffsversuchen, Stabilität des Betriebs.
+      </p>
+      <p>
+        <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. f DSGVO.
+      </p>
+      <p>
+        <strong>Berechtigtes Interesse:</strong> sichere, zuverlässige und wirtschaftliche Bereitstellung
+        unseres Internetauftritts.
+      </p>
+      <p>
+        Die Speicherdauer von Server-Logdaten richtet sich nach dem Erforderlichkeitsgrundsatz. Soweit keine
+        längere Aufbewahrung aus Sicherheits- oder Nachweisgründen erforderlich ist, werden Logdaten gelöscht
+        oder anonymisiert. Sofern konkrete Sicherheitsereignisse, Angriffsversuche oder Missbrauchsanzeichen
+        vorliegen, kann eine längere Speicherung für die Aufklärung und Rechtsverfolgung erforderlich sein.
+      </p>
+
+      <h2>5. Einbindung externer Bibliotheken und technischer Drittressourcen</h2>
+      <p>
+        Nach dem derzeit erkennbaren technischen Stand der Website werden beim Seitenaufruf externe JavaScript-
+        Bibliotheken von Drittanbietern eingebunden, insbesondere die Bibliothek <strong>@emailjs/browser</strong>
+        über ein CDN von <strong>jsDelivr</strong> sowie <strong>Three.js</strong> über ein CDN von
+        <strong>cdnjs / Cloudflare</strong>. Bereits beim Laden dieser externen Ressourcen kann es dazu kommen,
+        dass Ihre IP-Adresse, Browser- und Gerätedaten sowie weitere technisch erforderliche Verbindungsdaten an
+        die jeweiligen Anbieter übermittelt werden.
+      </p>
+      <p>
+        <strong>Zwecke:</strong> Bereitstellung und Ausführung der in die Website eingebundenen Skripte.
+      </p>
+      <p>
+        <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. f DSGVO, soweit die Einbindung für die technische
+        Umsetzung und Darstellung der Website erfolgt.
+      </p>
+      <p>
+        <strong>Berechtigtes Interesse:</strong> performante, wartbare und wirtschaftliche Bereitstellung der
+        eingesetzten Frontend-Funktionalitäten.
+      </p>
+      <p>
+        Sofern Anbieter ihren Sitz außerhalb der EU/des EWR haben oder eine Verarbeitung dort nicht ausgeschlossen
+        werden kann, kann eine Übermittlung personenbezogener Daten in Drittländer, insbesondere in die USA, nicht
+        ausgeschlossen werden. In solchen Fällen erfolgt eine Übermittlung nur auf Basis eines zulässigen
+        Übermittlungsmechanismus nach Art. 44 ff. DSGVO, insbesondere auf Grundlage eines Angemessenheitsbeschlusses
+        oder geeigneter Garantien wie Standardvertragsklauseln, soweit diese vom jeweiligen Anbieter eingesetzt werden.
+      </p>
+      <p>
+        <strong>Wichtiger Praxishinweis:</strong> Datenschutzrechtlich und abmahntechnisch ist es in vielen Fällen
+        sicherer, solche Bibliotheken lokal vom eigenen Server auszuliefern statt sie über externe CDNs zu laden.
+        Wenn Sie maximale Vorsicht wollen, sollten diese Dateien lokal gehostet und nicht von Drittservern
+        nachgeladen werden.
+      </p>
+
+      <h2>6. Kontaktaufnahme per E-Mail, Telefon, Post oder über das Kontaktformular</h2>
+      <p>
+        Wenn Sie uns kontaktieren, verarbeiten wir die von Ihnen mitgeteilten Daten zur Bearbeitung Ihrer Anfrage,
+        zur Kommunikation mit Ihnen sowie gegebenenfalls zur Anbahnung oder Durchführung eines Vertragsverhältnisses.
+      </p>
+      <p>Je nach Anfrage können insbesondere folgende Daten verarbeitet werden:</p>
+      <ul>
+        <li>Vorname, Nachname</li>
+        <li>Firma</li>
+        <li>E-Mail-Adresse</li>
+        <li>Telefonnummer</li>
+        <li>Anschrift</li>
+        <li>Betreff und Inhalt der Nachricht</li>
+        <li>sonstige von Ihnen freiwillig mitgeteilte Informationen</li>
+      </ul>
+      <p>
+        <strong>Rechtsgrundlagen:</strong><br />
+        – Art. 6 Abs. 1 lit. b DSGVO, soweit die Anfrage auf den Abschluss oder die Durchführung eines Vertrags
+        gerichtet ist oder vorvertragliche Maßnahmen betrifft<br />
+        – Art. 6 Abs. 1 lit. f DSGVO bei sonstigen allgemeinen Anfragen<br />
+        – Art. 6 Abs. 1 lit. c DSGVO, soweit gesetzliche Aufbewahrungs- oder Nachweispflichten bestehen
+      </p>
+      <p>
+        <strong>Berechtigtes Interesse:</strong> geordnete Kommunikation mit Interessenten, Kunden,
+        Geschäftspartnern, Bewerbern, Lieferanten und sonstigen Anfragenden.
+      </p>
+
+      <h3>6.1 Besonderheit des derzeitigen Kontaktformulars</h3>
+      <p>
+        Nach dem derzeit erkennbaren technischen Stand der Website wird das Kontaktformular nicht serverseitig
+        an uns übertragen. Stattdessen wird beim Absenden lokal auf Ihrem Endgerät ein <strong>mailto-Link</strong>
+        erzeugt, der Ihr Standard-E-Mail-Programm mit einer vorbereiteten Nachricht öffnet. Solange Sie die E-Mail
+        nicht selbst absenden, erfolgt über diese Formularfunktion nach derzeitigem Stand keine Übermittlung des
+        Nachrichteninhalts an unsere Website-Server.
+      </p>
+      <p>
+        Bitte beachten Sie jedoch, dass die Bibliothek <strong>@emailjs/browser</strong> im Quelltext eingebunden ist.
+        Soweit diese Bibliothek künftig aktiv zur Formularübermittlung genutzt wird oder bereits in anderen
+        Seitenelementen verwendet wird, muss diese Datenschutzerklärung gegebenenfalls um konkrete Angaben zum
+        eingesetzten Dienst, zu Empfängern, Übermittlungen in Drittländer, Speicherdauern und Rechtsgrundlagen
+        ergänzt werden.
+      </p>
+
+      <h2>7. Geschäftskontakte, Kunden-, Lieferanten- und Interessentendaten</h2>
+      <p>
+        Soweit personenbezogene Daten im Rahmen von Geschäftsanbahnungen, Angebotsbearbeitungen, Projektabwicklungen,
+        Dienstleistungs- oder Supportanfragen verarbeitet werden, verarbeiten wir diese Daten zur Vertragsdurchführung,
+        Projektkommunikation, Terminabstimmung, Dokumentation, Rechnungsstellung, Geltendmachung oder Abwehr von
+        Ansprüchen sowie zur Erfüllung handels- und steuerrechtlicher Pflichten.
+      </p>
+      <p>
+        <strong>Rechtsgrundlagen:</strong> Art. 6 Abs. 1 lit. b, c und f DSGVO.
+      </p>
+
+      <h2>8. Empfänger personenbezogener Daten</h2>
+      <p>
+        Eine Übermittlung personenbezogener Daten erfolgt nur, soweit dies rechtlich zulässig ist. Empfänger können
+        insbesondere sein:
+      </p>
+      <ul>
+        <li>Hosting-Dienstleister</li>
+        <li>IT- und Wartungsdienstleister</li>
+        <li>E-Mail-Provider und Telekommunikationsdienstleister</li>
+        <li>Steuerberater, Rechtsberater, Versicherer oder Banken, soweit erforderlich</li>
+        <li>öffentliche Stellen und Behörden, soweit eine gesetzliche Verpflichtung besteht</li>
+        <li>sonstige Auftragsverarbeiter im Sinne des Art. 28 DSGVO</li>
+      </ul>
+      <p>
+        Soweit externe Dienstleister in unserem Auftrag tätig werden, geschieht dies auf Grundlage eines
+        Auftragsverarbeitungsvertrages nach Art. 28 DSGVO oder einer sonstigen datenschutzrechtlich zulässigen
+        Grundlage.
+      </p>
+
+      <h2>9. Übermittlungen in Drittländer</h2>
+      <p>
+        Eine Verarbeitung personenbezogener Daten in Staaten außerhalb der Europäischen Union (EU) bzw. des
+        Europäischen Wirtschaftsraums (EWR) findet nur statt, sofern dies für die Nutzung bestimmter Dienste
+        technisch erforderlich ist, gesetzlich zulässig ist oder Sie eingewilligt haben.
+      </p>
+      <p>
+        Soweit auf unserer Website externe Bibliotheken, CDNs, Kommunikationsdienste oder E-Mail-Dienste eingesetzt
+        werden, kann nicht ausgeschlossen werden, dass dabei Daten in ein Drittland, insbesondere in die USA,
+        übermittelt werden. In solchen Fällen achten wir darauf, dass ein nach Art. 44 ff. DSGVO zulässiges
+        Datenschutzniveau hergestellt wird, etwa durch einen Angemessenheitsbeschluss oder geeignete Garantien.
+      </p>
+
+      <h2>10. Cookies, Local Storage, Session Storage und sonstige Endgerätezugriffe</h2>
+      <p>
+        Unsere Website verwendet nach dem derzeit erkennbaren Stand keine Analyse- oder Marketing-Cookies.
+        Soweit technisch erforderliche Cookies oder vergleichbare Technologien eingesetzt werden, geschieht dies
+        nur, soweit diese zur Bereitstellung und sicheren Nutzung der Website unbedingt erforderlich sind.
+      </p>
+      <p>
+        <strong>Rechtsgrundlage:</strong> § 25 Abs. 2 TDDDG sowie – soweit personenbezogene Daten verarbeitet werden –
+        Art. 6 Abs. 1 lit. f DSGVO.
+      </p>
+      <p>
+        <strong>Berechtigtes Interesse:</strong> technische Bereitstellung, Stabilität, Sicherheit und
+        Funktionsfähigkeit unseres Online-Angebots.
+      </p>
+      <p>
+        Sollte die Website künftig nicht technisch erforderliche Cookies oder sonstige Tracking-Technologien
+        verwenden, werden diese erst nach einer wirksamen Einwilligung über ein geeignetes Consent-Management-System
+        gesetzt bzw. ausgelesen.
+      </p>
+
+      <h2>11. Speicherdauer</h2>
+      <p>
+        Wir speichern personenbezogene Daten nur so lange, wie dies für die jeweiligen Zwecke erforderlich ist
+        oder gesetzliche Aufbewahrungspflichten bestehen. Anschließend werden die Daten gelöscht oder ihre
+        Verarbeitung eingeschränkt.
+      </p>
+      <p>Dies bedeutet insbesondere:</p>
+      <ul>
+        <li>Server-Logdaten: grundsätzlich nur so lange wie für Sicherheit und Fehleranalyse erforderlich</li>
+        <li>Kontaktanfragen: bis zur abschließenden Bearbeitung der Anfrage und darüber hinaus nur, soweit
+            gesetzliche Aufbewahrungspflichten oder berechtigte Interessen bestehen</li>
+        <li>geschäftsbezogene Unterlagen: entsprechend handels- und steuerrechtlicher Aufbewahrungsfristen</li>
+      </ul>
+
+      <h2>12. Bereitstellungspflicht</h2>
+      <p>
+        Die Bereitstellung personenbezogener Daten ist gesetzlich nicht vorgeschrieben. Sie ist jedoch erforderlich,
+        wenn Sie mit uns in Kontakt treten, eine Anfrage stellen oder eine vertragliche Zusammenarbeit anbahnen
+        möchten. Ohne die erforderlichen Angaben können wir Ihre Anfrage gegebenenfalls nicht oder nicht vollständig
+        bearbeiten.
+      </p>
+
+      <h2>13. Ihre Rechte</h2>
+      <p>Sie haben nach Maßgabe der gesetzlichen Voraussetzungen insbesondere folgende Rechte:</p>
+      <ul>
+        <li>Recht auf Auskunft nach Art. 15 DSGVO</li>
+        <li>Recht auf Berichtigung nach Art. 16 DSGVO</li>
+        <li>Recht auf Löschung nach Art. 17 DSGVO</li>
+        <li>Recht auf Einschränkung der Verarbeitung nach Art. 18 DSGVO</li>
+        <li>Recht auf Datenübertragbarkeit nach Art. 20 DSGVO</li>
+        <li>Widerspruchsrecht nach Art. 21 DSGVO</li>
+        <li>Recht auf Widerruf einer erteilten Einwilligung mit Wirkung für die Zukunft</li>
+        <li>Recht auf Beschwerde bei einer Datenschutzaufsichtsbehörde nach Art. 77 DSGVO</li>
+      </ul>
+
+      <h3>13.1 Widerspruchsrecht</h3>
+      <p>
+        Soweit wir personenbezogene Daten auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO verarbeiten, haben Sie das
+        Recht, aus Gründen, die sich aus Ihrer besonderen Situation ergeben, jederzeit Widerspruch gegen die
+        Verarbeitung einzulegen. Wir verarbeiten die betreffenden personenbezogenen Daten dann nicht mehr, es sei
+        denn, wir können zwingende schutzwürdige Gründe für die Verarbeitung nachweisen, die Ihre Interessen, Rechte
+        und Freiheiten überwiegen, oder die Verarbeitung dient der Geltendmachung, Ausübung oder Verteidigung von
+        Rechtsansprüchen.
+      </p>
+
+      <h3>13.2 Widerruf von Einwilligungen</h3>
+      <p>
+        Eine einmal erteilte Einwilligung können Sie jederzeit mit Wirkung für die Zukunft widerrufen. Die
+        Rechtmäßigkeit der bis zum Widerruf erfolgten Verarbeitung bleibt hiervon unberührt.
+      </p>
+
+      <h2>14. Beschwerderecht bei einer Aufsichtsbehörde</h2>
+      <p>
+        Sie haben das Recht, sich bei einer Datenschutzaufsichtsbehörde über die Verarbeitung Ihrer personenbezogenen
+        Daten zu beschweren. Für unser Unternehmen in Nordrhein-Westfalen ist insbesondere zuständig:
+      </p>
+      <p>
+        <strong>Landesbeauftragte für Datenschutz und Informationsfreiheit Nordrhein-Westfalen</strong><br />
+        Kavalleriestraße 2–4<br />
+        40213 Düsseldorf<br />
+        Telefon: +49 211 38424-0<br />
+        E-Mail: <a href="mailto:poststelle@ldi.nrw.de">poststelle@ldi.nrw.de</a>
+      </p>
+
+      <h2>15. Datensicherheit / TLS-Verschlüsselung</h2>
+      <p>
+        Wir treffen technische und organisatorische Sicherheitsmaßnahmen, um Ihre Daten gegen zufällige oder
+        vorsätzliche Manipulationen, teilweisen oder vollständigen Verlust, Zerstörung oder gegen den unbefugten
+        Zugriff Dritter zu schützen. Unsere Sicherheitsmaßnahmen werden entsprechend der technologischen Entwicklung
+        fortlaufend verbessert.
+      </p>
+      <p>
+        Diese Website nutzt zur geschützten Übertragung von Inhalten eine TLS-/SSL-Verschlüsselung.
+      </p>
+
+      <h2>16. Keine automatisierte Entscheidungsfindung</h2>
+      <p>
+        Eine automatisierte Entscheidungsfindung einschließlich Profiling im Sinne von Art. 22 DSGVO findet im
+        Zusammenhang mit dieser Website nach unserem derzeitigen Kenntnisstand nicht statt.
+      </p>
+
+      <h2>17. Aktualisierung dieser Datenschutzerklärung</h2>
+      <p>
+        Wir behalten uns vor, diese Datenschutzerklärung anzupassen, wenn sich unsere Website, die eingesetzten
+        Dienste, die Rechtslage oder behördliche Vorgaben ändern. Es gilt jeweils die zum Zeitpunkt Ihres Besuchs
+        abrufbare Fassung.
+      </p>
+
+      <h2>18. Stand</h2>
+      <p><strong>Stand dieser Datenschutzerklärung: 26.03.2026</strong></p>
+
+      <div class="legal-warning">
+        <strong>Wichtiger Abschluss-Hinweis:</strong> Diese Fassung ist bewusst umfangreich formuliert und bildet den
+        derzeit erkennbaren technischen Stand der von Ihnen bereitgestellten Dateien ab. Sie reduziert typische
+        Schwachstellen der bisherigen Fassung deutlich. Sie ersetzt aber keine individuelle anwaltliche Prüfung,
+        insbesondere dann nicht, wenn tatsächlich weitere Dienste eingesetzt werden oder künftig dazukommen, zum
+        Beispiel Google Fonts von Google-Servern, Google Maps, YouTube, reCAPTCHA, Meta Pixel, LinkedIn Insight Tag,
+        Google Analytics, Tag Manager, Chat-Widgets, Bewerbungsformulare, Newsletter-Tools, Cloudflare-Proxy-Funktionen,
+        Terminbuchungssysteme oder echte Formularversanddienste. Sobald solche Dienste aktiv sind, müssen
+        Datenschutzerklärung und gegebenenfalls Consent-Banner nochmals angepasst werden.
+      </div>
+    </div>
+  </section>
+
+  <script>
+    function toggleMenu() {
+      document.querySelector('.nav-links')?.classList.toggle('show');
+    }
+  </script>
 </body>
 </html>

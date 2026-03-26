@@ -295,7 +295,8 @@ export class CustomersService {
     for (const project of projects) {
       // Stunden berechnen (CLOCK_IN/OUT-Paare)
       const workerHoursMap = new Map<string, number>();
-      const weeklyHoursMap = new Map<string, number>();
+      // Schluessel: "workerId|YYYY-WW" → Stunden je Monteur je Woche
+      const workerWeekHoursMap = new Map<string, number>();
 
       const entriesByWorker = new Map<string, typeof project.timeEntries>();
       for (const entry of project.timeEntries) {
@@ -319,9 +320,10 @@ export class CustomersService {
                 (workerHoursMap.get(workerId) ?? 0) + hours,
               );
               const weekKey = isoWeekKey(pendingClockIn);
-              weeklyHoursMap.set(
-                weekKey,
-                (weeklyHoursMap.get(weekKey) ?? 0) + hours,
+              const compositeKey = `${workerId}|${weekKey}`;
+              workerWeekHoursMap.set(
+                compositeKey,
+                (workerWeekHoursMap.get(compositeKey) ?? 0) + hours,
               );
             }
             pendingClockIn = null;
@@ -331,7 +333,7 @@ export class CustomersService {
 
       const projHours = [...workerHoursMap.values()].reduce((s, h) => s + h, 0);
 
-      // Umsatz wochenweise
+      // Umsatz je Monteur je Woche
       const weeklyFlatRate = project.weeklyFlatRate ?? null;
       const includedHours = project.includedHoursPerWeek ?? 40;
       const hourlyRate = project.hourlyRateUpTo40h ?? 0;
@@ -341,15 +343,15 @@ export class CustomersService {
       let projOvertimeRevenue = 0;
       let projOvertimeHours = 0;
 
-      for (const [, weekHours] of weeklyHoursMap) {
+      for (const [, wHours] of workerWeekHoursMap) {
         if (weeklyFlatRate !== null) {
           projBaseRevenue += weeklyFlatRate;
-          const oh = Math.max(0, weekHours - includedHours);
+          const oh = Math.max(0, wHours - includedHours);
           projOvertimeHours += oh;
           projOvertimeRevenue += oh * overtimeRate;
         } else {
-          const reg = Math.min(weekHours, 40);
-          const oh = Math.max(0, weekHours - 40);
+          const reg = Math.min(wHours, 40);
+          const oh = Math.max(0, wHours - 40);
           projOvertimeHours += oh;
           projBaseRevenue += reg * hourlyRate;
           projOvertimeRevenue += oh * overtimeRate;

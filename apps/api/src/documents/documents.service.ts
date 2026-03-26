@@ -3,14 +3,19 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { DocumentApprovalStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UploadDocumentDto } from './dto/upload-document.dto';
 import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 @Injectable()
 export class DocumentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   private readonly documentInclude = {
     links: true,
@@ -214,6 +219,107 @@ export class DocumentsService {
         throw new NotFoundException('Dokument nicht gefunden.');
       }
     }
+  }
+
+  async replaceFile(id: string, file: Express.Multer.File) {
+    const document = await this.getById(id);
+
+    // Nur in DRAFT oder REJECTED ersetzen erlaubt
+    const status = document.approvalStatus as string;
+    if (status !== 'DRAFT' && status !== 'REJECTED') {
+      throw new BadRequestException(
+        'Dokument kann nach Einreichung/Freigabe nicht mehr ersetzt werden.',
+      );
+    }
+
+    // Alte Datei loeschen
+    const oldAbsolutePath = resolve(
+      process.cwd(),
+      'storage',
+      document.storageKey,
+    );
+    if (existsSync(oldAbsolutePath)) {
+      unlinkSync(oldAbsolutePath);
+    }
+
+    const newStorageKey = join('uploads', file.filename).replaceAll(
+      '\\',
+      '/',
+    );
+
+    return this.prisma.document.update({
+      where: { id },
+      data: {
+        storageKey: newStorageKey,
+        originalFilename: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+      },
+      include: this.documentInclude,
+    });
+  }
+
+  private assertStatusTransition(
+    current: DocumentApprovalStatus,
+    next: DocumentApprovalStatus,
+  ) {
+    const allowed: Record<string, string[]> = {
+      DRAFT: ['SUBMITTED'],
+      SUBMITTED: ['APPROVED', 'REJECTED'],
+      APPROVED: ['ARCHIVED'],
+      REJECTED: ['SUBMITTED', 'ARCHIVED'],
+      ARCHIVED: [],
+    };
+    if (!(allowed[current] ?? []).includes(next)) {
+      throw new BadRequestException(
+        `Statuswechsel von ${current} nach ${next} ist nicht erlaubt.`,
+      );
+    }
+  }
+
+  async setApprovalStatus(
+    id: string,
+    status: DocumentApprovalStatus,
+    userId?: string,
+    comment?: string,
+  ) {
+    const doc = await this.getById(id);
+    this.assertStatusTransition(
+      doc.approvalStatus as DocumentApprovalStatus,
+      status,
+    );
+    // SUBMITTED: alte Review-Metadaten loeschen, damit ein Re-Submit
+    // fachlich sauber als neuer Vorgang startet.
+    // APPROVED/REJECTED: frische Review-Metadaten setzen.
+    // ARCHIVED: bestehende Metadaten beibehalten.
+    const reviewData =
+      status === 'SUBMITTED'
+        ? { approvedAt: null, approvedByUserId: null, approvalComment: null }
+        : status === 'APPROVED' || status === 'REJECTED'
+          ? { approvedAt: new Date(), approvedByUserId: userId ?? null, approvalComment: comment ?? null }
+          : {};
+
+    const result = await this.prisma.document.update({
+      where: { id },
+      data: {
+        approvalStatus: status,
+        ...reviewData,
+      },
+      include: this.documentInclude,
+    });
+
+    if (status === 'APPROVED' || status === 'REJECTED') {
+      const projectLink = doc.links.find((l) => l.entityType === 'PROJECT');
+      void this.notifications.onDocumentApproval(
+        id,
+        doc.title ?? doc.originalFilename,
+        status,
+        doc.uploadedByWorkerId,
+        projectLink?.entityId,
+      );
+    }
+
+    return result;
   }
 
   async getById(id: string) {
