@@ -2,7 +2,7 @@
 
 import { MapPinned } from "lucide-react";
 import Link from "next/link";
-import { type ChangeEvent, type ReactNode, useState } from "react";
+import { type ChangeEvent, type MouseEventHandler, type ReactNode, useState } from "react";
 
 // ── Utility-Funktionen ──────────────────────────────────────
 
@@ -126,7 +126,7 @@ export function SecondaryButton({
   onClick,
 }: {
   children: ReactNode;
-  onClick: () => void;
+  onClick: MouseEventHandler<HTMLButtonElement>;
 }) {
   return (
     <button

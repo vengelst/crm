@@ -446,13 +446,16 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       window.localStorage.removeItem(AUTH_STORAGE_KEY);
     }
 
+    setLoginPin("");
+    setLoginEmail("");
+    setLoginPassword("");
     setAuth(null);
     setUsers([]);
     setRoles([]);
     setSettings(null);
     setSummary(null);
     setSuccess(null);
-    setError("Sitzung beendet.");
+    setError(null);
   }
 
   async function handleCustomerSubmit(event: FormEvent<HTMLFormElement>) {
@@ -927,7 +930,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         ) : null}
 
         {section === "customers" ? (
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className={cx("grid gap-6", !selectedWorker && "xl:grid-cols-[1.1fr_0.9fr]")}>
             <div className="grid gap-6">
               {selectedCustomer ? (
                 <>
@@ -1660,16 +1663,15 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     items={workers}
                     title={(item) => `${item.firstName} ${item.lastName}${item.active === false ? " (deaktiviert)" : ""}`}
                     subtitle={(item) => item.workerNumber}
-                    href={(item) => `/workers/${item.id}`}
-                    editLabel="Bearbeiten"
                     deleteLabel="Loeschen"
-                    onEdit={(item) => router.push(`/workers/${item.id}`)}
+                    onOpen={(item) => router.push(`/workers/${item.id}`)}
                     onDelete={(item) => void handleDelete(`/workers/${item.id}`, "Monteur", true)}
                   />
                 </SectionCard>
               )}
             </div>
 
+            {!selectedWorker ? (
             <SectionCard
               title={workerForm.id ? "Monteur bearbeiten" : "Neuen Monteur anlegen"}
               subtitle="Monteure melden sich ausschliesslich per PIN im Kiosk an. PIN leer lassen = bestehende PIN bleibt erhalten. Neuer Wert = PIN wird ersetzt."
@@ -1710,9 +1712,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   />
                   <div className="grid gap-2">
                     <label className="text-sm font-medium">Kiosk-PIN</label>
-                    {workerForm.id && selectedWorker?.pins?.[0]?.pinPlain ? (
+                    {workerForm.id && workers.find((item) => item.id === workerForm.id)?.pins?.[0]?.pinPlain ? (
                       <div className="mb-1 rounded-lg bg-slate-100 px-3 py-2 font-mono text-sm dark:bg-slate-800">
-                        Aktueller PIN: <span className="font-semibold">{selectedWorker.pins[0].pinPlain}</span>
+                        Aktueller PIN: <span className="font-semibold">{workers.find((item) => item.id === workerForm.id)?.pins?.[0]?.pinPlain}</span>
                       </div>
                     ) : null}
                     <input
@@ -1845,6 +1847,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </div>
               </form>
             </SectionCard>
+            ) : null}
           </div>
 
           {/* ── Teams ────────────────────────────────────── */}
@@ -4334,6 +4337,7 @@ function EntityList<T extends { id: string }>({
   href,
   editLabel,
   deleteLabel,
+  onOpen,
   onEdit,
   onDelete,
 }: {
@@ -4341,9 +4345,10 @@ function EntityList<T extends { id: string }>({
   title: (item: T) => string;
   subtitle: (item: T) => string;
   href?: (item: T) => string;
-  editLabel: string;
+  editLabel?: string;
   deleteLabel: string;
-  onEdit: (item: T) => void;
+  onOpen?: (item: T) => void;
+  onEdit?: (item: T) => void;
   onDelete: (item: T) => void;
 }) {
   return (
@@ -4351,7 +4356,19 @@ function EntityList<T extends { id: string }>({
       {items.map((item) => (
         <div
           key={item.id}
-          className="flex flex-col gap-3 rounded-2xl border border-black/10 p-4 dark:border-white/10 lg:flex-row lg:items-center lg:justify-between"
+          onClick={onOpen ? () => onOpen(item) : undefined}
+          onKeyDown={onOpen ? (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onOpen(item);
+            }
+          } : undefined}
+          role={onOpen ? "button" : undefined}
+          tabIndex={onOpen ? 0 : undefined}
+          className={cx(
+            "flex flex-col gap-3 rounded-2xl border border-black/10 p-4 dark:border-white/10 lg:flex-row lg:items-center lg:justify-between",
+            onOpen && "cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800/70",
+          )}
         >
           <div>
             {href ? (
@@ -4364,8 +4381,24 @@ function EntityList<T extends { id: string }>({
             <p className="text-sm text-slate-500">{subtitle(item)}</p>
           </div>
           <div className="flex gap-2">
-            <SecondaryButton onClick={() => onEdit(item)}>{editLabel}</SecondaryButton>
-            <SecondaryButton onClick={() => onDelete(item)}>{deleteLabel}</SecondaryButton>
+            {onEdit && editLabel ? (
+              <SecondaryButton
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEdit(item);
+                }}
+              >
+                {editLabel}
+              </SecondaryButton>
+            ) : null}
+            <SecondaryButton
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete(item);
+              }}
+            >
+              {deleteLabel}
+            </SecondaryButton>
           </div>
         </div>
       ))}
@@ -4970,6 +5003,21 @@ function WorkerTimeLog({ entries, workerName }: { entries: NonNullable<Worker["t
     return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
   }
 
+  function renderCoordinateLink(lat?: number | null, lon?: number | null) {
+    const href = mapsUrl(lat, lon);
+    if (!href || lat == null || lon == null) {
+      return <span className="text-slate-400">-</span>;
+    }
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="font-mono text-[11px]">{lat.toFixed(5)}, {lon.toFixed(5)}</span>
+        <a href={href} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+          Map
+        </a>
+      </div>
+    );
+  }
+
   function duration(start: string, end: string | null) {
     if (!end) return "laufend";
     const ms = new Date(end).getTime() - new Date(start).getTime();
@@ -5006,21 +5054,15 @@ function WorkerTimeLog({ entries, workerName }: { entries: NonNullable<Worker["t
           </thead>
           <tbody>
             {pairs.map((p, i) => {
-              const inUrl = mapsUrl(p.clockIn.latitude, p.clockIn.longitude);
-              const outUrl = p.clockOut ? mapsUrl(p.clockOut.latitude, p.clockOut.longitude) : null;
               const isOpen = !p.clockOut;
               return (
                 <tr key={i} onClick={() => setSelectedIdx(i)} className={cx("cursor-pointer border-b border-black/5 transition hover:bg-slate-50 dark:border-white/5 dark:hover:bg-slate-800", isOpen && "bg-emerald-50/50 dark:bg-emerald-500/5")}>
                   <td className="py-2 pr-2 font-mono text-xs">{new Date(p.clockIn.occurredAtClient).toLocaleDateString("de-DE")}</td>
                   <td className="py-2 pr-2 text-xs">{p.clockIn.project?.projectNumber ?? "-"}</td>
                   <td className="py-2 pr-2 font-mono text-xs">{new Date(p.clockIn.occurredAtClient).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</td>
-                  <td className="py-2 pr-2 text-xs">
-                    {inUrl ? <a href={inUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">Karte</a> : <span className="text-slate-400">-</span>}
-                  </td>
+                  <td className="py-2 pr-2 text-xs">{renderCoordinateLink(p.clockIn.latitude, p.clockIn.longitude)}</td>
                   <td className="py-2 pr-2 font-mono text-xs">{p.clockOut ? new Date(p.clockOut.occurredAtClient).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : <span className="font-semibold text-emerald-600 dark:text-emerald-400">laufend</span>}</td>
-                  <td className="py-2 pr-2 text-xs">
-                    {outUrl ? <a href={outUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">Karte</a> : <span className="text-slate-400">-</span>}
-                  </td>
+                  <td className="py-2 pr-2 text-xs">{renderCoordinateLink(p.clockOut?.latitude, p.clockOut?.longitude)}</td>
                   <td className="py-2 pr-2 font-mono text-xs">{duration(p.clockIn.occurredAtClient, p.clockOut?.occurredAtClient ?? null)}</td>
                   <td className="py-2 text-xs text-slate-400">{p.clockIn.locationSource ?? "-"}</td>
                 </tr>
