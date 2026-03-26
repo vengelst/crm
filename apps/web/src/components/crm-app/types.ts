@@ -35,6 +35,7 @@ export type AuthState = {
     id: string;
     workerNumber: string;
     name: string;
+    languageCode?: string;
   };
   currentProjects?: AuthProject[];
   futureProjects?: AuthProject[];

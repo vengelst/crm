@@ -285,6 +285,7 @@ export class AuthService {
         id: worker.id,
         workerNumber: worker.workerNumber,
         name: `${worker.firstName} ${worker.lastName}`,
+        languageCode: worker.languageCode ?? 'de',
       },
       user: null,
       currentProjects,

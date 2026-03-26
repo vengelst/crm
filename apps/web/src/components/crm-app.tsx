@@ -44,7 +44,7 @@ import {
   PrintButton, openPrintWindow,
 } from "./crm-app/shared";
 import { KioskLoginScreen } from "./crm-app/login";
-import { t, type SupportedLang } from "../i18n";
+import { t, SUPPORTED_LANGUAGES, type SupportedLang } from "../i18n";
 
 // Re-export types for page files that import CrmAppProps
 export type { CrmAppProps } from "./crm-app/types";
@@ -1772,7 +1772,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               )}
             </div>
 
-            {!selectedWorker ? (
             <SectionCard
               title={workerForm.id ? "Monteur bearbeiten" : "Neuen Monteur anlegen"}
               subtitle="Monteure melden sich ausschliesslich per PIN im Kiosk an. PIN leer lassen = bestehende PIN bleibt erhalten. Neuer Wert = PIN wird ersetzt."
@@ -1918,16 +1917,32 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     }
                   />
                 </FormRow>
-                <Field
-                  label="Interner Stundensatz (EUR)"
-                  value={workerForm.internalHourlyRate}
-                  onChange={(event) =>
-                    setWorkerForm((current) => ({
-                      ...current,
-                      internalHourlyRate: event.target.value,
-                    }))
-                  }
-                />
+                <FormRow>
+                  <SelectField
+                    label="Sprache (Kiosk/PDF)"
+                    value={workerForm.languageCode}
+                    onChange={(event) =>
+                      setWorkerForm((current) => ({
+                        ...current,
+                        languageCode: event.target.value,
+                      }))
+                    }
+                    options={SUPPORTED_LANGUAGES.map((lang) => ({
+                      value: lang.code,
+                      label: lang.label,
+                    }))}
+                  />
+                  <Field
+                    label="Interner Stundensatz (EUR)"
+                    value={workerForm.internalHourlyRate}
+                    onChange={(event) =>
+                      setWorkerForm((current) => ({
+                        ...current,
+                        internalHourlyRate: event.target.value,
+                      }))
+                    }
+                  />
+                </FormRow>
                 <TextArea
                   label="Notizen"
                   value={workerForm.notes}
@@ -1948,7 +1963,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </div>
               </form>
             </SectionCard>
-            ) : null}
           </div>
 
           {/* ── Teams ────────────────────────────────────── */}
@@ -5026,7 +5040,10 @@ function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, init?: Req
                 <button key={n.id} type="button" onClick={() => {
                   if (!n.read) void markRead(n.id);
                   if (n.linkType && n.linkId) {
-                    const path = n.linkType === "PROJECT" && n.linkId ? `/projects/${n.linkId}` : null;
+                    const path = n.linkType === "PROJECT" ? `/projects/${n.linkId}`
+                      : n.linkType === "DOCUMENT" ? `/projects` // Dokument → Projekte-Seite
+                      : n.linkType === "TIMESHEET" ? `/projects` // Timesheet → Projekte-Seite
+                      : null;
                     if (path) { setOpen(false); router.push(path); }
                   }
                 }}

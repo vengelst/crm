@@ -288,34 +288,29 @@ export class DocumentsService {
       doc.approvalStatus as DocumentApprovalStatus,
       status,
     );
-    // SUBMITTED: alte Review-Metadaten loeschen, damit ein Re-Submit
-    // fachlich sauber als neuer Vorgang startet.
-    // APPROVED/REJECTED: frische Review-Metadaten setzen.
-    // ARCHIVED: bestehende Metadaten beibehalten.
-    const reviewData =
-      status === 'SUBMITTED'
-        ? { approvedAt: null, approvedByUserId: null, approvalComment: null }
-        : status === 'APPROVED' || status === 'REJECTED'
-          ? { approvedAt: new Date(), approvedByUserId: userId ?? null, approvalComment: comment ?? null }
-          : {};
-
     const result = await this.prisma.document.update({
       where: { id },
       data: {
         approvalStatus: status,
-        ...reviewData,
+        approvedAt:
+          status === 'APPROVED' || status === 'REJECTED'
+            ? new Date()
+            : undefined,
+        approvedByUserId:
+          status === 'APPROVED' || status === 'REJECTED'
+            ? userId
+            : undefined,
+        approvalComment: comment,
       },
       include: this.documentInclude,
     });
 
     if (status === 'APPROVED' || status === 'REJECTED') {
-      const projectLink = doc.links.find((l) => l.entityType === 'PROJECT');
       void this.notifications.onDocumentApproval(
         id,
         doc.title ?? doc.originalFilename,
         status,
         doc.uploadedByWorkerId,
-        projectLink?.entityId,
       );
     }
 

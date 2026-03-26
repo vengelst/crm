@@ -713,7 +713,7 @@ export class TimesheetsService {
     });
 
     void this.notifications.onTimesheetSigned(
-      sheet.projectId,
+      id,
       signerType,
       dto.signerName,
       result.project.projectNumber,
@@ -754,7 +754,7 @@ export class TimesheetsService {
     });
 
     void this.notifications.onTimesheetApproved(
-      sheet.projectId,
+      id,
       result.project.projectNumber,
       `KW${sheet.weekNumber}/${sheet.weekYear}`,
       sheet.workerId,
