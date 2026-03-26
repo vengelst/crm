@@ -80,6 +80,7 @@ model User {
   uploadedDocuments Document[]
   createdCustomerCallLogs CustomerCallLog[]
   auditLogs   AuditLog[]
+  kioskDevices KioskDevice[]
 }
 
 model Role {
@@ -274,9 +275,11 @@ model Worker {
   timeEntries   TimeEntry[]
   gpsEvents     GpsEvent[]
   weeklyTimesheets WeeklyTimesheet[]
+  uploadedDocuments Document[]
   vehicleAssignments WorkerVehicleAssignment[]
   equipmentIssues WorkerEquipmentIssue[]
   teamMemberships WorkerTeamMember[]
+  kioskDevices    KioskDevice[]
 }
 
 model WorkerTeam {
@@ -403,6 +406,8 @@ model TimeEntry {
   sourceDevice      String?
   createdByUserId   String?
   kioskSessionId    String?
+  deviceUuid        String?
+  deviceDisplayName String?
   worker            Worker         @relation(fields: [workerId], references: [id], onDelete: Cascade)
   project           Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -480,11 +485,13 @@ model Document {
   mimeType         String
   fileSize         Int
   uploadedByUserId String?
+  uploadedByWorkerId String?
   documentType     String
   title            String?
   description      String?
   createdAt        DateTime       @default(now())
   uploadedBy       User?          @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  uploadedByWorker Worker?        @relation(fields: [uploadedByWorkerId], references: [id], onDelete: SetNull)
   links            DocumentLink[]
 }
 
@@ -545,4 +552,21 @@ model AuditLog {
   afterJson   Json?
   createdAt   DateTime @default(now())
   actorUser   User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+}
+
+model KioskDevice {
+  id               String    @id @default(cuid())
+  deviceUuid       String    @unique
+  displayName      String?
+  platform         String?
+  browser          String?
+  userAgent        String?
+  firstSeenAt      DateTime  @default(now())
+  lastSeenAt       DateTime  @default(now())
+  active           Boolean   @default(false)
+  notes            String?
+  assignedWorkerId String?
+  assignedUserId   String?
+  assignedWorker   Worker?   @relation(fields: [assignedWorkerId], references: [id], onDelete: SetNull)
+  assignedUser     User?     @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
 }

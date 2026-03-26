@@ -14,6 +14,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { SettingsModule } from './settings/settings.module';
 import { UsersModule } from './users/users.module';
 import { TeamsModule } from './teams/teams.module';
+import { DevicesModule } from './devices/devices.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { TeamsModule } from './teams/teams.module';
     DocumentsModule,
     SettingsModule,
     UsersModule,
+    DevicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

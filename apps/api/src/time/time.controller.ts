@@ -43,7 +43,11 @@ export class TimeController {
   ) {
     const resolvedWorkerId = this.resolveWorkerId(request, workerId);
 
-    const openEntry = await this.timeService.findOpenClockIn(resolvedWorkerId);
+    const [openEntry, todayStats] = await Promise.all([
+      this.timeService.findOpenClockIn(resolvedWorkerId),
+      this.timeService.getTodayStats(resolvedWorkerId),
+    ]);
+
     return {
       hasOpenWork: !!openEntry,
       openEntry: openEntry
@@ -58,6 +62,7 @@ export class TimeController {
             locationSource: openEntry.locationSource,
           }
         : null,
+      todayStats,
     };
   }
 

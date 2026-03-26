@@ -31,6 +31,7 @@ import type {
   DocumentFormState, DocumentPreviewState,
   TimesheetItem, WorkerTimeStatus,
   PermissionItem, SmtpFormState,
+  KioskDevice, DeviceBindingConfig,
 } from "./crm-app/types";
 import { API_ROOT, AUTH_STORAGE_KEY } from "./crm-app/types";
 import {
@@ -45,6 +46,34 @@ import { KioskLoginScreen } from "./crm-app/login";
 // Re-export types for page files that import CrmAppProps
 export type { CrmAppProps } from "./crm-app/types";
 
+const DEVICE_UUID_KEY = "crm-kiosk-device-uuid";
+
+function getDeviceUuid(): string {
+  if (typeof window === "undefined") return "";
+  let uuid = window.localStorage.getItem(DEVICE_UUID_KEY);
+  if (!uuid) {
+    uuid = crypto.randomUUID();
+    window.localStorage.setItem(DEVICE_UUID_KEY, uuid);
+  }
+  return uuid;
+}
+
+function getDeviceInfo() {
+  if (typeof navigator === "undefined") return {};
+  const ua = navigator.userAgent;
+  let browser = "Unknown";
+  if (ua.includes("Firefox/")) browser = "Firefox";
+  else if (ua.includes("Edg/")) browser = "Edge";
+  else if (ua.includes("Chrome/")) browser = "Chrome";
+  else if (ua.includes("Safari/")) browser = "Safari";
+  let platform = "Unknown";
+  if (ua.includes("Android")) platform = "Android";
+  else if (ua.includes("iPhone") || ua.includes("iPad")) platform = "iOS";
+  else if (ua.includes("Windows")) platform = "Windows";
+  else if (ua.includes("Mac")) platform = "macOS";
+  else if (ua.includes("Linux")) platform = "Linux";
+  return { platform, browser, userAgent: ua.slice(0, 500) };
+}
 
 const emptyCustomerForm = (): CustomerFormState => ({
   customerNumber: "",
@@ -134,6 +163,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [deviceWarning, setDeviceWarning] = useState<string | null>(null);
 
   const [loginTab, setLoginTab] = useState<"admin" | "kiosk">("admin");
   const [loginEmail, setLoginEmail] = useState("admin@example.local");
@@ -255,7 +285,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   }, []);
 
   const loadData = useCallback(async () => {
-    if (!auth || auth.type === "worker") {
+    if (!auth || auth.type === "worker" || auth.type === "kiosk-user") {
       return;
     }
 
@@ -402,36 +432,51 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     try {
       const response = await apiFetch<{
         accessToken: string;
-        worker: { id: string; workerNumber: string; name: string };
+        loginType: "worker" | "kiosk-user";
+        worker: { id: string; workerNumber: string; name: string } | null;
+        user: { id: string; email: string; displayName: string; roles: string[] } | null;
         currentProjects: AuthState["currentProjects"];
         futureProjects: AuthState["futureProjects"];
         pastProjects: AuthState["pastProjects"];
+        deviceWarning: string | null;
       }>("/auth/kiosk-login", {
         method: "POST",
         body: JSON.stringify({
           pin: loginPin,
+          deviceUuid: getDeviceUuid(),
+          ...getDeviceInfo(),
         }),
       });
 
-      const nextAuth: AuthState = {
-        accessToken: response.accessToken,
-        type: "worker",
-        user: {
-          id: response.worker.id,
-          email: "",
-          displayName: response.worker.name,
-          roles: ["WORKER"],
-        },
-        worker: response.worker,
-        currentProjects: response.currentProjects,
-        futureProjects: response.futureProjects,
-        pastProjects: response.pastProjects,
-      };
+      let nextAuth: AuthState;
+      if (response.loginType === "kiosk-user" && response.user) {
+        nextAuth = {
+          accessToken: response.accessToken,
+          type: "kiosk-user",
+          user: response.user,
+        };
+      } else {
+        nextAuth = {
+          accessToken: response.accessToken,
+          type: "worker",
+          user: {
+            id: response.worker!.id,
+            email: "",
+            displayName: response.worker!.name,
+            roles: ["WORKER"],
+          },
+          worker: response.worker!,
+          currentProjects: response.currentProjects,
+          futureProjects: response.futureProjects,
+          pastProjects: response.pastProjects,
+        };
+      }
 
       if (typeof window !== "undefined") {
         window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuth));
       }
 
+      setDeviceWarning(response.deviceWarning ?? null);
       setAuth(nextAuth);
       setSuccess("Anmeldung erfolgreich.");
     } catch (loginError) {
@@ -684,8 +729,16 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
   async function handleDelete(path: string, label: string, confirm = false) {
     if (confirm) {
+      const targetLabel =
+        label === "Kunde"
+          ? "dieser Kunde"
+          : label === "Monteur"
+            ? "dieser Monteur"
+            : label === "Projekt"
+              ? "dieses Projekt"
+              : label;
       const ok = window.confirm(
-        `Soll ${label === "Kunde" ? "dieser Kunde" : label === "Monteur" ? "dieser Monteur" : label} wirklich endgueltig geloescht werden?\n\nDieser Vorgang kann nicht rueckgaengig gemacht werden.`,
+        `Soll ${targetLabel} wirklich endgueltig geloescht werden?\n\nDieser Vorgang kann nicht rueckgaengig gemacht werden.`,
       );
       if (!ok) return;
     }
@@ -770,6 +823,26 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   async function handlePrintDocumentById(documentId: string) {
     try {
       const blob = await fetchDocumentBlob(documentId);
+      if (blob.type.startsWith("image/")) {
+        const url = window.URL.createObjectURL(blob);
+        const win = window.open("", "_blank", "width=1000,height=800");
+        if (!win) return;
+        win.document.write(`<!DOCTYPE html><html><head><title>Bild drucken</title>
+<style>
+  @page { margin: 0; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #fff; }
+  body { display: flex; align-items: center; justify-content: center; }
+  img { width: 100vw; height: 100vh; object-fit: contain; }
+</style></head><body><img src="${url}" alt="Druckbild" /></body></html>`);
+        win.document.close();
+        win.setTimeout(() => {
+          win.print();
+          window.setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+          }, 2000);
+        }, 300);
+        return;
+      }
       const url = window.URL.createObjectURL(blob);
       const iframe = window.document.createElement("iframe");
       iframe.style.position = "fixed";
@@ -867,6 +940,21 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         auth={auth}
         apiFetch={apiFetch}
         onLogout={logout}
+        deviceWarning={deviceWarning}
+        setDeviceWarning={setDeviceWarning}
+      />
+    );
+  }
+
+  // ── Kiosk-User-Sicht (Projektleiter Kunde etc.) ─────────────
+  if (auth.type === "kiosk-user") {
+    return (
+      <KioskUserView
+        auth={auth}
+        apiFetch={apiFetch}
+        onLogout={logout}
+        deviceWarning={deviceWarning}
+        setDeviceWarning={setDeviceWarning}
       />
     );
   }
@@ -1387,11 +1475,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     items={projects}
                     title={(item) => item.title}
                     subtitle={(item) => item.projectNumber}
-                    href={(item) => `/projects/${item.id}`}
-                    editLabel="Bearbeiten"
                     deleteLabel="Loeschen"
-                    onEdit={(item) => router.push(`/projects/${item.id}`)}
-                    onDelete={(item) => void handleDelete(`/projects/${item.id}`, "Projekt")}
+                    onOpen={(item) => router.push(`/projects/${item.id}`)}
+                    onDelete={(item) => void handleDelete(`/projects/${item.id}`, "Projekt", true)}
                   />
                 </SectionCard>
               )}
@@ -1655,6 +1741,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     setDocumentForm={setDocumentForm}
                     authToken={auth.accessToken}
                     onUpload={() => void handleDocumentUpload("WORKER", selectedWorker.id)}
+                    apiFetch={apiFetch}
                   />
                 </>
               ) : (
@@ -1978,6 +2065,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               onSettingsSubmit={handleSettingsSubmit}
               users={users}
               roles={roles}
+              workers={workers}
               userForm={userForm}
               setUserForm={setUserForm}
               onUserSubmit={handleUserSubmit}
@@ -2229,6 +2317,14 @@ function WorkerTimesheetSection({
     } catch (e) { setTsError(e instanceof Error ? e.message : "PDF-Fehler"); }
   }
 
+  function getCanvasPoint(canvas: HTMLCanvasElement, event: PointerEvent) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) * (canvas.width / rect.width),
+      y: (event.clientY - rect.top) * (canvas.height / rect.height),
+    };
+  }
+
   function initSignCanvas(canvas: HTMLCanvasElement | null) {
     setSignCanvasRef(canvas);
     if (!canvas) return;
@@ -2237,8 +2333,22 @@ function WorkerTimesheetSection({
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     let drawing = false;
-    canvas.onpointerdown = (e) => { drawing = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); };
-    canvas.onpointermove = (e) => { if (!drawing) return; ctx.lineTo(e.offsetX, e.offsetY); ctx.strokeStyle = "#000"; ctx.lineWidth = 2; ctx.stroke(); };
+    canvas.onpointerdown = (e) => {
+      drawing = true;
+      const point = getCanvasPoint(canvas, e);
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y);
+    };
+    canvas.onpointermove = (e) => {
+      if (!drawing) return;
+      const point = getCanvasPoint(canvas, e);
+      ctx.lineTo(point.x, point.y);
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.stroke();
+    };
     canvas.onpointerup = () => { drawing = false; };
     canvas.onpointerleave = () => { drawing = false; };
   }
@@ -2358,7 +2468,8 @@ function KioskProjectView({ project, timesheets, apiFetch, workerId, authToken }
 
   // Dokumente fuer dieses Projekt laden
   const [projectDocs, setProjectDocs] = useState<DocumentItem[]>([]);
-  const [docFile, setDocFile] = useState<File | null>(null);
+  const [documentForm, setDocumentForm] = useState<DocumentFormState>(emptyDocumentForm);
+  const [documentPreview, setDocumentPreview] = useState<DocumentPreviewState | null>(null);
   const [uploading, setUploading] = useState(false);
   const [docMsg, setDocMsg] = useState<string | null>(null);
 
@@ -2367,17 +2478,19 @@ function KioskProjectView({ project, timesheets, apiFetch, workerId, authToken }
   }, [apiFetch, project.id]);
 
   async function uploadDoc() {
-    if (!docFile) return;
+    if (!documentForm.file) return;
     setUploading(true); setDocMsg(null);
     try {
       const fd = new FormData();
-      fd.append("file", docFile);
-      fd.append("documentType", "PROJEKTDOKUMENT");
+      fd.append("file", documentForm.file);
+      fd.append("documentType", documentForm.documentType || "PROJEKTDOKUMENT");
+      fd.append("title", documentForm.title);
+      fd.append("description", documentForm.description);
       fd.append("entityType", "PROJECT");
       fd.append("entityId", project.id);
       await apiFetch("/documents/upload", { method: "POST", body: fd, headers: {} });
       setDocMsg("Dokument hochgeladen.");
-      setDocFile(null);
+      setDocumentForm(emptyDocumentForm());
       const docs = await apiFetch<DocumentItem[]>(`/documents?entityType=PROJECT&entityId=${project.id}`);
       setProjectDocs(docs);
     } catch (e) { setDocMsg(e instanceof Error ? e.message : "Upload fehlgeschlagen."); }
@@ -2385,6 +2498,116 @@ function KioskProjectView({ project, timesheets, apiFetch, workerId, authToken }
   }
 
   const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
+
+  async function fetchDocumentBlob(documentId: string) {
+    const response = await fetch(`${apiRoot}/api/documents/${documentId}/download`, {
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+    });
+    if (!response.ok) {
+      let message = "Dokument konnte nicht geladen werden.";
+      const rawBody = await response.text();
+      if (rawBody.trim()) {
+        try {
+          const body = JSON.parse(rawBody) as { message?: string | string[] };
+          const parsed = Array.isArray(body.message) ? body.message.join(", ") : body.message;
+          if (parsed) message = parsed;
+        } catch {
+          message = rawBody;
+        }
+      }
+      throw new Error(message);
+    }
+    return response.blob();
+  }
+
+  async function openDocument(document: DocumentItem) {
+    try {
+      const blob = await fetchDocumentBlob(document.id);
+      const url = window.URL.createObjectURL(blob);
+      setDocumentPreview((current) => {
+        if (current?.url) {
+          window.URL.revokeObjectURL(current.url);
+        }
+        return {
+          documentId: document.id,
+          url,
+          mimeType: document.mimeType,
+          title: document.title || document.originalFilename,
+        };
+      });
+    } catch (e) {
+      setDocMsg(e instanceof Error ? e.message : "Dokument konnte nicht geladen werden.");
+    }
+  }
+
+  async function printDocument(document: DocumentItem) {
+    try {
+      const blob = await fetchDocumentBlob(document.id);
+      if (blob.type.startsWith("image/")) {
+        const url = window.URL.createObjectURL(blob);
+        const win = window.open("", "_blank", "width=1000,height=800");
+        if (!win) return;
+        win.document.write(`<!DOCTYPE html><html><head><title>Bild drucken</title>
+<style>
+  @page { margin: 0; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #fff; }
+  body { display: flex; align-items: center; justify-content: center; }
+  img { width: 100vw; height: 100vh; object-fit: contain; }
+</style></head><body><img src="${url}" alt="Druckbild" /></body></html>`);
+        win.document.close();
+        win.setTimeout(() => {
+          win.print();
+          window.setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+          }, 2000);
+        }, 300);
+        return;
+      }
+      const url = window.URL.createObjectURL(blob);
+      const iframe = window.document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      iframe.src = url;
+      iframe.onload = () => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        window.setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          iframe.remove();
+        }, 2000);
+      };
+      window.document.body.appendChild(iframe);
+    } catch (e) {
+      setDocMsg(e instanceof Error ? e.message : "Druck fehlgeschlagen.");
+    }
+  }
+
+  async function printDocumentById(documentId: string) {
+    const document = projectDocs.find((item) => item.id === documentId);
+    if (!document) {
+      setDocMsg("Dokument konnte nicht gefunden werden.");
+      return;
+    }
+    await printDocument(document);
+  }
+
+  async function downloadDocument(documentId: string, filename: string) {
+    try {
+      const blob = await fetchDocumentBlob(documentId);
+      const url = window.URL.createObjectURL(blob);
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      setDocMsg(e instanceof Error ? e.message : "Download fehlgeschlagen.");
+    }
+  }
 
   return (
     <div className="grid gap-5">
@@ -2420,36 +2643,19 @@ function KioskProjectView({ project, timesheets, apiFetch, workerId, authToken }
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <h4 className="mb-3 text-sm font-semibold">Projektdokumente</h4>
         {docMsg ? <div className="mb-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{docMsg}</div> : null}
-        {projectDocs.length > 0 ? (
-          <div className="grid gap-2">
-            {projectDocs.map((doc) => (
-              <div key={doc.id} className="flex items-center justify-between rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
-                <div className="min-w-0">
-                  <div className="truncate font-medium">{doc.title || doc.originalFilename}</div>
-                  <div className="text-xs text-slate-500">{doc.mimeType}</div>
-                </div>
-                <a href={`${apiRoot}/api/documents/${doc.id}/download`}
-                  target="_blank" rel="noreferrer"
-                  className="shrink-0 rounded-lg border border-black/10 px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800">
-                  Oeffnen
-                </a>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-slate-500">Keine Dokumente vorhanden.</p>
-        )}
-        <div className="mt-3 grid gap-2">
-          <input type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
-            onChange={(e) => setDocFile(e.target.files?.[0] ?? null)}
-            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs dark:border-white/10 dark:bg-slate-900" />
-          {docFile ? (
-            <button type="button" disabled={uploading} onClick={() => void uploadDoc()}
-              className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white">
-              {uploading ? "Hochladen..." : "Dokument hochladen"}
-            </button>
-          ) : null}
-        </div>
+        <DocumentPanel
+          documents={projectDocs}
+          onOpenDocument={(document) => void openDocument(document)}
+          onPrintDocument={(document) => void printDocument(document)}
+          onDownload={downloadDocument}
+          onDeleteDocument={() => {}}
+          documentForm={documentForm}
+          setDocumentForm={setDocumentForm}
+          authToken={authToken}
+          onUpload={() => void uploadDoc()}
+          allowDelete={false}
+          uploadLabel={uploading ? "Hochladen..." : "Dokument hochladen"}
+        />
       </div>
 
       {/* Nur eigener aktueller Stundenzettel (nicht abgeschlossene) */}
@@ -2467,6 +2673,74 @@ function KioskProjectView({ project, timesheets, apiFetch, workerId, authToken }
               </div>
             ))}
           </div>
+        </div>
+      ) : null}
+      {documentPreview ? (
+        <DocumentPreviewModal
+          preview={documentPreview}
+          onPrint={() => void printDocumentById(documentPreview.documentId)}
+          onClose={() => {
+            if (documentPreview.url) {
+              window.URL.revokeObjectURL(documentPreview.url);
+            }
+            setDocumentPreview(null);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function WorkerElapsedTime({ startedAt }: { startedAt: string }) {
+  const [elapsed, setElapsed] = useState("");
+  useEffect(() => {
+    function update() {
+      const ms = Date.now() - new Date(startedAt).getTime();
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      setElapsed(`${h}h ${String(m).padStart(2, "0")}m`);
+    }
+    update();
+    const interval = setInterval(update, 30000);
+    return () => clearInterval(interval);
+  }, [startedAt]);
+
+  return (
+    <div className="mt-1 text-sm">
+      Gestartet: <span className="font-mono">{new Date(startedAt).toLocaleString("de-DE")}</span>
+      {" "}<span className="rounded-lg bg-emerald-100 px-2 py-0.5 font-mono font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">{elapsed}</span>
+    </div>
+  );
+}
+
+function formatMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
+function TodayStatsBar({ stats }: { stats: { completedMinutes: number; openSinceMinutes: number; totalMinutes: number } }) {
+  const [liveTotal, setLiveTotal] = useState(stats.totalMinutes);
+
+  useEffect(() => {
+    setLiveTotal(stats.totalMinutes);
+    if (stats.openSinceMinutes > 0) {
+      const interval = setInterval(() => {
+        setLiveTotal((prev) => prev + 0.5);
+      }, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [stats.totalMinutes, stats.openSinceMinutes]);
+
+  return (
+    <div className="flex items-center gap-4 rounded-2xl border border-black/10 bg-white/80 px-5 py-3 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
+      <div className="text-sm text-slate-500">Heute gearbeitet:</div>
+      <div className="rounded-lg bg-slate-100 px-3 py-1 font-mono text-lg font-semibold dark:bg-slate-800">
+        {formatMinutes(Math.round(liveTotal))}
+      </div>
+      {stats.completedMinutes > 0 && stats.openSinceMinutes > 0 ? (
+        <div className="text-xs text-slate-400">
+          ({formatMinutes(stats.completedMinutes)} abgeschlossen + laufend)
         </div>
       ) : null}
     </div>
@@ -2534,15 +2808,105 @@ function OpenWorkCard({ openWork, working, onClockOut, onOpenProject }: {
   );
 }
 
+// ── Kiosk-User-View (Projektleiter Kunde) ──────────────────
+function KioskUserView({
+  auth,
+  apiFetch,
+  onLogout,
+  deviceWarning,
+  setDeviceWarning,
+}: {
+  auth: AuthState;
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  onLogout: () => void;
+  deviceWarning: string | null;
+  setDeviceWarning: Dispatch<SetStateAction<string | null>>;
+}) {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void apiFetch<Project[]>("/projects")
+      .then(setProjects)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [apiFetch]);
+
+  return (
+    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
+      <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
+        <div className="flex flex-col gap-4 rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Kiosk</p>
+            <h1 className="text-xl font-semibold">{auth.user.displayName}</h1>
+            <p className="mt-0.5 text-sm text-slate-500">{auth.user.roles.join(", ")}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <SecondaryButton onClick={onLogout}>Abmelden</SecondaryButton>
+          </div>
+        </div>
+
+        {deviceWarning ? (
+          <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+            <svg className="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <div className="flex-1">
+              <span>{deviceWarning}</span>
+              <button type="button" onClick={() => setDeviceWarning(null)} className="ml-2 text-xs underline opacity-70 hover:opacity-100">Ausblenden</button>
+            </div>
+          </div>
+        ) : null}
+
+        <SectionCard title="Projekte" subtitle={loading ? "Laden..." : `${projects.length} Projekt(e)`}>
+          {projects.length === 0 && !loading ? (
+            <p className="text-sm text-slate-500">Keine Projekte vorhanden.</p>
+          ) : (
+            <div className="grid gap-3">
+              {projects.map((p) => (
+                <div key={p.id} className="rounded-xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-900/60">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-medium">{p.projectNumber} - {p.title}</div>
+                      {p.customer ? <div className="mt-0.5 text-sm text-slate-500">Kunde: {p.customer.companyName}</div> : null}
+                      {p.siteCity ? <div className="text-sm text-slate-500">Ort: {[p.siteAddressLine1, p.sitePostalCode, p.siteCity].filter(Boolean).join(", ")}</div> : null}
+                    </div>
+                    <span className={cx("shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase",
+                      p.status === "ACTIVE" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                    )}>{p.status}</span>
+                  </div>
+                  {p.plannedStartDate || p.plannedEndDate ? (
+                    <div className="mt-2 text-xs text-slate-500">
+                      Zeitraum: {p.plannedStartDate?.slice(0, 10) ?? "?"} - {p.plannedEndDate?.slice(0, 10) ?? "offen"}
+                    </div>
+                  ) : null}
+                  {p.assignments && p.assignments.length > 0 ? (
+                    <div className="mt-2 text-xs text-slate-500">
+                      Monteure: {p.assignments.map((a) => `${a.worker.firstName} ${a.worker.lastName}`).join(", ")}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      </div>
+    </div>
+  );
+}
+
 // ── Monteur Zeiterfassungs-View ──────────────────────────────
 function WorkerTimeView({
   auth,
   apiFetch,
   onLogout,
+  deviceWarning,
+  setDeviceWarning,
 }: {
   auth: AuthState;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   onLogout: () => void;
+  deviceWarning: string | null;
+  setDeviceWarning: Dispatch<SetStateAction<string | null>>;
 }) {
   const [status, setStatus] = useState<WorkerTimeStatus | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
@@ -2656,7 +3020,7 @@ function WorkerTimeView({
     setWorkerSuccess(null);
     try {
       const loc = await getLocation(selectedProjectId);
-      await apiFetch("/time/clock-in", {
+      const result = await apiFetch<{ deviceWarning?: string | null }>("/time/clock-in", {
         method: "POST",
         body: JSON.stringify({
           workerId,
@@ -2666,8 +3030,12 @@ function WorkerTimeView({
           accuracy: loc.accuracy,
           locationSource: loc.locationSource,
           sourceDevice: "web",
+          deviceUuid: getDeviceUuid(),
         }),
       });
+      if (result.deviceWarning) {
+        setDeviceWarning(result.deviceWarning);
+      }
       setWorkerSuccess("Arbeit gestartet.");
       setSelectedProjectId("");
       await loadStatus();
@@ -2685,7 +3053,7 @@ function WorkerTimeView({
     setWorkerSuccess(null);
     try {
       const loc = await getLocation(status.openEntry.projectId);
-      await apiFetch("/time/clock-out", {
+      const result = await apiFetch<{ deviceWarning?: string | null }>("/time/clock-out", {
         method: "POST",
         body: JSON.stringify({
           workerId,
@@ -2695,8 +3063,12 @@ function WorkerTimeView({
           accuracy: loc.accuracy,
           locationSource: loc.locationSource,
           sourceDevice: "web",
+          deviceUuid: getDeviceUuid(),
         }),
       });
+      if (result.deviceWarning) {
+        setDeviceWarning(result.deviceWarning);
+      }
       setWorkerSuccess("Arbeit beendet.");
       await loadStatus();
     } catch (err) {
@@ -2761,6 +3133,21 @@ function WorkerTimeView({
         </div>
 
         <MessageBar error={workerError} success={workerSuccess} />
+
+        {deviceWarning ? (
+          <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+            <svg className="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <div className="flex-1">
+              <span>{deviceWarning}</span>
+              <button type="button" onClick={() => setDeviceWarning(null)} className="ml-2 text-xs underline opacity-70 hover:opacity-100">Ausblenden</button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ── Tagesarbeitszeit ─────────────────────────── */}
+        {status?.todayStats && status.todayStats.totalMinutes > 0 ? (
+          <TodayStatsBar stats={status.todayStats} />
+        ) : null}
 
         {/* ── Laufende Arbeit ──────────────────────────── */}
         {openWork ? (
@@ -3208,7 +3595,7 @@ function GoogleCalendarSettings({ apiFetch, setPanelSuccess, setPanelError }: {
 
 function SettingsPanel({
   settingsForm, setSettingsForm, onSettingsSubmit,
-  users, roles, userForm, setUserForm, onUserSubmit, onDeleteUser,
+  users, roles, workers, userForm, setUserForm, onUserSubmit, onDeleteUser,
   canManageUsers, submitting, apiFetch, error, success,
 }: {
   settingsForm: AppSettings;
@@ -3216,6 +3603,7 @@ function SettingsPanel({
   onSettingsSubmit: (e: FormEvent<HTMLFormElement>) => void;
   users: UserItem[];
   roles: RoleItem[];
+  workers: Worker[];
   userForm: UserFormState;
   setUserForm: Dispatch<SetStateAction<UserFormState>>;
   onUserSubmit: (e: FormEvent<HTMLFormElement>) => void;
@@ -3226,7 +3614,7 @@ function SettingsPanel({
   error: string | null;
   success: string | null;
 }) {
-  const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "company" | "pdfconfig" | "smtp" | "backup" | "gcal">("general");
+  const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "company" | "pdfconfig" | "smtp" | "backup" | "gcal" | "devices">("general");
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [rolePermissionIds, setRolePermissionIds] = useState<string[]>([]);
@@ -3334,6 +3722,7 @@ function SettingsPanel({
     { key: "smtp", label: "E-Mail / SMTP" },
     { key: "backup", label: "Backup" },
     { key: "gcal" as const, label: "Google Kalender" },
+    { key: "devices" as const, label: "Kiosk-Geraete" },
   ];
 
   const permissionsByCategory = permissions.reduce<Record<string, PermissionItem[]>>((acc, p) => {
@@ -3493,6 +3882,227 @@ function SettingsPanel({
       {settingsTab === "gcal" ? (
         <GoogleCalendarSettings apiFetch={apiFetch} setPanelSuccess={setPanelSuccess} setPanelError={setPanelError} />
       ) : null}
+
+      {settingsTab === "devices" ? (
+        <KioskDeviceSettings apiFetch={apiFetch} workers={workers} users={users} setPanelSuccess={setPanelSuccess} setPanelError={setPanelError} />
+      ) : null}
+    </div>
+  );
+}
+
+function KioskDeviceSettings({ apiFetch, workers, users, setPanelSuccess, setPanelError }: {
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  workers: Worker[];
+  users: UserItem[];
+  setPanelSuccess: Dispatch<SetStateAction<string | null>>;
+  setPanelError: Dispatch<SetStateAction<string | null>>;
+}) {
+  const [config, setConfig] = useState<DeviceBindingConfig>({ mode: "off", appliesTo: "both" });
+  const [devices, setDevices] = useState<KioskDevice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ displayName: "", notes: "", assignedWorkerId: "", assignedUserId: "" });
+  const [filter, setFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const loadData = useCallback(async () => {
+    try {
+      const [c, d] = await Promise.all([
+        apiFetch<DeviceBindingConfig>("/devices/config"),
+        apiFetch<KioskDevice[]>("/devices"),
+      ]);
+      setConfig(c);
+      setDevices(d);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, [apiFetch]);
+
+  useEffect(() => { void loadData(); }, [loadData]);
+
+  async function saveConfig() {
+    setSaving(true);
+    setPanelError(null);
+    try {
+      const updated = await apiFetch<DeviceBindingConfig>("/devices/config", {
+        method: "PUT",
+        body: JSON.stringify(config),
+      });
+      setConfig(updated);
+      setPanelSuccess("Geraetebindung gespeichert.");
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+    setSaving(false);
+  }
+
+  function startEdit(d: KioskDevice) {
+    setEditingId(d.id);
+    setEditForm({
+      displayName: d.displayName ?? "",
+      notes: d.notes ?? "",
+      assignedWorkerId: d.assignedWorkerId ?? "",
+      assignedUserId: d.assignedUserId ?? "",
+    });
+  }
+
+  async function saveDevice() {
+    if (!editingId) return;
+    setPanelError(null);
+    try {
+      await apiFetch(`/devices/${editingId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          displayName: editForm.displayName || null,
+          notes: editForm.notes || null,
+          assignedWorkerId: editForm.assignedWorkerId || null,
+          assignedUserId: editForm.assignedUserId || null,
+        }),
+      });
+      setEditingId(null);
+      setPanelSuccess("Geraet aktualisiert.");
+      await loadData();
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+  }
+
+  async function toggleActive(d: KioskDevice) {
+    setPanelError(null);
+    try {
+      await apiFetch(`/devices/${d.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: !d.active }),
+      });
+      setPanelSuccess(d.active ? "Geraet deaktiviert." : "Geraet freigegeben.");
+      await loadData();
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+  }
+
+  async function deleteDevice(id: string) {
+    setPanelError(null);
+    try {
+      await apiFetch(`/devices/${id}`, { method: "DELETE" });
+      setPanelSuccess("Geraet entfernt.");
+      await loadData();
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+  }
+
+  const filtered = devices.filter((d) => {
+    if (filter === "active") return d.active;
+    if (filter === "inactive") return !d.active;
+    return true;
+  });
+
+  const activeWorkers = workers.filter((w) => w.active !== false);
+
+  if (loading) return <SectionCard title="Kiosk-Geraete"><p className="text-sm text-slate-500">Laden...</p></SectionCard>;
+
+  return (
+    <div className="grid gap-6">
+      <SectionCard title="Geraetebindung" subtitle="Kiosk-Logins und Zeitbuchungen optional an bekannte Geraete binden.">
+        <div className="grid gap-4 md:max-w-2xl">
+          <SelectField label="Modus" value={config.mode} onChange={(e) => setConfig((c) => ({ ...c, mode: e.target.value as DeviceBindingConfig["mode"] }))}
+            options={[
+              { value: "off", label: "Geraetebindung aus" },
+              { value: "warn", label: "Unbekannte Geraete nur warnen" },
+              { value: "enforce", label: "Nur freigegebene Geraete erlauben" },
+            ]}
+          />
+          <SelectField label="Gilt fuer" value={config.appliesTo} onChange={(e) => setConfig((c) => ({ ...c, appliesTo: e.target.value as DeviceBindingConfig["appliesTo"] }))}
+            options={[
+              { value: "both", label: "Login und Zeitbuchung" },
+              { value: "login", label: "Nur Login" },
+              { value: "time", label: "Nur Zeitbuchung" },
+            ]}
+          />
+          <button type="button" disabled={saving} onClick={() => void saveConfig()}
+            className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">
+            {saving ? "Speichert ..." : "Konfiguration speichern"}
+          </button>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Bekannte Geraete" subtitle={`${devices.length} Geraet(e) registriert, ${devices.filter((d) => d.active).length} freigegeben.`}>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {(["all", "active", "inactive"] as const).map((f) => (
+            <button key={f} type="button" onClick={() => setFilter(f)}
+              className={cx("rounded-lg border px-3 py-1.5 text-xs font-medium transition",
+                filter === f
+                  ? "border-slate-900 bg-slate-900 !text-white dark:border-slate-300 dark:bg-slate-200 dark:!text-slate-950"
+                  : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+              )}>
+              {f === "all" ? "Alle" : f === "active" ? "Freigegeben" : "Nicht freigegeben"}
+            </button>
+          ))}
+        </div>
+
+        {filtered.length === 0 ? (
+          <p className="text-sm text-slate-500">Keine Geraete gefunden.</p>
+        ) : (
+          <div className="grid gap-3">
+            {filtered.map((d) => (
+              <div key={d.id} className="rounded-xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-900/60">
+                {editingId === d.id ? (
+                  <div className="grid gap-3">
+                    <FormRow>
+                      <Field label="Anzeigename" value={editForm.displayName} onChange={(e) => setEditForm((c) => ({ ...c, displayName: e.target.value }))} />
+                    </FormRow>
+                    <FormRow>
+                      <SelectField label="Zugeordneter Monteur" value={editForm.assignedWorkerId} onChange={(e) => setEditForm((c) => ({ ...c, assignedWorkerId: e.target.value }))}
+                        options={[{ value: "", label: "- Kein -" }, ...activeWorkers.map((w) => ({ value: w.id, label: `${w.firstName} ${w.lastName} (${w.workerNumber})` }))]}
+                      />
+                      <SelectField label="Zugeordneter Benutzer" value={editForm.assignedUserId} onChange={(e) => setEditForm((c) => ({ ...c, assignedUserId: e.target.value }))}
+                        options={[{ value: "", label: "- Kein -" }, ...users.filter((u) => u.isActive).map((u) => ({ value: u.id, label: `${u.displayName} (${u.email})` }))]}
+                      />
+                    </FormRow>
+                    <Field label="Notizen" value={editForm.notes} onChange={(e) => setEditForm((c) => ({ ...c, notes: e.target.value }))} />
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => void saveDevice()}
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">Speichern</button>
+                      <SecondaryButton onClick={() => setEditingId(null)}>Abbrechen</SecondaryButton>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={cx("inline-block h-2.5 w-2.5 rounded-full", d.active ? "bg-emerald-500" : "bg-slate-400")} />
+                        <span className="font-medium">{d.displayName || d.deviceUuid.slice(0, 12) + "..."}</span>
+                        <span className={cx("rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase", d.active ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400")}>
+                          {d.active ? "Freigegeben" : "Nicht freigegeben"}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
+                        {d.platform ? <span>Plattform: {d.platform}</span> : null}
+                        {d.browser ? <span>Browser: {d.browser}</span> : null}
+                        <span>Erstmals: {new Date(d.firstSeenAt).toLocaleDateString("de-DE")}</span>
+                        <span>Zuletzt: {new Date(d.lastSeenAt).toLocaleString("de-DE")}</span>
+                      </div>
+                      {d.assignedWorker ? (
+                        <div className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                          Monteur: {d.assignedWorker.firstName} {d.assignedWorker.lastName} ({d.assignedWorker.workerNumber})
+                        </div>
+                      ) : null}
+                      {d.assignedUser ? (
+                        <div className="mt-1 text-xs text-indigo-600 dark:text-indigo-400">
+                          Benutzer: {d.assignedUser.displayName} ({d.assignedUser.email})
+                        </div>
+                      ) : null}
+                      {d.notes ? <div className="mt-1 text-xs text-slate-400 italic">{d.notes}</div> : null}
+                    </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      <SecondaryButton onClick={() => startEdit(d)}>Bearbeiten</SecondaryButton>
+                      <SecondaryButton onClick={() => void toggleActive(d)}>
+                        {d.active ? "Sperren" : "Freigeben"}
+                      </SecondaryButton>
+                      <button type="button" onClick={() => void deleteDevice(d.id)}
+                        className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">
+                        Entfernen
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }
@@ -3570,6 +4180,9 @@ function PlanningCalendar({ projects, workers, teams, apiFetch, onDataChanged }:
       }
       setPlanMsg("Planung und Monteur-Zuordnungen gespeichert.");
       onDataChanged();
+      // Formular mit den tatsaechlich gespeicherten Daten aktualisieren
+      setPlanForm((c) => ({ ...c, workerIds: [...planForm.workerIds] }));
+      setSelectedProject(null);
     } catch (e) { setPlanErr(e instanceof Error ? e.message : "Fehler beim Speichern."); }
     finally { setPlanSaving(false); }
   }
@@ -5151,6 +5764,7 @@ function WorkerDetailCard({
   setDocumentForm,
   authToken,
   onUpload,
+  apiFetch,
 }: {
   worker: Worker;
   documents: DocumentItem[];
@@ -5162,7 +5776,16 @@ function WorkerDetailCard({
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
   authToken: string;
   onUpload: () => void;
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
+  const [timeStatus, setTimeStatus] = useState<WorkerTimeStatus | null>(null);
+
+  useEffect(() => {
+    void apiFetch<WorkerTimeStatus>(`/time/status?workerId=${worker.id}`)
+      .then(setTimeStatus)
+      .catch(() => setTimeStatus(null));
+  }, [apiFetch, worker.id]);
+
   const workerMapsUrl = mapsUrlFromParts([
     `${worker.firstName} ${worker.lastName}`,
     worker.addressLine1,
@@ -5241,6 +5864,22 @@ function WorkerDetailCard({
           </div>
         </div>
       </div>
+
+      {/* ── Arbeitsstatus ──────────────────────────────── */}
+      {timeStatus?.hasOpenWork && timeStatus.openEntry ? (
+        <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50/60 p-4 dark:border-emerald-500/40 dark:bg-emerald-500/5">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Arbeitet aktuell</div>
+          <div className="font-semibold">{timeStatus.openEntry.projectTitle} ({timeStatus.openEntry.projectNumber})</div>
+          <WorkerElapsedTime startedAt={timeStatus.openEntry.startedAt} />
+          {timeStatus.todayStats ? (
+            <div className="mt-2 text-sm text-slate-500">Heute gesamt: {formatMinutes(timeStatus.todayStats.totalMinutes)}</div>
+          ) : null}
+        </div>
+      ) : timeStatus?.todayStats && timeStatus.todayStats.completedMinutes > 0 ? (
+        <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+          <div className="text-sm text-slate-500">Heute gearbeitet: <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">{formatMinutes(timeStatus.todayStats.completedMinutes)}</span></div>
+        </div>
+      ) : null}
 
       {/* ── Hinweis: nur zukuenftige Projekte ───────────── */}
       {hasOnlyFuture ? (
@@ -5342,6 +5981,8 @@ function DocumentPanel({
   setDocumentForm,
   authToken,
   onUpload,
+  allowDelete = true,
+  uploadLabel = "Datei / Bild hochladen",
 }: {
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
@@ -5352,9 +5993,16 @@ function DocumentPanel({
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
   authToken: string;
   onUpload: () => void;
+  allowDelete?: boolean;
+  uploadLabel?: string;
 }) {
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
   const [thumbnailErrors, setThumbnailErrors] = useState<Record<string, string>>({});
+  const [drawingDraft, setDrawingDraft] = useState<{
+    title: string;
+    sourceUrl?: string;
+    description?: string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -5444,6 +6092,9 @@ function DocumentPanel({
         ) : (
           documents.map((document) => {
             const fileError = thumbnailErrors[document.id];
+            const uploaderLabel = document.uploadedByWorker
+              ? `${document.uploadedByWorker.firstName} ${document.uploadedByWorker.lastName} (${document.uploadedByWorker.workerNumber})`
+              : document.uploadedBy?.displayName || document.uploadedBy?.email || null;
             return (
               <div
                 key={document.id}
@@ -5471,6 +6122,11 @@ function DocumentPanel({
                     <div className="text-sm text-slate-500">
                       {document.documentType} · {document.mimeType}
                     </div>
+                    {uploaderLabel ? (
+                      <div className="text-xs text-slate-500">
+                        Hochgeladen von: {uploaderLabel}
+                      </div>
+                    ) : null}
                     {fileError ? (
                       <div className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
                         {fileError}
@@ -5488,9 +6144,24 @@ function DocumentPanel({
                   >
                     Download
                   </SecondaryButton>
-                  <SecondaryButton onClick={() => onDeleteDocument(document.id)}>
-                    Loeschen
-                  </SecondaryButton>
+                  {document.mimeType.startsWith("image/") && thumbnailUrls[document.id] ? (
+                    <SecondaryButton
+                      onClick={() =>
+                        setDrawingDraft({
+                          title: `${document.title || document.originalFilename} - Anmerkung`,
+                          sourceUrl: thumbnailUrls[document.id],
+                          description: `Anmerkung zu ${document.title || document.originalFilename}`,
+                        })
+                      }
+                    >
+                      Anmerken
+                    </SecondaryButton>
+                  ) : null}
+                  {allowDelete ? (
+                    <SecondaryButton onClick={() => onDeleteDocument(document.id)}>
+                      Loeschen
+                    </SecondaryButton>
+                  ) : null}
                 </div>
               </div>
             );
@@ -5547,7 +6218,183 @@ function DocumentPanel({
           </p>
         </div>
         <div>
-          <SecondaryButton onClick={onUpload}>Datei / Bild hochladen</SecondaryButton>
+          <SecondaryButton onClick={onUpload}>{uploadLabel}</SecondaryButton>
+        </div>
+        <div>
+          <SecondaryButton
+            onClick={() =>
+              setDrawingDraft({
+                title: "Neue Zeichnung",
+                description: "Freihandzeichnung",
+              })
+            }
+          >
+            Zeichnung erstellen
+          </SecondaryButton>
+        </div>
+      </div>
+      {drawingDraft ? (
+        <DrawingEditorModal
+          title={drawingDraft.title}
+          sourceUrl={drawingDraft.sourceUrl}
+          onClose={() => setDrawingDraft(null)}
+          onApply={(file) => {
+            setDocumentForm((current) => ({
+              ...current,
+              title: current.title || drawingDraft.title,
+              description: current.description || drawingDraft.description || "",
+              file,
+            }));
+            setDrawingDraft(null);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function DrawingEditorModal({
+  title,
+  sourceUrl,
+  onClose,
+  onApply,
+}: {
+  title: string;
+  sourceUrl?: string;
+  onClose: () => void;
+  onApply: (file: File) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const baseImageRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let drawing = false;
+
+    const drawBase = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const img = baseImageRef.current;
+      if (img) {
+        const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+        const width = img.width * scale;
+        const height = img.height * scale;
+        const x = (canvas.width - width) / 2;
+        const y = (canvas.height - height) / 2;
+        ctx.drawImage(img, x, y, width, height);
+      }
+    };
+
+    const loadImage = async () => {
+      if (!sourceUrl) {
+        baseImageRef.current = null;
+        drawBase();
+        return;
+      }
+      const img = new window.Image();
+      img.onload = () => {
+        baseImageRef.current = img;
+        drawBase();
+      };
+      img.src = sourceUrl;
+    };
+
+    const getPoint = (event: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (event.clientX - rect.left) * (canvas.width / rect.width),
+        y: (event.clientY - rect.top) * (canvas.height / rect.height),
+      };
+    };
+
+    canvas.onpointerdown = (event) => {
+      drawing = true;
+      const point = getPoint(event);
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y);
+    };
+    canvas.onpointermove = (event) => {
+      if (!drawing) return;
+      const point = getPoint(event);
+      ctx.lineTo(point.x, point.y);
+      ctx.strokeStyle = "#dc2626";
+      ctx.lineWidth = 4;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.stroke();
+    };
+    canvas.onpointerup = () => { drawing = false; };
+    canvas.onpointerleave = () => { drawing = false; };
+
+    void loadImage();
+
+    return () => {
+      canvas.onpointerdown = null;
+      canvas.onpointermove = null;
+      canvas.onpointerup = null;
+      canvas.onpointerleave = null;
+    };
+  }, [sourceUrl]);
+
+  async function applyDrawing() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((result) => resolve(result), "image/png");
+    });
+    if (!blob) return;
+    const safeName = title.toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "zeichnung";
+    onApply(new File([blob], `${safeName}.png`, { type: "image/png" }));
+  }
+
+  function clearDrawing() {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const img = baseImageRef.current;
+    if (img) {
+      const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+      const width = img.width * scale;
+      const height = img.height * scale;
+      const x = (canvas.width - width) / 2;
+      const y = (canvas.height - height) / 2;
+      ctx.drawImage(img, x, y, width, height);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col gap-4 rounded-3xl bg-white p-4 shadow-2xl dark:bg-slate-900">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold">{title}</h3>
+            <p className="text-sm text-slate-500">
+              Mit Maus oder Finger zeichnen. Das Ergebnis wird als PNG in den Upload uebernommen.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <SecondaryButton onClick={clearDrawing}>Leeren</SecondaryButton>
+            <SecondaryButton onClick={() => void applyDrawing()}>Als Datei uebernehmen</SecondaryButton>
+            <SecondaryButton onClick={onClose}>Schliessen</SecondaryButton>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-black/10 bg-slate-50 p-2 dark:border-white/10 dark:bg-slate-950">
+          <canvas
+            ref={canvasRef}
+            width={1200}
+            height={800}
+            className="mx-auto max-h-[72vh] w-full rounded-xl bg-white"
+            style={{ touchAction: "none" }}
+          />
         </div>
       </div>
     </div>

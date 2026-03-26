@@ -11,6 +11,7 @@ import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import { KIOSK_ALLOWED_KEY } from '../decorators/kiosk-allowed.decorator';
 import { RoleCode } from '@prisma/client';
 
 type AuthenticatedUser = {
@@ -18,7 +19,7 @@ type AuthenticatedUser = {
   email?: string;
   workerId?: string;
   roles: RoleCode[];
-  type: 'user' | 'worker';
+  type: 'user' | 'worker' | 'kiosk-user';
 };
 
 type RequestWithUser = Request & {
@@ -57,7 +58,7 @@ export class JwtAuthGuard implements CanActivate {
         await this.jwtService.verifyAsync<AuthenticatedUser>(token);
       request.user = payload;
 
-      if (payload.type === 'user') {
+      if (payload.type === 'user' || payload.type === 'kiosk-user') {
         const user = await this.prisma.user.findUnique({
           where: { id: payload.sub },
           include: {
@@ -87,6 +88,22 @@ export class JwtAuthGuard implements CanActivate {
 
           if (!hasRole) {
             throw new ForbiddenException('Fehlende Berechtigung.');
+          }
+        }
+
+        // kiosk-user: bei rollengeschuetzten Endpunkten nur explizit
+        // freigegebene erlauben (Endpunkte ohne @Roles bleiben offen)
+        if (payload.type === 'kiosk-user' && requiredRoles.length > 0) {
+          const kioskAllowed =
+            this.reflector.getAllAndOverride<boolean>(KIOSK_ALLOWED_KEY, [
+              context.getHandler(),
+              context.getClass(),
+            ]) ?? false;
+
+          if (!kioskAllowed) {
+            throw new ForbiddenException(
+              'Dieser Endpunkt ist fuer Kiosk-Benutzer nicht freigegeben.',
+            );
           }
         }
       }

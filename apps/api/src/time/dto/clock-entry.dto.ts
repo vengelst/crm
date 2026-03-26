@@ -34,4 +34,8 @@ export class ClockEntryDto {
   @IsOptional()
   @IsString()
   sourceDevice?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceUuid?: string;
 }

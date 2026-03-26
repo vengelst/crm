@@ -1,7 +1,23 @@
-import { IsString, Length } from 'class-validator';
+import { IsOptional, IsString, Length } from 'class-validator';
 
 export class KioskLoginDto {
   @IsString()
   @Length(4, 8)
   pin!: string;
+
+  @IsOptional()
+  @IsString()
+  deviceUuid?: string;
+
+  @IsOptional()
+  @IsString()
+  platform?: string;
+
+  @IsOptional()
+  @IsString()
+  browser?: string;
+
+  @IsOptional()
+  @IsString()
+  userAgent?: string;
 }

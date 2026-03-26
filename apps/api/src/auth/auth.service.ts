@@ -7,6 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Prisma, RoleCode } from '@prisma/client';
 import { compare } from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { DevicesService } from '../devices/devices.service';
 import { LoginDto } from './dto/login.dto';
 import { KioskLoginDto } from './dto/kiosk-login.dto';
 import { PinLoginDto } from './dto/pin-login.dto';
@@ -44,6 +45,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly devicesService: DevicesService,
   ) {}
 
   async login(dto: LoginDto) {
@@ -108,6 +110,7 @@ export class AuthService {
   }
 
   async kioskLogin(dto: KioskLoginDto) {
+    // 1. Worker-PINs pruefen
     const workers = await this.prisma.worker.findMany({
       where: {
         active: true,
@@ -115,7 +118,7 @@ export class AuthService {
       include: workerAuthInclude,
     });
 
-    const matches: WorkerAuthData[] = [];
+    const workerMatches: WorkerAuthData[] = [];
 
     for (const worker of workers) {
       const [pinRecord] = worker.pins;
@@ -125,21 +128,108 @@ export class AuthService {
 
       const pinMatches = await compare(dto.pin, pinRecord.pinHash);
       if (pinMatches) {
-        matches.push(worker);
+        workerMatches.push(worker);
       }
     }
 
-    if (matches.length === 0) {
+    // 2. User-KioskCodes pruefen (PROJECT_MANAGER als Kiosk-Benutzer)
+    const kioskUsers = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        kioskCodeHash: { not: null },
+        roles: {
+          some: {
+            role: {
+              code: { in: [RoleCode.PROJECT_MANAGER] },
+            },
+          },
+        },
+      },
+      include: {
+        roles: { include: { role: true } },
+      },
+    });
+
+    type KioskUserMatch = (typeof kioskUsers)[number];
+    const userMatches: KioskUserMatch[] = [];
+
+    for (const user of kioskUsers) {
+      if (!user.kioskCodeHash) continue;
+      const codeMatches = await compare(dto.pin, user.kioskCodeHash);
+      if (codeMatches) {
+        userMatches.push(user);
+      }
+    }
+
+    const totalMatches = workerMatches.length + userMatches.length;
+
+    if (totalMatches === 0) {
       throw new UnauthorizedException('PIN-Anmeldung fehlgeschlagen.');
     }
 
-    if (matches.length > 1) {
+    if (totalMatches > 1) {
       throw new BadRequestException(
-        'PIN ist nicht eindeutig. Bitte einem aktiven Monteur eine eindeutige PIN zuweisen.',
+        'PIN/Code ist nicht eindeutig. Bitte eindeutige PINs/Codes zuweisen.',
       );
     }
 
-    return this.createWorkerLoginResponse(matches[0]);
+    // Device touch
+    if (dto.deviceUuid) {
+      await this.devicesService.touchDevice({
+        deviceUuid: dto.deviceUuid,
+        platform: dto.platform,
+        browser: dto.browser,
+        userAgent: dto.userAgent,
+      });
+    }
+
+    // 3a. Worker-Match → bestehende Logik
+    if (workerMatches.length === 1) {
+      const worker = workerMatches[0];
+      const deviceCheck = await this.devicesService.checkDevice(
+        'login',
+        dto.deviceUuid,
+        { workerId: worker.id },
+      );
+
+      const response = await this.createWorkerLoginResponse(worker);
+      return {
+        ...response,
+        deviceWarning: deviceCheck.warning ?? null,
+      };
+    }
+
+    // 3b. User-Match → Kiosk-User-Session
+    const kioskUser = userMatches[0];
+    const deviceCheck = await this.devicesService.checkDevice(
+      'login',
+      dto.deviceUuid,
+      { userId: kioskUser.id },
+    );
+
+    const roles = kioskUser.roles.map((entry) => entry.role.code);
+    const accessToken = await this.jwtService.signAsync({
+      sub: kioskUser.id,
+      email: kioskUser.email,
+      roles,
+      type: 'kiosk-user',
+    });
+
+    return {
+      accessToken,
+      loginType: 'kiosk-user' as const,
+      user: {
+        id: kioskUser.id,
+        email: kioskUser.email,
+        displayName: kioskUser.displayName,
+        roles,
+      },
+      worker: null,
+      currentProjects: [] as ReturnType<typeof Array<never>>,
+      futureProjects: [] as ReturnType<typeof Array<never>>,
+      pastProjects: [] as ReturnType<typeof Array<never>>,
+      deviceWarning: deviceCheck.warning ?? null,
+    };
   }
 
   private async createWorkerLoginResponse(worker: WorkerAuthData) {
@@ -189,11 +279,13 @@ export class AuthService {
 
     return {
       accessToken,
+      loginType: 'worker' as const,
       worker: {
         id: worker.id,
         workerNumber: worker.workerNumber,
         name: `${worker.firstName} ${worker.lastName}`,
       },
+      user: null,
       currentProjects,
       futureProjects,
       pastProjects,

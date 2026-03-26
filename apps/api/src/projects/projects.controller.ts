@@ -12,6 +12,7 @@ import {
 import type { Response } from 'express';
 import { RoleCode } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
+import { KioskAllowed } from '../common/decorators/kiosk-allowed.decorator';
 import { AssignWorkerDto } from './dto/assign-worker.dto';
 import { SaveProjectDto } from './dto/save-project.dto';
 import { ProjectsService } from './projects.service';
@@ -22,11 +23,13 @@ export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Get()
+  @KioskAllowed()
   list() {
     return this.projectsService.list();
   }
 
   @Get(':id')
+  @KioskAllowed()
   getById(@Param('id') id: string) {
     return this.projectsService.getById(id);
   }

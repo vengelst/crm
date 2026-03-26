@@ -503,6 +503,16 @@ export class TimesheetsService {
     y -= 14;
 
     if (workerSig) {
+      const workerSigImage = await loadSignatureImage(pdf, workerSig.signatureImagePath);
+      if (workerSigImage) {
+        const dims = workerSigImage.scale(Math.min(36 / workerSigImage.height, 140 / workerSigImage.width));
+        page.drawImage(workerSigImage, {
+          x: margin,
+          y: y - dims.height + 8,
+          width: dims.width,
+          height: dims.height,
+        });
+      }
       text(
         `${workerSig.signerName} (${workerSig.signedAt.toLocaleDateString('de-DE')})`,
         margin,
@@ -513,6 +523,16 @@ export class TimesheetsService {
     }
 
     if (customerSig) {
+      const customerSigImage = await loadSignatureImage(pdf, customerSig.signatureImagePath);
+      if (customerSigImage) {
+        const dims = customerSigImage.scale(Math.min(36 / customerSigImage.height, 140 / customerSigImage.width));
+        page.drawImage(customerSigImage, {
+          x: pageWidth / 2,
+          y: y - dims.height + 8,
+          width: dims.width,
+          height: dims.height,
+        });
+      }
       text(
         `${customerSig.signerName} (${customerSig.signedAt.toLocaleDateString('de-DE')})`,
         pageWidth / 2,
@@ -521,7 +541,7 @@ export class TimesheetsService {
     } else {
       text('________________________', pageWidth / 2, 9);
     }
-    y -= 20;
+    y -= 44;
 
     // ── Fusszeile ──────────────────────────────────
     if (pdfCfg.footer) {
@@ -679,6 +699,54 @@ export class TimesheetsService {
 
 function createPdfFilename(year: number, week: number) {
   return `wochenzettel-${year}-kw${String(week).padStart(2, '0')}.pdf`;
+}
+
+async function loadSignatureImage(
+  pdf: PDFDocument,
+  signatureImagePath?: string | null,
+) {
+  if (!signatureImagePath) {
+    return null;
+  }
+
+  try {
+    if (signatureImagePath.startsWith('data:image/')) {
+      const match = signatureImagePath.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      if (!match) {
+        return null;
+      }
+      const mimeType = match[1].toLowerCase();
+      const bytes = Buffer.from(match[2], 'base64');
+      if (mimeType.includes('png')) {
+        return await pdf.embedPng(bytes);
+      }
+      if (mimeType.includes('jpg') || mimeType.includes('jpeg')) {
+        return await pdf.embedJpg(bytes);
+      }
+      return null;
+    }
+
+    if (signatureImagePath.startsWith('/')) {
+      const { existsSync, readFileSync } = await import('node:fs');
+      const { resolve } = await import('node:path');
+      const absPath = resolve(process.cwd(), signatureImagePath.slice(1));
+      if (!existsSync(absPath)) {
+        return null;
+      }
+      const bytes = readFileSync(absPath);
+      const lowerPath = signatureImagePath.toLowerCase();
+      if (lowerPath.endsWith('.png')) {
+        return await pdf.embedPng(bytes);
+      }
+      if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
+        return await pdf.embedJpg(bytes);
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 function fmtMinutes(minutes: number) {

@@ -24,7 +24,7 @@ export type Summary = {
 
 export type AuthState = {
   accessToken: string;
-  type: "user" | "worker";
+  type: "user" | "worker" | "kiosk-user";
   user: {
     id: string;
     email: string;
@@ -189,6 +189,17 @@ export type DocumentItem = {
   mimeType: string;
   createdAt: string;
   links: { entityType: string; entityId: string }[];
+  uploadedBy?: {
+    id: string;
+    displayName: string;
+    email: string;
+  } | null;
+  uploadedByWorker?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    workerNumber: string;
+  } | null;
 };
 
 export type TeamItem = {
@@ -369,10 +380,37 @@ export type WorkerTimeStatus = {
     longitude?: number | null;
     locationSource?: string | null;
   } | null;
+  todayStats?: {
+    completedMinutes: number;
+    openSinceMinutes: number;
+    totalMinutes: number;
+  };
 };
 
 export type PermissionItem = { id: string; code: string; name: string; category: string };
 export type SmtpFormState = { host: string; port: string; user: string; password: string; fromEmail: string; secure: boolean };
+
+export type KioskDevice = {
+  id: string;
+  deviceUuid: string;
+  displayName: string | null;
+  platform: string | null;
+  browser: string | null;
+  userAgent: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  active: boolean;
+  notes: string | null;
+  assignedWorkerId: string | null;
+  assignedUserId: string | null;
+  assignedWorker?: { id: string; workerNumber: string; firstName: string; lastName: string } | null;
+  assignedUser?: { id: string; displayName: string; email: string } | null;
+};
+
+export type DeviceBindingConfig = {
+  mode: 'off' | 'warn' | 'enforce';
+  appliesTo: 'login' | 'time' | 'both';
+};
 
 export const API_ROOT = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
 export const AUTH_STORAGE_KEY = "crm-admin-auth";

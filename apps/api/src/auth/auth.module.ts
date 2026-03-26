@@ -4,11 +4,13 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { DevicesModule } from '../devices/devices.module';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @Module({
   imports: [
     PrismaModule,
+    DevicesModule,
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET ?? 'change-me',
