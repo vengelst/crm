@@ -331,3 +331,40 @@ export function TextArea({
     </div>
   );
 }
+
+// ── Druckfunktion ───────────────────────────────────
+
+export function PrintButton({ onClick, label = "Drucken" }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+    >
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+      </svg>
+      {label}
+    </button>
+  );
+}
+
+export function openPrintWindow(title: string, htmlContent: string) {
+  const win = window.open("", "_blank", "width=800,height=600");
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; margin: 20px; color: #1e293b; font-size: 13px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  h2 { font-size: 15px; margin: 16px 0 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+  th { font-weight: 600; color: #64748b; font-size: 11px; text-transform: uppercase; }
+  .meta { color: #64748b; font-size: 12px; }
+  .grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 16px; }
+  .label { color: #64748b; }
+  @media print { body { margin: 0; } }
+</style></head><body>${htmlContent}</body></html>`);
+  win.document.close();
+  win.setTimeout(() => { win.print(); }, 300);
+}

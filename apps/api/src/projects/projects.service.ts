@@ -230,6 +230,92 @@ export class ProjectsService {
     });
   }
 
+  async setAssignments(
+    projectId: string,
+    data: { workerIds: string[]; startDate: string; endDate?: string },
+  ) {
+    await this.getById(projectId);
+
+    const newStart = new Date(data.startDate);
+    const newEnd = data.endDate ? new Date(data.endDate) : null;
+
+    // Ueberschneidungspruefung fuer jeden Worker (gleiche Logik wie assignWorker)
+    for (const workerId of data.workerIds) {
+      const existing = await this.prisma.projectAssignment.findMany({
+        where: {
+          workerId,
+          active: true,
+          NOT: { projectId }, // Eigenes Projekt ausschliessen
+        },
+        include: { project: true },
+      });
+
+      for (const assignment of existing) {
+        const exStart = assignment.startDate;
+        const exEnd = assignment.endDate;
+        const startBeforeExEnd = !exEnd || newStart < exEnd;
+        const endAfterExStart = !newEnd || newEnd > exStart;
+
+        if (startBeforeExEnd && endAfterExStart) {
+          const projectLabel = `${assignment.project.projectNumber} – ${assignment.project.title}`;
+          throw new BadRequestException(
+            `Zeitueberschneidung: Monteur ist bereits dem Projekt "${projectLabel}" zugeordnet ` +
+              `(${exStart.toISOString().slice(0, 10)} bis ${exEnd ? exEnd.toISOString().slice(0, 10) : 'offen'}).`,
+          );
+        }
+      }
+    }
+
+    // Bestehende Zuordnungen fuer dieses Projekt laden
+    const currentAssignments = await this.prisma.projectAssignment.findMany({
+      where: { projectId },
+    });
+
+    const currentWorkerIds = new Set(
+      currentAssignments.map((a) => a.workerId),
+    );
+    const newWorkerIds = new Set(data.workerIds);
+
+    // 1. Entfernte Worker loeschen
+    const removedIds = currentAssignments
+      .filter((a) => !newWorkerIds.has(a.workerId))
+      .map((a) => a.id);
+    if (removedIds.length > 0) {
+      await this.prisma.projectAssignment.deleteMany({
+        where: { id: { in: removedIds } },
+      });
+    }
+
+    // 2. Bestehende Worker aktualisieren (nur Datum, Metadaten bleiben)
+    for (const assignment of currentAssignments) {
+      if (newWorkerIds.has(assignment.workerId)) {
+        await this.prisma.projectAssignment.update({
+          where: { id: assignment.id },
+          data: {
+            startDate: newStart,
+            endDate: newEnd ?? undefined,
+          },
+        });
+      }
+    }
+
+    // 3. Neue Worker anlegen (ohne Metadaten)
+    for (const workerId of data.workerIds) {
+      if (!currentWorkerIds.has(workerId)) {
+        await this.prisma.projectAssignment.create({
+          data: {
+            projectId,
+            workerId,
+            startDate: newStart,
+            endDate: newEnd ?? undefined,
+          },
+        });
+      }
+    }
+
+    return this.getById(projectId);
+  }
+
   async getFinancials(id: string) {
     const project = await this.prisma.project.findFirst({
       where: { id, deletedAt: null },

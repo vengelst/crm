@@ -310,14 +310,72 @@ export class TimesheetsService {
       });
     };
 
-    // ── Kopfzeile ──────────────────────────────────
-    if (pdfCfg.header) {
-      text(String(pdfCfg.header), margin, 8);
-      y -= 14;
+    // ── Logo + Kopfzeile als H1 ─────────────────────
+    const logoRow = await this.prisma.setting.findUnique({
+      where: { key: 'company.logoPath' },
+    });
+    const logoPath =
+      typeof logoRow?.valueJson === 'string' ? logoRow.valueJson : null;
+
+    if (pdfCfg.useLogo && logoPath) {
+      const { existsSync: fileExists, readFileSync: readFile } =
+        await import('node:fs');
+      const { resolve: resolvePath } = await import('node:path');
+      const absLogoPath = resolvePath(process.cwd(), 'storage', logoPath);
+      if (fileExists(absLogoPath)) {
+        try {
+          const logoBytes = readFile(absLogoPath);
+          const isPng = logoPath.toLowerCase().endsWith('.png');
+          const logoImage = isPng
+            ? await pdf.embedPng(logoBytes)
+            : await pdf.embedJpg(logoBytes);
+          const logoDims = logoImage.scale(
+            Math.min(60 / logoImage.height, 150 / logoImage.width),
+          );
+          page.drawImage(logoImage, {
+            x: margin,
+            y: y - logoDims.height + 10,
+            width: logoDims.width,
+            height: logoDims.height,
+          });
+          // Header text next to logo
+          if (pdfCfg.header) {
+            page.drawText(pdfCfg.header, {
+              x: margin + logoDims.width + 15,
+              y: y - 5,
+              size: 22,
+              font: boldFont,
+            });
+          }
+          y -= logoDims.height + 10;
+        } catch {
+          // Logo embed failed — render header only
+          if (pdfCfg.header) {
+            page.drawText(pdfCfg.header, {
+              x: margin,
+              y,
+              size: 22,
+              font: boldFont,
+            });
+            y -= 30;
+          }
+        }
+      } else if (pdfCfg.header) {
+        page.drawText(pdfCfg.header, {
+          x: margin,
+          y,
+          size: 22,
+          font: boldFont,
+        });
+        y -= 30;
+      }
+    } else if (pdfCfg.header) {
+      page.drawText(pdfCfg.header, { x: margin, y, size: 22, font: boldFont });
+      y -= 30;
     }
 
     // ── Titel ──────────────────────────────────────
-    text('Wochen-Stundenzettel', margin, 18, boldFont);
+    text('Wochen-Stundenzettel', margin, 16, boldFont);
     y -= 8;
     text(`KW ${sheet.weekNumber} / ${sheet.weekYear}`, margin + 250, 12);
     y -= 26;

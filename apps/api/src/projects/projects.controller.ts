@@ -6,7 +6,10 @@ import {
   Param,
   Patch,
   Post,
+  Put,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { RoleCode } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AssignWorkerDto } from './dto/assign-worker.dto';
@@ -48,8 +51,57 @@ export class ProjectsController {
     return this.projectsService.assignWorker(id, dto);
   }
 
+  @Put(':id/assignments')
+  setAssignments(
+    @Param('id') id: string,
+    @Body() body: { workerIds: string[]; startDate: string; endDate?: string },
+  ) {
+    return this.projectsService.setAssignments(id, body);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.projectsService.remove(id);
+  }
+
+  @Get('export/ical')
+  async exportIcal(@Res() response: Response) {
+    const projects = await this.projectsService.list();
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//CRM Monteur//Projekte//DE',
+    ];
+    for (const p of projects) {
+      if (!p.plannedStartDate) continue;
+      const start =
+        new Date(p.plannedStartDate)
+          .toISOString()
+          .replace(/[-:]/g, '')
+          .slice(0, 15) + 'Z';
+      const end = p.plannedEndDate
+        ? new Date(p.plannedEndDate)
+            .toISOString()
+            .replace(/[-:]/g, '')
+            .slice(0, 15) + 'Z'
+        : start;
+      lines.push(
+        'BEGIN:VEVENT',
+        `DTSTART:${start}`,
+        `DTEND:${end}`,
+        `SUMMARY:${p.projectNumber} - ${p.title}`,
+        `DESCRIPTION:Kunde: ${p.customer?.companyName ?? '-'}`,
+        `LOCATION:${[p.siteAddressLine1, p.siteCity].filter(Boolean).join(', ')}`,
+        `UID:${p.id}@crm-monteur`,
+        'END:VEVENT',
+      );
+    }
+    lines.push('END:VCALENDAR');
+    response.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    response.setHeader(
+      'Content-Disposition',
+      'attachment; filename="projekte.ics"',
+    );
+    response.send(lines.join('\r\n'));
   }
 }

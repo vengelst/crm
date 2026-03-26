@@ -5,6 +5,7 @@ export type AppSection =
   | "customers"
   | "projects"
   | "workers"
+  | "planning"
   | "reports"
   | "settings"
   | "users";

@@ -38,7 +38,9 @@ import {
   NavLink, IconNavLink, PrimaryButton, SecondaryButton,
   SectionCard, InfoCard, MessageBar, MiniStat, MapLinkButton,
   FormRow, Field, SelectField, TextArea,
+  PrintButton, openPrintWindow,
 } from "./crm-app/shared";
+import { KioskLoginScreen } from "./crm-app/login";
 
 // Re-export types for page files that import CrmAppProps
 export type { CrmAppProps } from "./crm-app/types";
@@ -839,91 +841,19 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
   if (!auth) {
     return (
-      <div className="min-h-screen bg-slate-100 px-4 py-10 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
-        <div className="mx-auto flex max-w-5xl flex-col gap-6">
-          <div className="flex items-center justify-between rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
-            <div>
-              <p className="text-sm uppercase tracking-[0.2em] text-slate-500">CRM Monteur Plattform</p>
-              <h1 className="text-3xl font-semibold">Anmeldung</h1>
-            </div>
-            <ThemeToggle />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => { setLoginTab("admin"); setError(null); setSuccess(null); }}
-              className={cx(
-                "rounded-xl border px-4 py-2 text-sm font-medium transition",
-                loginTab === "admin"
-                  ? "border-slate-900 bg-slate-900 !text-white dark:border-slate-300 dark:bg-slate-200 dark:!text-slate-950"
-                  : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
-              )}
-            >
-              Benutzer-Anmeldung
-            </button>
-            <button
-              type="button"
-              onClick={() => { setLoginTab("kiosk"); setError(null); setSuccess(null); }}
-              className={cx(
-                "rounded-xl border px-4 py-2 text-sm font-medium transition",
-                loginTab === "kiosk"
-                  ? "border-slate-900 bg-slate-900 !text-white dark:border-slate-300 dark:bg-slate-200 dark:!text-slate-950"
-                  : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
-              )}
-            >
-              Kiosk / Monteur
-            </button>
-          </div>
-
-          {loginTab === "admin" ? (
-            <form
-              onSubmit={handleLogin}
-              className="grid gap-4 rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
-            >
-              <FormRow>
-                <Field
-                  label="E-Mail"
-                  value={loginEmail}
-                  autoComplete="username"
-                  onChange={(event) => setLoginEmail(event.target.value)}
-                />
-                <Field
-                  label="Passwort"
-                  type="password"
-                  value={loginPassword}
-                  autoComplete="current-password"
-                  onChange={(event) => setLoginPassword(event.target.value)}
-                />
-              </FormRow>
-              <PrimaryButton disabled={submitting}>
-                {submitting ? "Anmeldung laeuft ..." : "Anmelden"}
-              </PrimaryButton>
-              <MessageBar error={error} success={success} />
-            </form>
-          ) : (
-            <form
-              onSubmit={handleKioskLogin}
-              className="grid gap-4 rounded-3xl border border-black/10 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
-            >
-              <Field
-                label="Monteur-PIN"
-                type="password"
-                value={loginPin}
-                autoComplete="off"
-                onChange={(event) => setLoginPin(event.target.value)}
-              />
-              <p className="text-xs text-slate-500">
-                Monteure und Projektleiter melden sich ausschliesslich per PIN an. Die PIN muss eindeutig vergeben sein.
-              </p>
-              <PrimaryButton disabled={submitting}>
-                {submitting ? "Anmeldung laeuft ..." : "Monteur anmelden"}
-              </PrimaryButton>
-              <MessageBar error={error} success={success} />
-            </form>
-          )}
-        </div>
-      </div>
+      <KioskLoginScreen
+        loginPin={loginPin}
+        setLoginPin={setLoginPin}
+        loginEmail={loginEmail}
+        setLoginEmail={setLoginEmail}
+        loginPassword={loginPassword}
+        setLoginPassword={setLoginPassword}
+        submitting={submitting}
+        error={error}
+        success={success}
+        onKioskLogin={handleKioskLogin}
+        onAdminLogin={handleLogin}
+      />
     );
   }
 
@@ -961,6 +891,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
             </NavLink>
             <NavLink href="/workers" active={section === "workers"}>
               Monteure
+            </NavLink>
+            <NavLink href="/planning" active={section === "planning"}>
+              Planung
             </NavLink>
             <NavLink href="/reports" active={section === "reports"}>
               Auswertung
@@ -1441,6 +1374,12 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </>
               ) : (
                 <SectionCard title="Projektliste" subtitle="Klick auf den Projekttitel oeffnet die Projektseite.">
+                  <div className="mb-3 flex justify-end">
+                    <PrintButton onClick={() => {
+                      const rows = projects.map((p) => `<tr><td>${p.projectNumber}</td><td>${p.title}</td><td>${p.customer?.companyName ?? "-"}</td><td>${p.status ?? "-"}</td><td>${p.plannedStartDate?.slice(0, 10) ?? "-"} - ${p.plannedEndDate?.slice(0, 10) ?? "offen"}</td></tr>`).join("");
+                      openPrintWindow("Projektliste", `<h1>Projektliste</h1><p class="meta">${projects.length} Projekte</p><table><thead><tr><th>Nr.</th><th>Titel</th><th>Kunde</th><th>Status</th><th>Zeitraum</th></tr></thead><tbody>${rows}</tbody></table>`);
+                    }} label="Liste drucken" />
+                  </div>
                   <EntityList
                     items={projects}
                     title={(item) => item.title}
@@ -2015,6 +1954,10 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
           </>
         ) : null}
 
+        {section === "planning" ? (
+          <PlanningCalendar projects={projects} workers={workers} teams={teams} apiFetch={apiFetch} onDataChanged={() => void loadData()} />
+        ) : null}
+
         {section === "reports" ? (
           <ReportsSection
             customers={customers}
@@ -2396,14 +2339,49 @@ function WorkerTimesheetSection({
   );
 }
 
-function KioskProjectView({ project, financials, timesheets, apiFetch }: {
+function KioskProjectView({ project, timesheets, apiFetch, workerId, authToken }: {
   project: Project;
-  financials: ProjectFinancials | null;
   timesheets: TimesheetItem[];
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  workerId: string;
+  authToken: string;
 }) {
-  const fmt = (v?: number | null) => v != null ? `${v.toFixed(2)} EUR` : "-";
-  const hasPricing = project.weeklyFlatRate != null || project.hourlyRateUpTo40h != null;
+  // Nur eigene, aktuelle (nicht abgeschlossene) Stundenzettel
+  const myCurrentTimesheets = timesheets.filter((ts) =>
+    ts.worker?.id === workerId &&
+    ts.status !== "COMPLETED" &&
+    ts.status !== "LOCKED",
+  );
+
+  // Dokumente fuer dieses Projekt laden
+  const [projectDocs, setProjectDocs] = useState<DocumentItem[]>([]);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [docMsg, setDocMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    void apiFetch<DocumentItem[]>(`/documents?entityType=PROJECT&entityId=${project.id}`).then(setProjectDocs).catch(() => {});
+  }, [apiFetch, project.id]);
+
+  async function uploadDoc() {
+    if (!docFile) return;
+    setUploading(true); setDocMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", docFile);
+      fd.append("documentType", "PROJEKTDOKUMENT");
+      fd.append("entityType", "PROJECT");
+      fd.append("entityId", project.id);
+      await apiFetch("/documents/upload", { method: "POST", body: fd, headers: {} });
+      setDocMsg("Dokument hochgeladen.");
+      setDocFile(null);
+      const docs = await apiFetch<DocumentItem[]>(`/documents?entityType=PROJECT&entityId=${project.id}`);
+      setProjectDocs(docs);
+    } catch (e) { setDocMsg(e instanceof Error ? e.message : "Upload fehlgeschlagen."); }
+    finally { setUploading(false); }
+  }
+
+  const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
 
   return (
     <div className="grid gap-5">
@@ -2414,51 +2392,80 @@ function KioskProjectView({ project, financials, timesheets, apiFetch }: {
         <div className="mt-2 grid gap-1 text-sm text-slate-500">
           <div>{project.status ?? "-"}</div>
           <div>{formatAddress([project.siteAddressLine1, project.sitePostalCode, project.siteCity, project.siteCountry]) || "Keine Projektadresse"}</div>
+          {project.description ? <div className="mt-1">{project.description}</div> : null}
+          {project.plannedStartDate ? (
+            <div>Zeitraum: {project.plannedStartDate.slice(0, 10)} bis {project.plannedEndDate?.slice(0, 10) ?? "offen"}</div>
+          ) : null}
         </div>
       </div>
 
-      {/* Preise */}
-      {hasPricing ? (
-        <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-          <h4 className="mb-3 text-base font-semibold">Projektpreise</h4>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            <span className="text-slate-500">Wochenpauschale</span><span className="font-mono">{fmt(project.weeklyFlatRate)}</span>
-            <span className="text-slate-500">Inklusivstunden</span><span className="font-mono">{project.includedHoursPerWeek != null ? `${project.includedHoursPerWeek} h` : "-"}</span>
-            <span className="text-slate-500">Stundensatz</span><span className="font-mono">{fmt(project.hourlyRateUpTo40h)}</span>
-            <span className="text-slate-500">Ueberstundensatz</span><span className="font-mono">{fmt(project.overtimeRate)}</span>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Monteure */}
+      {/* Team / zugeordnete Monteure */}
       {(project.assignments ?? []).length > 0 ? (
         <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-          <h4 className="mb-3 text-base font-semibold">Zugeordnete Monteure</h4>
-          <div className="grid gap-2">
+          <h4 className="mb-2 text-sm font-semibold">Mein Team</h4>
+          <div className="flex flex-wrap gap-2">
             {(project.assignments ?? []).map((a) => (
-              <div key={a.id} className="flex items-center justify-between rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
-                <span className="font-medium">{a.worker.firstName} {a.worker.lastName}</span>
-                <span className="text-xs text-slate-500">{a.worker.workerNumber}</span>
-              </div>
+              <span key={a.id} className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium dark:bg-slate-800">
+                {a.worker.firstName} {a.worker.lastName}
+              </span>
             ))}
           </div>
         </div>
       ) : null}
 
-      {/* Auswertung */}
-      {financials ? (
+      {/* Projektdokumente (kein Loeschen fuer Monteur) */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h4 className="mb-3 text-sm font-semibold">Projektdokumente</h4>
+        {docMsg ? <div className="mb-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{docMsg}</div> : null}
+        {projectDocs.length > 0 ? (
+          <div className="grid gap-2">
+            {projectDocs.map((doc) => (
+              <div key={doc.id} className="flex items-center justify-between rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{doc.title || doc.originalFilename}</div>
+                  <div className="text-xs text-slate-500">{doc.mimeType}</div>
+                </div>
+                <a href={`${apiRoot}/api/documents/${doc.id}/download`}
+                  target="_blank" rel="noreferrer"
+                  className="shrink-0 rounded-lg border border-black/10 px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800">
+                  Oeffnen
+                </a>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">Keine Dokumente vorhanden.</p>
+        )}
+        <div className="mt-3 grid gap-2">
+          <input type="file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
+            onChange={(e) => setDocFile(e.target.files?.[0] ?? null)}
+            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs dark:border-white/10 dark:bg-slate-900" />
+          {docFile ? (
+            <button type="button" disabled={uploading} onClick={() => void uploadDoc()}
+              className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white">
+              {uploading ? "Hochladen..." : "Dokument hochladen"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Nur eigener aktueller Stundenzettel (nicht abgeschlossene) */}
+      {myCurrentTimesheets.length > 0 ? (
         <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-          <h4 className="mb-3 text-base font-semibold">Auswertung</h4>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <FinancialKpi label="Stunden" value={`${financials.totalHours} h`} />
-            <FinancialKpi label="Umsatz" value={`${financials.totalRevenue.toFixed(2)} EUR`} highlight />
-            <FinancialKpi label="Kosten" value={`${financials.totalCosts.toFixed(2)} EUR`} />
+          <h4 className="mb-3 text-sm font-semibold">Mein aktueller Stundenzettel</h4>
+          <div className="grid gap-2">
+            {myCurrentTimesheets.map((ts) => (
+              <div key={ts.id} className="rounded-xl border border-black/10 p-3 dark:border-white/10">
+                <div className="font-medium">KW {ts.weekNumber} / {ts.weekYear}</div>
+                <div className="text-xs text-slate-500">
+                  {Math.floor(ts.totalMinutesNet / 60)}h {ts.totalMinutesNet % 60}m netto ·
+                  {ts.status === "DRAFT" ? " Entwurf" : ts.status === "WORKER_SIGNED" ? " Monteur signiert" : ` ${ts.status}`}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       ) : null}
-
-      {/* Stundenzettel */}
-      <TimesheetList timesheets={timesheets} apiFetch={apiFetch} />
     </div>
   );
 }
@@ -2700,13 +2707,11 @@ function WorkerTimeView({
   const allProjects = [...currentProjects, ...futureProjects];
   const viewingProject = viewingProjectId ? allProjects.find((p) => p.id === viewingProjectId) ?? null : null;
   const [kioskProjectDetail, setKioskProjectDetail] = useState<Project | null>(null);
-  const [kioskProjectFinancials, setKioskProjectFinancials] = useState<ProjectFinancials | null>(null);
   const [kioskTimesheets, setKioskTimesheets] = useState<TimesheetItem[]>([]);
 
   useEffect(() => {
-    if (!viewingProjectId) { setKioskProjectDetail(null); setKioskProjectFinancials(null); setKioskTimesheets([]); return; }
+    if (!viewingProjectId) { setKioskProjectDetail(null); setKioskTimesheets([]); return; }
     void apiFetch<Project>(`/projects/${viewingProjectId}`).then(setKioskProjectDetail).catch(() => {});
-    void apiFetch<ProjectFinancials>(`/projects/${viewingProjectId}/financials`).then(setKioskProjectFinancials).catch(() => {});
     void apiFetch<TimesheetItem[]>(`/timesheets/weekly?projectId=${viewingProjectId}`).then(setKioskTimesheets).catch(() => {});
   }, [apiFetch, viewingProjectId]);
 
@@ -2727,7 +2732,7 @@ function WorkerTimeView({
             </div>
           ) : null}
 
-          <KioskProjectView project={kioskProjectDetail} financials={kioskProjectFinancials} timesheets={kioskTimesheets} apiFetch={apiFetch} />
+          <KioskProjectView project={kioskProjectDetail} timesheets={kioskTimesheets} apiFetch={apiFetch} workerId={workerId} authToken={auth.accessToken} />
         </div>
       </div>
     );
@@ -2879,6 +2884,325 @@ function WorkerTimeView({
 }
 
 
+function CompanySettingsTab({ companyForm, setCompanyForm, onSave, submitting, apiFetch, setPanelSuccess, setPanelError }: {
+  companyForm: { name: string; street: string; postalCode: string; city: string; country: string; phone: string; email: string; website: string };
+  setCompanyForm: Dispatch<SetStateAction<typeof companyForm>>;
+  onSave: (e: FormEvent<HTMLFormElement>) => void;
+  submitting: boolean;
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  setPanelSuccess: (v: string | null) => void;
+  setPanelError: (v: string | null) => void;
+}) {
+  const [logoPath, setLogoPath] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    void apiFetch<{ path: string | null }>("/settings/logo").then((r) => setLogoPath(r.path)).catch(() => {});
+  }, [apiFetch]);
+
+  async function uploadLogo(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await apiFetch<{ path: string }>("/settings/logo", { method: "POST", body: fd, headers: {} });
+      setLogoPath(r.path);
+      setPanelSuccess("Logo hochgeladen.");
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Upload fehlgeschlagen."); }
+    finally { setUploading(false); }
+  }
+
+  async function deleteLogo() {
+    try {
+      await apiFetch("/settings/logo", { method: "DELETE" });
+      setLogoPath(null);
+      setPanelSuccess("Logo entfernt.");
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler."); }
+  }
+
+  const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
+
+  return (
+    <div className="grid gap-6">
+      <SectionCard title="Firmeninformationen" subtitle="Diese Daten erscheinen auf Stundenzetteln und PDFs.">
+        <form className="grid gap-4 md:max-w-2xl" onSubmit={onSave}>
+          <Field label="Firmenname" value={companyForm.name} onChange={(e) => setCompanyForm((c) => ({ ...c, name: e.target.value }))} />
+          <Field label="Strasse / Hausnummer" value={companyForm.street} onChange={(e) => setCompanyForm((c) => ({ ...c, street: e.target.value }))} />
+          <FormRow>
+            <Field label="PLZ" value={companyForm.postalCode} onChange={(e) => setCompanyForm((c) => ({ ...c, postalCode: e.target.value }))} />
+            <Field label="Ort" value={companyForm.city} onChange={(e) => setCompanyForm((c) => ({ ...c, city: e.target.value }))} />
+          </FormRow>
+          <Field label="Land" value={companyForm.country} onChange={(e) => setCompanyForm((c) => ({ ...c, country: e.target.value }))} />
+          <FormRow>
+            <Field label="Telefon" value={companyForm.phone} onChange={(e) => setCompanyForm((c) => ({ ...c, phone: e.target.value }))} />
+            <Field label="E-Mail" value={companyForm.email} onChange={(e) => setCompanyForm((c) => ({ ...c, email: e.target.value }))} />
+          </FormRow>
+          <Field label="Website" value={companyForm.website} onChange={(e) => setCompanyForm((c) => ({ ...c, website: e.target.value }))} />
+          <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "Firmeninformationen speichern"}</PrimaryButton>
+        </form>
+      </SectionCard>
+
+      <SectionCard title="Firmenlogo" subtitle="Logo fuer Stundenzettel und PDF-Dokumente.">
+        <div className="grid gap-4">
+          {logoPath ? (
+            <div className="flex items-center gap-4">
+              <img src={`${apiRoot}/api/settings/logo/file?t=${Date.now()}`} alt="Logo" className="h-16 rounded-lg border border-black/10 dark:border-white/10" />
+              <div className="grid gap-2">
+                <p className="text-sm text-slate-500">Logo vorhanden</p>
+                <SecondaryButton onClick={() => void deleteLogo()}>Logo entfernen</SecondaryButton>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Kein Logo hinterlegt.</p>
+          )}
+          <div className="grid gap-2">
+            <label className="text-sm font-medium">{logoPath ? "Logo ersetzen" : "Logo hochladen"}</label>
+            <input type="file" accept="image/png,image/jpeg" disabled={uploading}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); }}
+              className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" />
+          </div>
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+type BackupEntry = { id: string; createdAt: string; hasDatabase: boolean; databaseStatus?: string; hasSettings: boolean; settingsStatus?: string; hasDocuments: boolean; documentsStatus?: string; sizeBytes: number };
+
+function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, submitting, apiFetch, setPanelSuccess, setPanelError }: {
+  backupForm: { enabled: boolean; interval: string; time: string; keepCount: string };
+  setBackupForm: Dispatch<SetStateAction<typeof backupForm>>;
+  onSaveConfig: (e: FormEvent<HTMLFormElement>) => void;
+  submitting: boolean;
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  setPanelSuccess: (v: string | null) => void;
+  setPanelError: (v: string | null) => void;
+}) {
+  const [backups, setBackups] = useState<BackupEntry[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [restoreId, setRestoreId] = useState<string | null>(null);
+  const [restoreOpts, setRestoreOpts] = useState({ database: true, documents: true, settings: true });
+  const [restoring, setRestoring] = useState(false);
+
+  const loadBackups = useCallback(async () => {
+    try { const list = await apiFetch<BackupEntry[]>("/settings/backup/list"); setBackups(list); } catch { /* skip */ }
+  }, [apiFetch]);
+
+  useEffect(() => { void loadBackups(); }, [loadBackups]);
+
+  async function createBackup() {
+    setCreating(true); setPanelError(null);
+    try {
+      await apiFetch("/settings/backup/create", { method: "POST" });
+      setPanelSuccess("Backup erstellt.");
+      await loadBackups();
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Backup fehlgeschlagen."); }
+    finally { setCreating(false); }
+  }
+
+  async function deleteBackup(id: string) {
+    if (!window.confirm("Backup wirklich loeschen?")) return;
+    try {
+      await apiFetch(`/settings/backup/${id}`, { method: "DELETE" });
+      setPanelSuccess("Backup geloescht.");
+      await loadBackups();
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler."); }
+  }
+
+  async function restore() {
+    if (!restoreId) return;
+    if (!window.confirm("ACHTUNG: Ausgewaehlte Daten werden ueberschrieben. Fortfahren?")) return;
+    setRestoring(true); setPanelError(null);
+    try {
+      const r = await apiFetch<{ restored: string[] }>(`/settings/backup/${restoreId}/restore`, {
+        method: "POST",
+        body: JSON.stringify(restoreOpts),
+      });
+      setPanelSuccess(r.restored.join(" "));
+      setRestoreId(null);
+    } catch (e) { setPanelError(e instanceof Error ? e.message : "Restore fehlgeschlagen."); }
+    finally { setRestoring(false); }
+  }
+
+  function fmtSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1048576).toFixed(1)} MB`;
+  }
+
+  return (
+    <div className="grid gap-6">
+      <SectionCard title="Manuelles Backup" subtitle="Erstellt ein Backup von Datenbank, Dokumenten und Einstellungen.">
+        <button type="button" disabled={creating} onClick={() => void createBackup()}
+          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white">
+          {creating ? "Erstelle Backup ..." : "Backup jetzt erstellen"}
+        </button>
+      </SectionCard>
+
+      <SectionCard title="Vorhandene Backups" subtitle={`${backups.length} Backup(s) gespeichert.`}>
+        {backups.length === 0 ? (
+          <p className="text-sm text-slate-500">Noch keine Backups vorhanden.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
+                  <th className="pb-2 pr-2">ID</th>
+                  <th className="pb-2 pr-2">Erstellt</th>
+                  <th className="pb-2 pr-2">Inhalt</th>
+                  <th className="pb-2 pr-2 text-right">Groesse</th>
+                  <th className="pb-2">Aktionen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backups.map((b) => (
+                  <tr key={b.id} className="border-b border-black/5 dark:border-white/5">
+                    <td className="py-2 pr-2 font-mono text-xs">{b.id}</td>
+                    <td className="py-2 pr-2 text-xs">{new Date(b.createdAt).toLocaleString("de-DE")}</td>
+                    <td className="py-2 pr-2 text-xs">
+                      <span className={b.hasDatabase ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}>DB:{b.hasDatabase ? "OK" : "Fehler"}</span>
+                      {" "}
+                      <span className={b.hasSettings ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}>Set:{b.hasSettings ? "OK" : "Fehler"}</span>
+                      {" "}
+                      <span className={b.hasDocuments ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}>Dok:{b.hasDocuments ? "OK" : "-"}</span>
+                    </td>
+                    <td className="py-2 pr-2 text-right font-mono text-xs">{fmtSize(b.sizeBytes)}</td>
+                    <td className="py-2 text-xs">
+                      <div className="flex gap-1">
+                        <button type="button" onClick={() => { setRestoreId(b.id); setRestoreOpts({ database: true, documents: true, settings: true }); }}
+                          className="rounded border border-emerald-300 px-1.5 py-0.5 text-[10px] text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500/30 dark:text-emerald-400">Restore</button>
+                        <button type="button" onClick={() => void deleteBackup(b.id)}
+                          className="rounded border border-red-300 px-1.5 py-0.5 text-[10px] text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400">Loeschen</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
+
+      {restoreId ? (
+        <SectionCard title="Wiederherstellung" subtitle={`Backup ${restoreId} wiederherstellen.`}>
+          <div className="grid gap-4">
+            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-amber-400">
+              Achtung: Die ausgewaehlten Daten werden mit dem Backup-Stand ueberschrieben.
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={restoreOpts.database} onChange={(e) => setRestoreOpts((c) => ({ ...c, database: e.target.checked }))} /> Datenbank</label>
+              <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={restoreOpts.documents} onChange={(e) => setRestoreOpts((c) => ({ ...c, documents: e.target.checked }))} /> Dokumente</label>
+              <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={restoreOpts.settings} onChange={(e) => setRestoreOpts((c) => ({ ...c, settings: e.target.checked }))} /> Einstellungen</label>
+            </div>
+            <div className="flex gap-3">
+              <button type="button" disabled={restoring} onClick={() => void restore()}
+                className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-60">
+                {restoring ? "Stelle wieder her ..." : "Wiederherstellen"}
+              </button>
+              <SecondaryButton onClick={() => setRestoreId(null)}>Abbrechen</SecondaryButton>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
+
+      <SectionCard title="Automatische Backups" subtitle="Zeitgesteuerte Datensicherung konfigurieren.">
+        <form className="grid gap-4 md:max-w-2xl" onSubmit={onSaveConfig}>
+          <label className="inline-flex items-center gap-3 text-sm font-medium">
+            <input type="checkbox" checked={backupForm.enabled} onChange={(e) => setBackupForm((c) => ({ ...c, enabled: e.target.checked }))} />
+            Automatische Backups aktiviert
+          </label>
+          <FormRow>
+            <SelectField label="Intervall" value={backupForm.interval} onChange={(e) => setBackupForm((c) => ({ ...c, interval: e.target.value }))}
+              options={[{ value: "daily", label: "Taeglich" }, { value: "weekly", label: "Woechentlich" }, { value: "monthly", label: "Monatlich" }]} />
+            <Field label="Uhrzeit" value={backupForm.time} onChange={(e) => setBackupForm((c) => ({ ...c, time: e.target.value }))} />
+          </FormRow>
+          <Field label="Aufzubewahrende Backups" value={backupForm.keepCount} onChange={(e) => setBackupForm((c) => ({ ...c, keepCount: e.target.value }))} />
+          <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "Backup-Konfiguration speichern"}</PrimaryButton>
+        </form>
+      </SectionCard>
+    </div>
+  );
+}
+
+function GoogleCalendarSettings({ apiFetch, setPanelSuccess, setPanelError }: {
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  setPanelSuccess: (v: string | null) => void;
+  setPanelError: (v: string | null) => void;
+}) {
+  const [gcalForm, setGcalForm] = useState({ clientId: "", clientSecret: "", calendarId: "", enabled: false });
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ lastSync: string | null; lastSyncStatus: string | null; lastSyncCount: number }>({ lastSync: null, lastSyncStatus: null, lastSyncCount: 0 });
+
+  useEffect(() => {
+    void apiFetch<typeof gcalForm>("/settings/google-calendar").then(setGcalForm).catch(() => {});
+    void apiFetch<typeof syncStatus>("/settings/google-calendar/status").then(setSyncStatus).catch(() => {});
+  }, [apiFetch]);
+
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setSaving(true); setPanelError(null);
+    try {
+      await apiFetch("/settings/google-calendar", { method: "PUT", body: JSON.stringify(gcalForm) });
+      setPanelSuccess("Google-Kalender-Konfiguration gespeichert.");
+    } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler."); }
+    finally { setSaving(false); }
+  }
+
+  const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
+
+  return (
+    <div className="grid gap-6">
+      <SectionCard title="Google Kalender" subtitle="Projekttermine mit Google Kalender synchronisieren.">
+        <form className="grid gap-4 md:max-w-2xl" onSubmit={(e) => void save(e)}>
+          <label className="inline-flex items-center gap-3 text-sm font-medium">
+            <input type="checkbox" checked={gcalForm.enabled} onChange={(e) => setGcalForm((c) => ({ ...c, enabled: e.target.checked }))} />
+            Google-Kalender-Abgleich aktiviert
+          </label>
+          <Field label="Service-Account E-Mail (optional)" value={gcalForm.clientId} onChange={(e) => setGcalForm((c) => ({ ...c, clientId: e.target.value }))} />
+          <Field label="OAuth2 Access Token" type="password" value={gcalForm.clientSecret} onChange={(e) => setGcalForm((c) => ({ ...c, clientSecret: e.target.value }))} />
+          <Field label="Kalender-ID (z.B. primary oder user@gmail.com)" value={gcalForm.calendarId} onChange={(e) => setGcalForm((c) => ({ ...c, calendarId: e.target.value }))} />
+          <p className="text-xs text-slate-500">
+            Access Token kann ueber Google Cloud Console / OAuth 2.0 Playground generiert werden.
+            Kalender-ID findet sich in den Google Kalender-Einstellungen unter Kalenderdetails.
+          </p>
+          <PrimaryButton disabled={saving}>{saving ? "Speichert ..." : "Konfiguration speichern"}</PrimaryButton>
+        </form>
+      </SectionCard>
+
+      <SectionCard title="Synchronisierung" subtitle="Projekttermine in Google Kalender uebertragen.">
+        <div className="grid gap-4">
+          {syncStatus.lastSync ? (
+            <div className="rounded-xl border border-black/10 bg-slate-50/50 p-3 dark:border-white/10 dark:bg-slate-950/30">
+              <div className="text-xs text-slate-500">Letzter Sync: {new Date(syncStatus.lastSync).toLocaleString("de-DE")}</div>
+              <div className="text-sm font-medium">{syncStatus.lastSyncStatus}</div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Noch nie synchronisiert.</p>
+          )}
+          <div className="flex flex-wrap gap-3">
+            <button type="button" disabled={syncing || !gcalForm.enabled} onClick={async () => {
+              setSyncing(true); setPanelError(null);
+              try {
+                const r = await apiFetch<{ syncedAt: string; status: string; count: number }>("/settings/google-calendar/sync", { method: "POST" });
+                setPanelSuccess(r.status);
+                setSyncStatus({ lastSync: r.syncedAt, lastSyncStatus: r.status, lastSyncCount: r.count });
+              } catch (e) { setPanelError(e instanceof Error ? e.message : "Sync fehlgeschlagen."); }
+              finally { setSyncing(false); }
+            }} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white">
+              {syncing ? "Synchronisiert ..." : "Jetzt synchronisieren"}
+            </button>
+            <a href={`${apiRoot}/api/projects/export/ical`} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800">
+              iCal-Export (.ics)
+            </a>
+          </div>
+          {!gcalForm.enabled ? <p className="text-xs text-amber-600 dark:text-amber-400">Google-Kalender ist deaktiviert. Bitte oben aktivieren und Kalender-ID eintragen.</p> : null}
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
 function SettingsPanel({
   settingsForm, setSettingsForm, onSettingsSubmit,
   users, roles, userForm, setUserForm, onUserSubmit, onDeleteUser,
@@ -2899,7 +3223,7 @@ function SettingsPanel({
   error: string | null;
   success: string | null;
 }) {
-  const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "company" | "pdfconfig" | "smtp" | "backup">("general");
+  const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "company" | "pdfconfig" | "smtp" | "backup" | "gcal">("general");
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [rolePermissionIds, setRolePermissionIds] = useState<string[]>([]);
@@ -3006,6 +3330,7 @@ function SettingsPanel({
     { key: "pdfconfig" as const, label: "PDF" },
     { key: "smtp", label: "E-Mail / SMTP" },
     { key: "backup", label: "Backup" },
+    { key: "gcal" as const, label: "Google Kalender" },
   ];
 
   const permissionsByCategory = permissions.reduce<Record<string, PermissionItem[]>>((acc, p) => {
@@ -3109,23 +3434,7 @@ function SettingsPanel({
       ) : null}
 
       {settingsTab === "company" ? (
-        <SectionCard title="Firmeninformationen" subtitle="Diese Daten erscheinen auf Stundenzetteln und PDFs.">
-          <form className="grid gap-4 md:max-w-2xl" onSubmit={(e) => void saveCompanyInfo(e)}>
-            <Field label="Firmenname" value={companyForm.name} onChange={(e) => setCompanyForm((c) => ({ ...c, name: e.target.value }))} />
-            <Field label="Strasse / Hausnummer" value={companyForm.street} onChange={(e) => setCompanyForm((c) => ({ ...c, street: e.target.value }))} />
-            <FormRow>
-              <Field label="PLZ" value={companyForm.postalCode} onChange={(e) => setCompanyForm((c) => ({ ...c, postalCode: e.target.value }))} />
-              <Field label="Ort" value={companyForm.city} onChange={(e) => setCompanyForm((c) => ({ ...c, city: e.target.value }))} />
-            </FormRow>
-            <Field label="Land" value={companyForm.country} onChange={(e) => setCompanyForm((c) => ({ ...c, country: e.target.value }))} />
-            <FormRow>
-              <Field label="Telefon" value={companyForm.phone} onChange={(e) => setCompanyForm((c) => ({ ...c, phone: e.target.value }))} />
-              <Field label="E-Mail" value={companyForm.email} onChange={(e) => setCompanyForm((c) => ({ ...c, email: e.target.value }))} />
-            </FormRow>
-            <Field label="Website" value={companyForm.website} onChange={(e) => setCompanyForm((c) => ({ ...c, website: e.target.value }))} />
-            <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "Firmeninformationen speichern"}</PrimaryButton>
-          </form>
-        </SectionCard>
+        <CompanySettingsTab companyForm={companyForm} setCompanyForm={setCompanyForm} onSave={(e) => void saveCompanyInfo(e)} submitting={submitting} apiFetch={apiFetch} setPanelSuccess={setPanelSuccess} setPanelError={setPanelError} />
       ) : null}
 
       {settingsTab === "pdfconfig" ? (
@@ -3175,47 +3484,402 @@ function SettingsPanel({
       ) : null}
 
       {settingsTab === "backup" ? (
-        <div className="grid gap-6">
-          <SectionCard title="Manuelles Backup" subtitle="Sofort ein vollstaendiges Backup erstellen.">
-            <SecondaryButton onClick={() => setPanelSuccess("Backup-Funktion wird in einem spaeteren Update vollstaendig aktiviert.")}>Backup jetzt erstellen</SecondaryButton>
-          </SectionCard>
+        <BackupSettingsTab backupForm={backupForm} setBackupForm={setBackupForm} onSaveConfig={(e) => void saveBackupConfig(e)} submitting={submitting} apiFetch={apiFetch} setPanelSuccess={setPanelSuccess} setPanelError={setPanelError} />
+      ) : null}
 
-          <SectionCard title="Automatische Backups" subtitle="Zeitgesteuerte Datensicherung konfigurieren.">
-            <form className="grid gap-4 md:max-w-2xl" onSubmit={(e) => void saveBackupConfig(e)}>
-              <label className="inline-flex items-center gap-3 text-sm font-medium">
-                <input type="checkbox" checked={backupForm.enabled}
-                  onChange={(e) => setBackupForm((c) => ({ ...c, enabled: e.target.checked }))} />
-                Automatische Backups aktiviert
-              </label>
-              <FormRow>
-                <SelectField label="Intervall" value={backupForm.interval}
-                  onChange={(e) => setBackupForm((c) => ({ ...c, interval: e.target.value }))}
-                  options={[
-                    { value: "daily", label: "Taeglich" },
-                    { value: "weekly", label: "Woechentlich" },
-                    { value: "monthly", label: "Monatlich" },
-                  ]}
-                />
-                <Field label="Uhrzeit" value={backupForm.time}
-                  onChange={(e) => setBackupForm((c) => ({ ...c, time: e.target.value }))} />
-              </FormRow>
-              <Field label="Aufzubewahrende Backups" value={backupForm.keepCount}
-                onChange={(e) => setBackupForm((c) => ({ ...c, keepCount: e.target.value }))} />
-              <PrimaryButton disabled={submitting}>
-                {submitting ? "Speichert ..." : "Backup-Konfiguration speichern"}
-              </PrimaryButton>
-            </form>
-          </SectionCard>
+      {settingsTab === "gcal" ? (
+        <GoogleCalendarSettings apiFetch={apiFetch} setPanelSuccess={setPanelSuccess} setPanelError={setPanelError} />
+      ) : null}
+    </div>
+  );
+}
 
-          <SectionCard title="Wiederherstellung" subtitle="Backup zurueckspielen.">
-            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-500/30 dark:bg-amber-500/5">
-              <p className="text-sm text-amber-600 dark:text-amber-400">
-                Backup-Wiederherstellung mit selektiver Auswahl (Datenbank, Dokumente, Einstellungen) wird in einem spaeteren Update aktiviert.
-              </p>
+function PlanningCalendar({ projects, workers, teams, apiFetch, onDataChanged }: { projects: Project[]; workers: Worker[]; teams: TeamItem[]; apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>; onDataChanged: () => void }) {
+  const [viewMonth, setViewMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [planForm, setPlanForm] = useState({ projectId: "", startDate: "", endDate: "", teamId: "", workerIds: [] as string[] });
+  const [planConflicts, setPlanConflicts] = useState<string[]>([]);
+  const [planSaving, setPlanSaving] = useState(false);
+  const [planMsg, setPlanMsg] = useState<string | null>(null);
+  const [planErr, setPlanErr] = useState<string | null>(null);
+
+  function openPlanForm(p: Project) {
+    setPlanForm({
+      projectId: p.id,
+      startDate: p.plannedStartDate?.slice(0, 10) ?? "",
+      endDate: p.plannedEndDate?.slice(0, 10) ?? "",
+      teamId: "",
+      workerIds: (p.assignments ?? []).map((a) => a.worker.id),
+    });
+    setPlanConflicts([]);
+    setPlanMsg(null);
+    setPlanErr(null);
+    setSelectedProject(p);
+  }
+
+  function checkConflicts() {
+    if (!planForm.startDate) return [];
+    const start = new Date(planForm.startDate);
+    const end = planForm.endDate ? new Date(planForm.endDate) : null;
+    const issues: string[] = [];
+    for (const wid of planForm.workerIds) {
+      const w = workers.find((x) => x.id === wid);
+      if (!w) continue;
+      for (const p of projects) {
+        if (p.id === planForm.projectId) continue;
+        if (!(p.assignments ?? []).some((a) => a.worker.id === wid)) continue;
+        if (!p.plannedStartDate) continue;
+        const pStart = new Date(p.plannedStartDate);
+        const pEnd = p.plannedEndDate ? new Date(p.plannedEndDate) : null;
+        const overlap = start <= (pEnd ?? new Date("9999-12-31")) && (end ?? new Date("9999-12-31")) >= pStart;
+        if (overlap) {
+          issues.push(`${w.firstName} ${w.lastName} kollidiert mit ${p.projectNumber} (${p.plannedStartDate.slice(0, 10)} - ${p.plannedEndDate?.slice(0, 10) ?? "offen"})`);
+        }
+      }
+    }
+    return issues;
+  }
+
+  async function savePlan() {
+    const conflicts = checkConflicts();
+    setPlanConflicts(conflicts);
+    if (conflicts.length > 0 && !window.confirm(`Es gibt ${conflicts.length} Ueberschneidung(en). Trotzdem speichern?`)) return;
+    setPlanSaving(true); setPlanErr(null); setPlanMsg(null);
+    try {
+      // 1. Zeitraum speichern
+      await apiFetch(`/projects/${planForm.projectId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          plannedStartDate: planForm.startDate || undefined,
+          plannedEndDate: planForm.endDate || undefined,
+        }),
+      });
+      // 2. Monteur-Zuordnungen ersetzen (auch bei leerem Array = alle entfernen)
+      if (planForm.startDate) {
+        await apiFetch(`/projects/${planForm.projectId}/assignments`, {
+          method: "PUT",
+          body: JSON.stringify({
+            workerIds: planForm.workerIds,
+            startDate: planForm.startDate,
+            endDate: planForm.endDate || undefined,
+          }),
+        });
+      }
+      setPlanMsg("Planung und Monteur-Zuordnungen gespeichert.");
+      onDataChanged();
+    } catch (e) { setPlanErr(e instanceof Error ? e.message : "Fehler beim Speichern."); }
+    finally { setPlanSaving(false); }
+  }
+
+  // Drag-Zustand fuer Kalender (Verschieben/Resize bestehender)
+  const [dragState, setDragState] = useState<{ projectId: string; startDay: number; currentDay: number; mode: "move" | "resize-end" } | null>(null);
+
+  // Aufziehen neuer Termine auf leeren Tagen
+  const [drawState, setDrawState] = useState<{ startDay: number; currentDay: number } | null>(null);
+  const [drawProjectPicker, setDrawProjectPicker] = useState<{ startDay: number; endDay: number } | null>(null);
+
+  function handleDragStart(projectId: string, day: number, mode: "move" | "resize-end") {
+    setDragState({ projectId, startDay: day, currentDay: day, mode });
+  }
+
+  function handleDragOver(day: number) {
+    if (dragState) setDragState((s) => s ? { ...s, currentDay: day } : null);
+  }
+
+  async function handleDragEnd() {
+    if (!dragState) return;
+    const p = projects.find((x) => x.id === dragState.projectId);
+    if (!p) { setDragState(null); return; }
+
+    const delta = dragState.currentDay - dragState.startDay;
+    if (delta === 0) { setDragState(null); return; }
+
+    let newStart = p.plannedStartDate ? new Date(p.plannedStartDate) : new Date(year, month - 1, dragState.startDay);
+    let newEnd = p.plannedEndDate ? new Date(p.plannedEndDate) : null;
+
+    if (dragState.mode === "move") {
+      newStart = new Date(newStart.getTime() + delta * 86400000);
+      if (newEnd) newEnd = new Date(newEnd.getTime() + delta * 86400000);
+    } else {
+      // resize-end
+      if (newEnd) {
+        newEnd = new Date(newEnd.getTime() + delta * 86400000);
+      } else {
+        newEnd = new Date(newStart.getTime() + delta * 86400000);
+      }
+      if (newEnd < newStart) newEnd = newStart;
+    }
+
+    setDragState(null);
+    try {
+      await apiFetch(`/projects/${dragState.projectId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          plannedStartDate: newStart.toISOString().slice(0, 10),
+          plannedEndDate: newEnd?.toISOString().slice(0, 10) ?? undefined,
+        }),
+      });
+      onDataChanged();
+    } catch { /* silently fail */ }
+  }
+
+  function applyTeam(teamId: string) {
+    const team = teams.find((t) => t.id === teamId);
+    if (team) {
+      setPlanForm((c) => ({ ...c, teamId, workerIds: team.members.map((m) => m.worker.id) }));
+    }
+  }
+
+  const year = Number(viewMonth.slice(0, 4));
+  const month = Number(viewMonth.slice(5, 7));
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDayOfWeek = (new Date(year, month - 1, 1).getDay() + 6) % 7; // Mo=0
+
+  // Projekte mit Zeitraum
+  const plannable = projects.filter((p) => p.plannedStartDate || p.plannedEndDate);
+
+  function projectInDay(p: Project, day: number) {
+    const date = new Date(year, month - 1, day);
+    const start = p.plannedStartDate ? new Date(p.plannedStartDate) : null;
+    const end = p.plannedEndDate ? new Date(p.plannedEndDate) : null;
+    if (start && date < new Date(start.getFullYear(), start.getMonth(), start.getDate())) return false;
+    if (end && date > new Date(end.getFullYear(), end.getMonth(), end.getDate())) return false;
+    if (!start && !end) return false;
+    return true;
+  }
+
+  // Konflikte: Monteure die an mehreren Projekten gleichzeitig zugeordnet sind
+  function getConflicts() {
+    const conflicts: { day: number; workerName: string; projects: string[] }[] = [];
+    const activeWorkers = workers.filter((w) => w.active !== false);
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayProjects = plannable.filter((p) => projectInDay(p, day));
+      for (const w of activeWorkers) {
+        const workerProjects = dayProjects.filter((p) =>
+          (p.assignments ?? []).some((a) => a.worker.id === w.id),
+        );
+        if (workerProjects.length > 1) {
+          conflicts.push({
+            day,
+            workerName: `${w.firstName} ${w.lastName}`,
+            projects: workerProjects.map((p) => p.projectNumber),
+          });
+        }
+      }
+    }
+    return conflicts;
+  }
+
+  const conflicts = getConflicts();
+  const conflictDays = new Set(conflicts.map((c) => c.day));
+
+  const statusColor = (s?: string) => {
+    switch (s) {
+      case "ACTIVE": return "bg-emerald-200 dark:bg-emerald-800";
+      case "PLANNED": return "bg-blue-200 dark:bg-blue-800";
+      case "PAUSED": return "bg-amber-200 dark:bg-amber-800";
+      default: return "bg-slate-200 dark:bg-slate-700";
+    }
+  };
+
+  return (
+    <div className="grid gap-6">
+      {/* Monatsnavigation */}
+      <div className="flex items-center gap-4">
+        <SecondaryButton onClick={() => {
+          const d = new Date(year, month - 2, 1);
+          setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+        }}>&#8592;</SecondaryButton>
+        <h2 className="text-xl font-semibold">{new Date(year, month - 1).toLocaleDateString("de-DE", { month: "long", year: "numeric" })}</h2>
+        <SecondaryButton onClick={() => {
+          const d = new Date(year, month, 1);
+          setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+        }}>&#8594;</SecondaryButton>
+      </div>
+
+      {/* Projekt einplanen */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="grid gap-1">
+          <label className="text-xs font-medium text-slate-500">Projekt waehlen und einplanen</label>
+          <select onChange={(e) => { const p = projects.find((x) => x.id === e.target.value); if (p) openPlanForm(p); e.target.value = ""; }}
+            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900">
+            <option value="">Projekt waehlen...</option>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.projectNumber} – {p.title}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Konflikte */}
+      {conflicts.length > 0 ? (
+        <div className="rounded-2xl border border-red-300 bg-red-50/60 p-4 dark:border-red-500/40 dark:bg-red-500/5">
+          <h3 className="mb-2 text-sm font-semibold text-red-700 dark:text-red-400">Ueberschneidungen</h3>
+          {conflicts.map((c, i) => (
+            <div key={i} className="text-xs text-red-600 dark:text-red-300">
+              Tag {c.day}: {c.workerName} in {c.projects.join(" + ")}
             </div>
-          </SectionCard>
+          ))}
         </div>
       ) : null}
+
+      {/* Kalender-Grid mit Drag-Support */}
+      <div className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
+        onPointerUp={() => {
+          if (dragState) { void handleDragEnd(); return; }
+          if (drawState) {
+            const s = Math.min(drawState.startDay, drawState.currentDay);
+            const e = Math.max(drawState.startDay, drawState.currentDay);
+            setDrawState(null);
+            if (s !== e) setDrawProjectPicker({ startDay: s, endDay: e });
+          }
+        }}>
+        <div className="grid grid-cols-7 gap-px select-none">
+          {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((d) => (
+            <div key={d} className="p-2 text-center text-xs font-semibold text-slate-500">{d}</div>
+          ))}
+          {Array.from({ length: firstDayOfWeek }).map((_, i) => (
+            <div key={`empty-${i}`} className="min-h-[80px] rounded-lg bg-slate-50/50 dark:bg-slate-950/20" />
+          ))}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const day = i + 1;
+            const dayProjects = plannable.filter((p) => projectInDay(p, day));
+            const hasConflict = conflictDays.has(day);
+            const isWeekend = ((firstDayOfWeek + i) % 7) >= 5;
+            const isDragOver = dragState && dragState.currentDay === day;
+            return (
+              <div key={day}
+                onPointerEnter={() => { handleDragOver(day); if (drawState) setDrawState((s) => s ? { ...s, currentDay: day } : null); }}
+                onPointerDown={(e) => { if (dayProjects.length === 0 && !dragState) { e.preventDefault(); setDrawState({ startDay: day, currentDay: day }); } }}
+                className={cx(
+                  "min-h-[80px] rounded-lg border p-1 transition-colors",
+                  (drawState && day >= Math.min(drawState.startDay, drawState.currentDay) && day <= Math.max(drawState.startDay, drawState.currentDay)) ? "border-blue-400 bg-blue-100/50 dark:border-blue-500/50 dark:bg-blue-500/15" :
+                  isDragOver ? "border-blue-400 bg-blue-50/50 dark:border-blue-500/50 dark:bg-blue-500/10" :
+                  hasConflict ? "border-red-300 bg-red-50/50 dark:border-red-500/30 dark:bg-red-500/5" :
+                  isWeekend ? "border-black/5 bg-slate-50/30 dark:border-white/5 dark:bg-slate-950/30" :
+                  "border-black/5 dark:border-white/5",
+                )}>
+                <div className="mb-1 text-right text-xs font-medium text-slate-400">{day}</div>
+                {dayProjects.slice(0, 3).map((p) => (
+                  <div key={p.id} className={cx("group relative mb-0.5 flex w-full items-center rounded text-left text-[10px] font-medium", statusColor(p.status))}>
+                    <button type="button"
+                      onClick={() => openPlanForm(p)}
+                      onPointerDown={(e) => { e.preventDefault(); handleDragStart(p.id, day, "move"); }}
+                      className="flex-1 truncate px-1 py-0.5 cursor-grab active:cursor-grabbing">
+                      {p.projectNumber}
+                    </button>
+                    <button type="button"
+                      onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); handleDragStart(p.id, day, "resize-end"); }}
+                      className="hidden w-2 cursor-ew-resize rounded-r bg-black/10 group-hover:block dark:bg-white/20"
+                      title="Ende anpassen">&nbsp;</button>
+                  </div>
+                ))}
+                {dayProjects.length > 3 ? <div className="text-[9px] text-slate-400">+{dayProjects.length - 3}</div> : null}
+              </div>
+            );
+          })}
+        </div>
+        {dragState ? <div className="mt-2 text-center text-xs text-blue-600 dark:text-blue-400">
+          {dragState.mode === "move" ? "Verschieben" : "Ende anpassen"}: Tag {dragState.startDay} → {dragState.currentDay} ({dragState.currentDay - dragState.startDay > 0 ? "+" : ""}{dragState.currentDay - dragState.startDay} Tage)
+        </div> : null}
+        {drawState ? <div className="mt-2 text-center text-xs text-blue-600 dark:text-blue-400">
+          Neuer Termin: Tag {Math.min(drawState.startDay, drawState.currentDay)} – {Math.max(drawState.startDay, drawState.currentDay)}
+        </div> : null}
+      </div>
+
+      {/* Aufgezogenen Termin einem Projekt zuweisen */}
+      {drawProjectPicker ? (
+        <SectionCard title="Neuen Termin zuweisen" subtitle={`${drawProjectPicker.startDay}. – ${drawProjectPicker.endDay}. ${new Date(year, month - 1).toLocaleDateString("de-DE", { month: "long", year: "numeric" })}`}>
+          <div className="grid gap-3">
+            <p className="text-sm text-slate-500">Bitte Projekt fuer diesen Zeitraum waehlen:</p>
+            {projects.filter((p) => !p.plannedStartDate).map((p) => (
+              <button key={p.id} type="button" onClick={async () => {
+                const startDate = `${year}-${String(month).padStart(2, "0")}-${String(drawProjectPicker.startDay).padStart(2, "0")}`;
+                const endDate = `${year}-${String(month).padStart(2, "0")}-${String(drawProjectPicker.endDay).padStart(2, "0")}`;
+                try {
+                  await apiFetch(`/projects/${p.id}`, { method: "PATCH", body: JSON.stringify({ plannedStartDate: startDate, plannedEndDate: endDate }) });
+                  setDrawProjectPicker(null);
+                  onDataChanged();
+                } catch { /* */ }
+              }} className="rounded-xl border border-black/10 px-4 py-3 text-left text-sm transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800">
+                <div className="font-medium">{p.projectNumber} – {p.title}</div>
+                <div className="text-xs text-slate-500">{p.customer?.companyName ?? "-"}</div>
+              </button>
+            ))}
+            {projects.filter((p) => !p.plannedStartDate).length === 0 ? <p className="text-sm text-slate-500">Alle Projekte haben bereits einen Zeitraum.</p> : null}
+            <SecondaryButton onClick={() => setDrawProjectPicker(null)}>Abbrechen</SecondaryButton>
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {/* Planungsformular */}
+      {selectedProject ? (
+        <SectionCard title={`Planung: ${selectedProject.title}`} subtitle={`${selectedProject.projectNumber} · ${selectedProject.customer?.companyName ?? ""}`}>
+          <MessageBar error={planErr} success={planMsg} />
+          <div className="grid gap-4">
+            <FormRow>
+              <Field label="Startdatum" type="date" value={planForm.startDate} onChange={(e) => setPlanForm((c) => ({ ...c, startDate: e.target.value }))} />
+              <Field label="Enddatum" type="date" value={planForm.endDate} onChange={(e) => setPlanForm((c) => ({ ...c, endDate: e.target.value }))} />
+            </FormRow>
+            {teams.length > 0 ? (
+              <SelectField label="Team zuordnen" value={planForm.teamId}
+                onChange={(e) => { setPlanForm((c) => ({ ...c, teamId: e.target.value })); if (e.target.value) applyTeam(e.target.value); }}
+                options={teams.map((t) => ({ value: t.id, label: `${t.name} (${t.members.length} Monteure)` }))} />
+            ) : null}
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Monteure</label>
+              <div className="flex flex-wrap gap-2">
+                {workers.filter((w) => w.active !== false).map((w) => (
+                  <label key={w.id} className="inline-flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
+                    <input type="checkbox" checked={planForm.workerIds.includes(w.id)}
+                      onChange={(e) => setPlanForm((c) => ({ ...c, workerIds: e.target.checked ? [...c.workerIds, w.id] : c.workerIds.filter((x) => x !== w.id) }))} />
+                    {w.firstName} {w.lastName}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Konflikte */}
+            {(() => { const c = checkConflicts(); return c.length > 0 ? (
+              <div className="rounded-xl border border-red-300 bg-red-50/60 p-3 dark:border-red-500/30 dark:bg-red-500/5">
+                <h4 className="mb-1 text-xs font-semibold uppercase text-red-700 dark:text-red-400">Ueberschneidungen</h4>
+                {c.map((x, i) => <div key={i} className="text-xs text-red-600 dark:text-red-300">{x}</div>)}
+              </div>
+            ) : null; })()}
+
+            <div className="flex gap-3">
+              <button type="button" disabled={planSaving} onClick={() => void savePlan()}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white">
+                {planSaving ? "Speichert ..." : "Planung speichern"}
+              </button>
+              <SecondaryButton onClick={() => setSelectedProject(null)}>Schliessen</SecondaryButton>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {/* Projektliste unter Kalender */}
+      <SectionCard title="Geplante Projekte" subtitle={`${plannable.length} Projekte mit Zeitraum`}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
+                <th className="pb-2 pr-2">Nr.</th><th className="pb-2 pr-2">Titel</th><th className="pb-2 pr-2">Kunde</th><th className="pb-2 pr-2">Status</th><th className="pb-2 pr-2">Zeitraum</th><th className="pb-2">Monteure</th>
+              </tr>
+            </thead>
+            <tbody>
+              {plannable.map((p) => (
+                <tr key={p.id} className="border-b border-black/5 dark:border-white/5">
+                  <td className="py-2 pr-2 font-mono text-xs">{p.projectNumber}</td>
+                  <td className="py-2 pr-2 text-xs">{p.title}</td>
+                  <td className="py-2 pr-2 text-xs">{p.customer?.companyName ?? "-"}</td>
+                  <td className="py-2 pr-2 text-xs">{p.status}</td>
+                  <td className="py-2 pr-2 font-mono text-xs">{p.plannedStartDate?.slice(0, 10) ?? "-"} – {p.plannedEndDate?.slice(0, 10) ?? "offen"}</td>
+                  <td className="py-2 text-xs">{(p.assignments ?? []).map((a) => `${a.worker.firstName} ${a.worker.lastName}`).join(", ") || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
     </div>
   );
 }
@@ -3395,6 +4059,8 @@ function sectionTitle(section: AppSection) {
       return "Projekte";
     case "workers":
       return "Monteure";
+    case "planning":
+      return "Planung";
     case "reports":
       return "Auswertung";
     case "settings":
@@ -3783,6 +4449,27 @@ function CustomerDetailCard({
     }
   };
 
+  function printCustomer() {
+    const addr = formatAddress([customer.addressLine1, customer.addressLine2, customer.postalCode, customer.city, customer.country]);
+    const branches = customer.branches.map((b) => `<tr><td>${b.name}</td><td>${formatAddress([b.addressLine1, b.postalCode, b.city])}</td><td>${b.phone ?? "-"}</td><td>${b.email ?? "-"}</td></tr>`).join("");
+    const contacts = customer.contacts.map((c) => `<tr><td>${c.firstName} ${c.lastName}</td><td>${c.role ?? "-"}</td><td>${c.phoneMobile ?? "-"}</td><td>${c.email ?? "-"}</td></tr>`).join("");
+    openPrintWindow(`Kunde ${customer.companyName}`, `
+      <h1>${customer.companyName}</h1>
+      <p class="meta">${customer.customerNumber} · ${customer.status ?? ""}</p>
+      <h2>Stammdaten</h2>
+      <div class="grid">
+        <span class="label">Adresse</span><span>${addr || "-"}</span>
+        <span class="label">Telefon</span><span>${customer.phone ?? "-"}</span>
+        <span class="label">E-Mail</span><span>${customer.email ?? "-"}</span>
+        <span class="label">Website</span><span>${customer.website ?? "-"}</span>
+        <span class="label">USt-IdNr</span><span>${customer.vatId ?? "-"}</span>
+      </div>
+      ${customer.branches.length > 0 ? `<h2>Niederlassungen</h2><table><thead><tr><th>Name</th><th>Adresse</th><th>Telefon</th><th>E-Mail</th></tr></thead><tbody>${branches}</tbody></table>` : ""}
+      ${customer.contacts.length > 0 ? `<h2>Ansprechpartner</h2><table><thead><tr><th>Name</th><th>Rolle</th><th>Mobil</th><th>E-Mail</th></tr></thead><tbody>${contacts}</tbody></table>` : ""}
+      ${customer.notes ? `<h2>Notizen</h2><p>${customer.notes}</p>` : ""}
+    `);
+  }
+
   return (
     <div className="grid gap-5">
       {/* ── Stammdaten ─────────────────────────────────────────── */}
@@ -3792,7 +4479,10 @@ function CustomerDetailCard({
             <h3 className="text-lg font-semibold">{customer.companyName}</h3>
             <p className="text-sm text-slate-500">{customer.customerNumber}</p>
           </div>
-          {customerMapsUrl ? <MapLinkButton href={customerMapsUrl}>Google Maps</MapLinkButton> : null}
+          <div className="flex gap-2">
+            {customerMapsUrl ? <MapLinkButton href={customerMapsUrl}>Google Maps</MapLinkButton> : null}
+            <PrintButton onClick={printCustomer} label="Stammblatt drucken" />
+          </div>
         </div>
         <div className="grid gap-1 text-sm text-slate-500">
           <div>{formatAddress([customer.addressLine1, customer.addressLine2, customer.postalCode, customer.city, customer.country]) || "Keine Adresse hinterlegt."}</div>
@@ -4042,6 +4732,31 @@ function ProjectDetailCard({
 
   const fmt = (value?: number | null) => value != null ? `${value.toFixed(2)} EUR` : "-";
 
+  function printProject() {
+    const addr = formatAddress([project.siteAddressLine1, project.sitePostalCode, project.siteCity, project.siteCountry]);
+    const workers = (project.assignments ?? []).map((a) => `<tr><td>${a.worker.firstName} ${a.worker.lastName}</td><td>${a.worker.workerNumber}</td></tr>`).join("");
+    openPrintWindow(`Projekt ${project.projectNumber}`, `
+      <h1>${project.title}</h1>
+      <p class="meta">${project.projectNumber} · ${project.customer?.companyName ?? "-"} · ${project.status ?? "-"}</p>
+      <h2>Projektdaten</h2>
+      <div class="grid">
+        <span class="label">Kunde</span><span>${project.customer?.companyName ?? "-"}</span>
+        <span class="label">Einsatzort</span><span>${addr || "-"}</span>
+        <span class="label">Status</span><span>${project.status ?? "-"}</span>
+        <span class="label">Leistungsart</span><span>${project.serviceType ?? "-"}</span>
+        ${project.description ? `<span class="label">Beschreibung</span><span>${project.description}</span>` : ""}
+      </div>
+      ${hasPricing ? `<h2>Preise</h2><div class="grid">
+        <span class="label">Wochenpauschale</span><span>${fmt(project.weeklyFlatRate)}</span>
+        <span class="label">Inklusivstunden</span><span>${project.includedHoursPerWeek != null ? project.includedHoursPerWeek + " h" : "-"}</span>
+        <span class="label">Stundensatz</span><span>${fmt(project.hourlyRateUpTo40h)}</span>
+        <span class="label">Ueberstundensatz</span><span>${fmt(project.overtimeRate)}</span>
+      </div>` : ""}
+      ${workers ? `<h2>Monteure</h2><table><thead><tr><th>Name</th><th>Nummer</th></tr></thead><tbody>${workers}</tbody></table>` : ""}
+      ${project.notes ? `<h2>Notizen</h2><p>${project.notes}</p>` : ""}
+    `);
+  }
+
   return (
     <div className="grid gap-5">
       {/* ── Stammdaten ──────────────────────────────────── */}
@@ -4053,7 +4768,10 @@ function ProjectDetailCard({
               {project.projectNumber} · {project.customer?.companyName ?? "Kein Kunde"}
             </p>
           </div>
-          {projectMapsUrl ? <MapLinkButton href={projectMapsUrl}>Google Maps</MapLinkButton> : null}
+          <div className="flex gap-2">
+            {projectMapsUrl ? <MapLinkButton href={projectMapsUrl}>Google Maps</MapLinkButton> : null}
+            <PrintButton onClick={printProject} label="Projekt drucken" />
+          </div>
         </div>
         <div className="mt-2 grid gap-1 text-sm text-slate-500">
           <div>{project.status ?? "Kein Status"}</div>
@@ -4218,7 +4936,9 @@ function ProjectDetailCard({
   );
 }
 
-function WorkerTimeLog({ entries }: { entries: NonNullable<Worker["timeEntries"]> }) {
+function WorkerTimeLog({ entries, workerName }: { entries: NonNullable<Worker["timeEntries"]>; workerName?: string }) {
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
   // Paare CLOCK_IN/CLOCK_OUT
   type WorkPair = {
     clockIn: (typeof entries)[number];
@@ -4290,7 +5010,7 @@ function WorkerTimeLog({ entries }: { entries: NonNullable<Worker["timeEntries"]
               const outUrl = p.clockOut ? mapsUrl(p.clockOut.latitude, p.clockOut.longitude) : null;
               const isOpen = !p.clockOut;
               return (
-                <tr key={i} className={cx("border-b border-black/5 dark:border-white/5", isOpen && "bg-emerald-50/50 dark:bg-emerald-500/5")}>
+                <tr key={i} onClick={() => setSelectedIdx(i)} className={cx("cursor-pointer border-b border-black/5 transition hover:bg-slate-50 dark:border-white/5 dark:hover:bg-slate-800", isOpen && "bg-emerald-50/50 dark:bg-emerald-500/5")}>
                   <td className="py-2 pr-2 font-mono text-xs">{new Date(p.clockIn.occurredAtClient).toLocaleDateString("de-DE")}</td>
                   <td className="py-2 pr-2 text-xs">{p.clockIn.project?.projectNumber ?? "-"}</td>
                   <td className="py-2 pr-2 font-mono text-xs">{new Date(p.clockIn.occurredAtClient).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</td>
@@ -4309,6 +5029,57 @@ function WorkerTimeLog({ entries }: { entries: NonNullable<Worker["timeEntries"]
           </tbody>
         </table>
       </div>
+
+      {/* Detail-Popup */}
+      {selectedIdx !== null && pairs[selectedIdx] ? (() => {
+        const sp = pairs[selectedIdx];
+        const dateStr = new Date(sp.clockIn.occurredAtClient).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+        const inTime = new Date(sp.clockIn.occurredAtClient).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+        const outTime = sp.clockOut ? new Date(sp.clockOut.occurredAtClient).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "laufend";
+        const dur = duration(sp.clockIn.occurredAtClient, sp.clockOut?.occurredAtClient ?? null);
+        const inUrl = mapsUrl(sp.clockIn.latitude, sp.clockIn.longitude);
+        const outUrl = sp.clockOut ? mapsUrl(sp.clockOut.latitude, sp.clockOut.longitude) : null;
+
+        function printDay() {
+          openPrintWindow(`Tagesbericht ${dateStr}`, `
+            <h1>Tagesbericht</h1>
+            ${workerName ? `<p class="meta">${workerName}</p>` : ""}
+            <h2>${dateStr}</h2>
+            <div class="grid">
+              <span class="label">Projekt</span><span>${sp.clockIn.project?.projectNumber ?? "-"}</span>
+              <span class="label">Beginn</span><span>${inTime}</span>
+              <span class="label">Ende</span><span>${outTime}</span>
+              <span class="label">Dauer</span><span>${dur}</span>
+              <span class="label">Standort Beginn</span><span>${sp.clockIn.latitude != null ? `${sp.clockIn.latitude.toFixed(5)}, ${sp.clockIn.longitude?.toFixed(5)}` : "-"}</span>
+              <span class="label">Standort Ende</span><span>${sp.clockOut?.latitude != null ? `${sp.clockOut.latitude.toFixed(5)}, ${sp.clockOut.longitude?.toFixed(5)}` : "-"}</span>
+              <span class="label">Quelle</span><span>${sp.clockIn.locationSource ?? "-"}</span>
+            </div>
+          `);
+        }
+
+        return (
+          <div className="mt-3 rounded-2xl border-2 border-slate-300 bg-white p-4 shadow-lg dark:border-slate-600 dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="text-base font-semibold">{dateStr}</h4>
+              <div className="flex gap-2">
+                <PrintButton onClick={printDay} label="Drucken" />
+                <SecondaryButton onClick={() => setSelectedIdx(null)}>Schliessen</SecondaryButton>
+              </div>
+            </div>
+            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+              <span className="text-slate-500">Projekt</span><span>{sp.clockIn.project?.projectNumber ?? "-"} {sp.clockIn.project?.title ?? ""}</span>
+              <span className="text-slate-500">Beginn</span><span className="font-mono">{inTime}</span>
+              <span className="text-slate-500">Ende</span><span className="font-mono">{outTime}</span>
+              <span className="text-slate-500">Dauer</span><span className="font-mono font-semibold">{dur}</span>
+              <span className="text-slate-500">Standort Beginn</span>
+              <span>{inUrl ? <a href={inUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">{sp.clockIn.latitude?.toFixed(5)}, {sp.clockIn.longitude?.toFixed(5)}</a> : "Kein Standort"}</span>
+              <span className="text-slate-500">Standort Ende</span>
+              <span>{outUrl ? <a href={outUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">{sp.clockOut?.latitude?.toFixed(5)}, {sp.clockOut?.longitude?.toFixed(5)}</a> : "Kein Standort"}</span>
+              <span className="text-slate-500">Quelle</span><span>{sp.clockIn.locationSource ?? "-"}</span>
+            </div>
+          </div>
+        );
+      })() : null}
     </div>
   );
 }
@@ -4386,6 +5157,24 @@ function WorkerDetailCard({
     return `${s} bis ${e}`;
   };
 
+  function printWorker() {
+    const addr = formatAddress([worker.addressLine1, worker.addressLine2, worker.postalCode, worker.city, worker.country]);
+    const projs = allAssignments.map((a) => `<tr><td>${a.project.projectNumber}</td><td>${a.project.title}</td><td>${formatDateRange(a)}</td></tr>`).join("");
+    openPrintWindow(`Monteur ${worker.firstName} ${worker.lastName}`, `
+      <h1>${worker.firstName} ${worker.lastName}</h1>
+      <p class="meta">${worker.workerNumber} · ${worker.active === false ? "deaktiviert" : "aktiv"}</p>
+      <h2>Stammdaten</h2>
+      <div class="grid">
+        <span class="label">Adresse</span><span>${addr || "-"}</span>
+        <span class="label">Mobil</span><span>${worker.phoneMobile ?? worker.phone ?? "-"}</span>
+        <span class="label">Buero</span><span>${worker.phoneOffice ?? "-"}</span>
+        <span class="label">E-Mail</span><span>${worker.email ?? "-"}</span>
+        <span class="label">Stundensatz intern</span><span>${worker.internalHourlyRate != null ? worker.internalHourlyRate.toFixed(2) + " EUR/h" : "-"}</span>
+      </div>
+      ${projs ? `<h2>Projekte</h2><table><thead><tr><th>Nr.</th><th>Titel</th><th>Zeitraum</th></tr></thead><tbody>${projs}</tbody></table>` : ""}
+    `);
+  }
+
   return (
     <div className="grid gap-5">
       {/* ── Stammdaten ──────────────────────────────────── */}
@@ -4397,7 +5186,10 @@ function WorkerDetailCard({
             </h3>
             <p className="text-sm text-slate-500">{worker.workerNumber}</p>
           </div>
-          {workerMapsUrl ? <MapLinkButton href={workerMapsUrl}>Google Maps</MapLinkButton> : null}
+          <div className="flex gap-2">
+            {workerMapsUrl ? <MapLinkButton href={workerMapsUrl}>Google Maps</MapLinkButton> : null}
+            <PrintButton onClick={printWorker} label="Monteur drucken" />
+          </div>
         </div>
         <div className="mt-2 grid gap-1 text-sm text-slate-500">
           <div>{formatAddress([worker.addressLine1, worker.addressLine2, worker.postalCode, worker.city, worker.country]) || "Keine Adresse hinterlegt."}</div>
@@ -4478,7 +5270,7 @@ function WorkerDetailCard({
       ) : null}
 
       {/* ── Arbeitsprotokoll ──────────────────────────────── */}
-      <WorkerTimeLog entries={worker.timeEntries ?? []} />
+      <WorkerTimeLog entries={worker.timeEntries ?? []} workerName={`${worker.firstName} ${worker.lastName}`} />
 
       {/* ── Dokumente ───────────────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
