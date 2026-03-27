@@ -199,6 +199,109 @@ export class ChecklistsController {
     return this.checklistsService.applyTemplate(templateId, projectId);
   }
 
+  // ── Template Notices ──────────────────────────
+
+  @Get('templates/:templateId/notices')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE)
+  listTemplateNotices(@Param('templateId') templateId: string) {
+    return this.checklistsService.listTemplateNotices(templateId);
+  }
+
+  @Post('templates/:templateId/notices')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE)
+  addTemplateNotice(
+    @Param('templateId') templateId: string,
+    @Body() body: { title: string; body: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+  ) {
+    return this.checklistsService.addTemplateNotice(templateId, body);
+  }
+
+  @Patch('template-notices/:id')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE)
+  updateTemplateNotice(
+    @Param('id') id: string,
+    @Body() body: { title?: string; body?: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+  ) {
+    return this.checklistsService.updateTemplateNotice(id, body);
+  }
+
+  @Delete('template-notices/:id')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE)
+  removeTemplateNotice(@Param('id') id: string) {
+    return this.checklistsService.removeTemplateNotice(id);
+  }
+
+  // ── Project Notices ───────────────────────────
+
+  @Get('notices/project/:projectId')
+  @KioskAllowed()
+  async listProjectNotices(
+    @Param('projectId') projectId: string,
+    @Req() request: RequestWithUser,
+  ) {
+    await this.assertProjectAccess(request, projectId);
+    return this.checklistsService.listProjectNotices(projectId);
+  }
+
+  @Post('notices/project/:projectId')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER)
+  createProjectNotice(
+    @Param('projectId') projectId: string,
+    @Body() body: { title: string; body: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+  ) {
+    return this.checklistsService.createProjectNotice(projectId, body);
+  }
+
+  @Patch('notices/:id')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER)
+  updateProjectNotice(
+    @Param('id') id: string,
+    @Body() body: { title?: string; body?: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+  ) {
+    return this.checklistsService.updateProjectNotice(id, body);
+  }
+
+  @Delete('notices/:id')
+  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER)
+  removeProjectNotice(@Param('id') id: string) {
+    return this.checklistsService.removeProjectNotice(id);
+  }
+
+  @Post('notices/:id/acknowledge')
+  @KioskAllowed()
+  async acknowledgeNotice(
+    @Param('id') id: string,
+    @Body() body: { signatureImagePath?: string; comment?: string },
+    @Req() request: RequestWithUser,
+  ) {
+    // Nur Monteure duerfen Hinweise bestaetigen/unterschreiben
+    if (request.user?.type !== 'worker') {
+      throw new ForbiddenException(
+        'Nur Monteure koennen Baustellenhinweise bestaetigen.',
+      );
+    }
+
+    const notice = await this.prisma.projectNotice.findUnique({
+      where: { id },
+      select: { projectId: true, requireSignature: true },
+    });
+    if (!notice) throw new ForbiddenException('Hinweis nicht gefunden.');
+    await this.assertProjectAccess(request, notice.projectId);
+
+    if (notice.requireSignature && !body.signatureImagePath) {
+      throw new ForbiddenException('Unterschrift ist fuer diesen Hinweis erforderlich.');
+    }
+
+    const workerId = request.user.workerId ?? request.user.sub;
+
+    return this.checklistsService.acknowledgeNotice(
+      id,
+      workerId,
+      notice.projectId,
+      body,
+    );
+  }
+
   // ── Helpers ───────────────────────────────────
 
   private async assertProjectAccess(request: RequestWithUser, projectId: string) {

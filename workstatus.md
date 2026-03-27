@@ -75,6 +75,14 @@
 - `AGENTS.md` als dauerhafte Projektregeldatei pflegen.
 - Kuenftige Claude-Umsetzungen und Codex-Pruefungen fortlaufend hier dokumentieren.
 - Technische Struktur erst dann genauer dokumentieren, wenn sie wirklich feststeht.
+- Naechster fachlicher Umsetzungspunkt:
+  - `Baustellenhinweise / Pflichttexte / Monteur-Zustimmung / Unterschrift`
+  - mit projektbezogenem Nachweis und reproduzierbaren Testdaten
+- Sprachlogik fuer Monteure / Kiosk ist fachlich neu festgelegt, aber noch nicht abgeschlossen:
+  - Sprache wird kuenftig direkt im Loginfenster gewaehlt
+  - die gewaehlte Sprache gilt fuer die gesamte Sitzung
+  - Wechsel erst nach Logout und neuer Anmeldung
+- Die bisherige profilbasierte `languageCode`-Ableitung ist damit nur noch eine moegliche Voreinstellung, aber nicht mehr die massgebliche aktive Sitzungsquelle.
 
 ## Vorlage fuer neue Eintraege
 
@@ -396,3 +404,87 @@
 
 - Offene Punkte:
   - Produktpflege und weitere Verfeinerungen koennen folgen, aber fuer dieses Paket besteht aktuell keine offene Abweichung mehr.
+
+## 2026-03-23
+
+### Backup-Runtime, Monteur-Bearbeitung und Sprachstand
+
+- Ausgangslage:
+  - Backup und Restore nutzen im API-Prozess direkt `pg_dump` und `psql`.
+  - Monteure sollten direkt im UI bearbeitbar sein, ohne erst indirekt in einen anderen Modus wechseln zu muessen.
+  - Die Sprachumschaltung fuer Monteure / Kiosk war nur teilweise umgesetzt und fuehrte zu gemischten Ansichten.
+
+- Geplante Aufgabe:
+  - PostgreSQL-CLI-Tools in der Docker-Runtime fuer API sicherstellen.
+  - Monteur-Detail und Monteur-Formular fachlich zusammenbringen.
+  - Sprachlogik fuer Monteure / Kiosk weiter schliessen.
+
+- Umsetzung durch Claude:
+  - `apps/api/Dockerfile` und `docker/Dockerfile.dev` so angepasst, dass `postgresql16-client` in der API-Runtime vorhanden ist.
+  - Das Monteur-Formular bleibt nun in der rechten Spalte sichtbar und wird bei geoeffnetem Monteur mit `mapWorkerToForm(selectedWorker)` vorbelegt.
+  - Im Monteur-Formular wurde eine Sprachauswahl fuer `Deutsch` / `English` eingebaut.
+  - Der Worker-Login liefert `languageCode` an das Frontend zurueck.
+  - Teile der Worker-/Kiosk-Oberflaeche wurden bereits auf i18n-Keys umgestellt.
+
+- Pruefung durch Codex:
+  - `pnpm --filter api build` gruen.
+  - `pnpm --filter web build` gruen.
+  - Docker-Runtime fuer Backup/Restore verifiziert:
+    - `pg_dump` und `psql` im API-Produktionscontainer verfuegbar
+    - `pg_dump` und `psql` im Dev-API-Container verfuegbar
+  - Monteur-Bearbeitung als direktes UI-Formular bestaetigt.
+  - Sprachstand nur teilweise bestaetigt:
+    - Hauptbereiche wurden verbessert
+    - in worker-/kioskrelevanten Unteransichten blieben zuletzt noch gemischte Sprachreste bestehen
+
+- Ergebnis / Entscheidung:
+  - Backup-/Restore-Runtime in Docker: **Gruen**
+  - Monteur-Bearbeitung im UI: **Gruen**
+  - Sprachumschaltung ueber `languageCode` im Workerprofil: **nur teilweise** und fachlich inzwischen ueberholt
+  - Neue fachliche Entscheidung:
+    - Die Sprache soll nicht mehr primär waehrend der Sitzung aus dem Workerprofil abgeleitet werden
+    - Stattdessen wird die Sprache kuenftig direkt im Loginfenster gewaehlt und fuer die laufende Sitzung fixiert
+
+- Offene Punkte:
+  - Loginbasierte Sitzungssprache fuer Monteure / Kiosk umsetzen
+  - Restliche worker-/kioskrelevanten Sprachreste auf die neue Sitzungslogik umstellen
+  - Danach erneute Codex-Abnahme nur fuer den Sprach-Login-Ansatz
+
+## 2026-03-23
+
+### Neue Fachanforderung Baustellenhinweise und Testdaten
+
+- Ausgangslage:
+  - Vorlagen sollen kuenftig nicht nur einzelne Punkte enthalten, sondern auch laengere Hinweis- und Zustimmungstexte.
+  - Monteure sollen projektbezogen ueber besondere Gegebenheiten auf der Baustelle informiert werden.
+  - Diese Hinweise sollen bei Bedarf mit Unterschrift bestaetigt und als Nachweis im Projekt gespeichert werden.
+  - Zusaetzlich werden reproduzierbare Testdaten fuer Kunden, Ansprechpartner, Projekte und Monteure benoetigt.
+
+- Geplante Aufgabe:
+  - Vorlagen um Hinweis-/Zustimmungstexte erweitern.
+  - Projektbezogene Kopien dieser Hinweise speichern.
+  - Monteur-Bestaetigung und Signatur je Projekt/Hinweis ermoeglichen.
+  - Nachweis im Projekt sichtbar machen.
+  - Reproduzierbare Testdaten anlegen:
+    - 5 Kunden
+    - je Kunde 1 bis 3 Ansprechpartner
+    - je Kunde 1 bis 3 Projekte
+    - alle Projekte im Zeitraum `01.03.2026` bis `31.05.2026`
+    - 6 Monteure
+
+- Umsetzung durch Claude:
+  - Noch offen.
+  - Eine konkrete Claude-Aufgabenbeschreibung fuer Datenmodell, API, UI, Signaturfluss und Testdaten wurde vorbereitet.
+
+- Pruefung durch Codex:
+  - Noch offen.
+  - Eine Codex-Abnahmeanweisung fuer dieses Paket wurde vorbereitet, aber die Umsetzung steht noch aus.
+
+- Ergebnis / Entscheidung:
+  - Dieses Paket ist der naechste groessere fachliche Ausbauschritt.
+  - Der Nachweis soll projektbezogen gespeichert bleiben und darf nicht nur eine Live-Referenz auf die Vorlage sein.
+
+- Offene Punkte:
+  - Umsetzung durch Claude
+  - anschliessende Codex-Abnahme
+  - Entscheidung nach Umsetzung, ob die Hinweis-Nachweise zusaetzlich auch in PDF / Dokumenthistorie sichtbar gemacht werden sollen

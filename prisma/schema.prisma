@@ -264,6 +264,8 @@ model Project {
   weeklyTimesheets             WeeklyTimesheet[]
   projectNotes                 ProjectNote[]
   checklists                   ProjectChecklist[]
+  notices                      ProjectNotice[]
+  noticeAcknowledgements       ProjectNoticeAcknowledgement[]
 }
 
 model Worker {
@@ -297,6 +299,7 @@ model Worker {
   teamMemberships WorkerTeamMember[]
   kioskDevices    KioskDevice[]
   notifications   Notification[]
+  noticeAcknowledgements ProjectNoticeAcknowledgement[]
 }
 
 model WorkerTeam {
@@ -325,7 +328,6 @@ model WorkerPin {
   id        String   @id @default(cuid())
   workerId  String
   pinHash   String
-  pinPlain  String?
   validFrom DateTime @default(now())
   validTo   DateTime?
   isActive  Boolean  @default(true)
@@ -636,6 +638,20 @@ model ChecklistTemplate {
   createdAt   DateTime                  @default(now())
   updatedAt   DateTime                  @updatedAt
   items       ChecklistTemplateItem[]
+  notices     ChecklistTemplateNotice[]
+}
+
+model ChecklistTemplateNotice {
+  id               String            @id @default(cuid())
+  templateId       String
+  title            String
+  body             String
+  sortOrder        Int               @default(0)
+  required         Boolean           @default(false)
+  requireSignature Boolean           @default(false)
+  template         ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
 }
 
 model ChecklistTemplateItem {
@@ -680,4 +696,42 @@ model ReminderLog {
 
   @@unique([type, entityId, channel, recipientId])
   @@index([type, entityId])
+}
+
+model ProjectNotice {
+  id                      String                       @id @default(cuid())
+  projectId               String
+  sourceTemplateId        String?
+  sourceTemplateNoticeId  String?
+  title                   String
+  body                    String
+  sortOrder               Int                          @default(0)
+  required                Boolean                      @default(false)
+  requireSignature        Boolean                      @default(false)
+  active                  Boolean                      @default(true)
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+  project                 Project                      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  acknowledgements        ProjectNoticeAcknowledgement[]
+
+  @@index([projectId])
+}
+
+model ProjectNoticeAcknowledgement {
+  id                 String        @id @default(cuid())
+  projectNoticeId    String
+  projectId          String
+  workerId           String
+  acknowledged       Boolean       @default(false)
+  acknowledgedAt     DateTime?
+  signatureImagePath String?
+  comment            String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  projectNotice      ProjectNotice @relation(fields: [projectNoticeId], references: [id], onDelete: Cascade)
+  project            Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  worker             Worker        @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@unique([projectNoticeId, workerId])
+  @@index([projectId, workerId])
 }

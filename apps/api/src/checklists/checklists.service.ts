@@ -213,11 +213,14 @@ export class ChecklistsService {
   async applyTemplate(templateId: string, projectId: string) {
     const template = await this.prisma.checklistTemplate.findUnique({
       where: { id: templateId },
-      include: { items: { orderBy: { sortOrder: 'asc' } } },
+      include: {
+        items: { orderBy: { sortOrder: 'asc' } },
+        notices: { orderBy: { sortOrder: 'asc' } },
+      },
     });
     if (!template) throw new NotFoundException('Vorlage nicht gefunden.');
 
-    return this.prisma.projectChecklist.create({
+    const checklist = await this.prisma.projectChecklist.create({
       data: {
         projectId,
         name: template.name,
@@ -231,6 +234,147 @@ export class ChecklistsService {
         },
       },
       include: this.checklistInclude,
+    });
+
+    // Hinweistexte als Projektkopien uebernehmen
+    if (template.notices.length > 0) {
+      await this.prisma.projectNotice.createMany({
+        data: template.notices.map((n) => ({
+          projectId,
+          sourceTemplateId: templateId,
+          sourceTemplateNoticeId: n.id,
+          title: n.title,
+          body: n.body,
+          sortOrder: n.sortOrder,
+          required: n.required,
+          requireSignature: n.requireSignature,
+        })),
+      });
+    }
+
+    return checklist;
+  }
+
+  // ── Template Notices ──────────────────────────
+
+  listTemplateNotices(templateId: string) {
+    return this.prisma.checklistTemplateNotice.findMany({
+      where: { templateId },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  async addTemplateNotice(
+    templateId: string,
+    data: { title: string; body: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+  ) {
+    return this.prisma.checklistTemplateNotice.create({
+      data: {
+        templateId,
+        title: data.title,
+        body: data.body,
+        sortOrder: data.sortOrder ?? 0,
+        required: data.required ?? false,
+        requireSignature: data.requireSignature ?? false,
+      },
+    });
+  }
+
+  async updateTemplateNotice(
+    id: string,
+    data: { title?: string; body?: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+  ) {
+    return this.prisma.checklistTemplateNotice.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async removeTemplateNotice(id: string) {
+    return this.prisma.checklistTemplateNotice.delete({ where: { id } });
+  }
+
+  // ── Project Notices ───────────────────────────
+
+  listProjectNotices(projectId: string) {
+    return this.prisma.projectNotice.findMany({
+      where: { projectId, active: true },
+      include: {
+        acknowledgements: {
+          include: {
+            worker: { select: { id: true, firstName: true, lastName: true, workerNumber: true } },
+          },
+        },
+      },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  async createProjectNotice(
+    projectId: string,
+    data: { title: string; body: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+  ) {
+    return this.prisma.projectNotice.create({
+      data: { projectId, ...data, sortOrder: data.sortOrder ?? 0, required: data.required ?? false, requireSignature: data.requireSignature ?? false },
+    });
+  }
+
+  async updateProjectNotice(
+    id: string,
+    data: { title?: string; body?: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+  ) {
+    const notice = await this.prisma.projectNotice.findUnique({ where: { id } });
+    if (!notice) throw new NotFoundException('Hinweis nicht gefunden.');
+
+    // Bei relevanter Textaenderung alte Bestaetigungen zuruecksetzen
+    const textChanged = (data.title && data.title !== notice.title) || (data.body && data.body !== notice.body);
+
+    const result = await this.prisma.projectNotice.update({
+      where: { id },
+      data,
+    });
+
+    if (textChanged) {
+      await this.prisma.projectNoticeAcknowledgement.deleteMany({
+        where: { projectNoticeId: id },
+      });
+    }
+
+    return result;
+  }
+
+  async removeProjectNotice(id: string) {
+    return this.prisma.projectNotice.update({
+      where: { id },
+      data: { active: false },
+    });
+  }
+
+  async acknowledgeNotice(
+    noticeId: string,
+    workerId: string,
+    projectId: string,
+    data: { signatureImagePath?: string; comment?: string },
+  ) {
+    return this.prisma.projectNoticeAcknowledgement.upsert({
+      where: {
+        projectNoticeId_workerId: { projectNoticeId: noticeId, workerId },
+      },
+      create: {
+        projectNoticeId: noticeId,
+        projectId,
+        workerId,
+        acknowledged: true,
+        acknowledgedAt: new Date(),
+        signatureImagePath: data.signatureImagePath,
+        comment: data.comment,
+      },
+      update: {
+        acknowledged: true,
+        acknowledgedAt: new Date(),
+        signatureImagePath: data.signatureImagePath,
+        comment: data.comment,
+      },
     });
   }
 }

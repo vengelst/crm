@@ -25,6 +25,7 @@ export type Summary = {
 export type AuthState = {
   accessToken: string;
   type: "user" | "worker" | "kiosk-user";
+  sessionLang?: "de" | "en";
   user: {
     id: string;
     email: string;
@@ -164,7 +165,7 @@ export type Worker = {
   notes?: string | null;
   active?: boolean;
   internalHourlyRate?: number | null;
-  pins?: { pinPlain?: string | null }[];
+  pins?: { id: string }[];
   timeEntries?: {
     id: string;
     entryType: string;
@@ -453,6 +454,28 @@ export type ChecklistTemplate = {
   name: string;
   description?: string | null;
   items: ChecklistTemplateItem[];
+};
+
+export type ProjectNotice = {
+  id: string;
+  projectId: string;
+  title: string;
+  body: string;
+  sortOrder: number;
+  required: boolean;
+  requireSignature: boolean;
+  active: boolean;
+  acknowledgements: ProjectNoticeAck[];
+};
+
+export type ProjectNoticeAck = {
+  id: string;
+  workerId: string;
+  acknowledged: boolean;
+  acknowledgedAt?: string | null;
+  signatureImagePath?: string | null;
+  comment?: string | null;
+  worker?: { id: string; firstName: string; lastName: string; workerNumber: string };
 };
 
 export type NotificationItem = {

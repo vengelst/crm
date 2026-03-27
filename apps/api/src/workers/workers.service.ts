@@ -108,7 +108,6 @@ export class WorkersService {
         pins: {
           create: {
             pinHash,
-            pinPlain: dto.pin,
           },
         },
       },
@@ -190,7 +189,6 @@ export class WorkersService {
         data: {
           workerId: id,
           pinHash,
-          pinPlain: pin,
         },
       });
     });

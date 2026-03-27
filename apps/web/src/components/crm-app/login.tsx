@@ -3,6 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { ThemeToggle } from "../theme-toggle";
 import { cx, MessageBar } from "./shared";
+import { t, SUPPORTED_LANGUAGES, type SupportedLang } from "../../i18n";
 
 export function KioskLoginScreen({
   loginPin, setLoginPin,
@@ -10,6 +11,7 @@ export function KioskLoginScreen({
   loginPassword, setLoginPassword,
   submitting, error, success,
   onKioskLogin, onAdminLogin,
+  lang, setLang,
 }: {
   loginPin: string;
   setLoginPin: (v: string) => void;
@@ -22,7 +24,10 @@ export function KioskLoginScreen({
   success: string | null;
   onKioskLogin: (e: FormEvent<HTMLFormElement>) => void;
   onAdminLogin: (e: FormEvent<HTMLFormElement>) => void;
+  lang: SupportedLang;
+  setLang: (lang: SupportedLang) => void;
 }) {
+  const l = (key: string) => t(key, lang);
   const [showAdmin, setShowAdmin] = useState(false);
   const maxPinLength = 8;
 
@@ -38,15 +43,28 @@ export function KioskLoginScreen({
     setLoginPin("");
   }
 
-  // Auto-submit bei voller PIN-Länge (optional, hier bei 4+ Stellen + Bestätigungsbutton)
   const pinDots = Array.from({ length: maxPinLength }, (_, i) => i < loginPin.length);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4 py-8 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-200">
+      {/* Sprache */}
+      <div className="mb-6 flex items-center gap-1 rounded-xl border border-black/10 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-slate-900">
+        {SUPPORTED_LANGUAGES.map((sl) => (
+          <button key={sl.code} type="button" onClick={() => setLang(sl.code)}
+            className={cx("rounded-lg px-4 py-2 text-sm font-medium transition",
+              lang === sl.code
+                ? "bg-slate-900 text-white dark:bg-white dark:text-slate-950"
+                : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
+            )}>
+            {sl.label}
+          </button>
+        ))}
+      </div>
+
       {/* Header */}
       <div className="mb-8 text-center">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">CRM Monteur Plattform</p>
-        <h1 className="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">Kiosk-Anmeldung</h1>
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{l("kiosk.subtitle")}</p>
+        <h1 className="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">{l("kiosk.title")}</h1>
       </div>
 
       {/* PIN-Bereich */}
@@ -66,16 +84,14 @@ export function KioskLoginScreen({
           ))}
         </div>
 
-        {/* Fehlermeldung */}
         {error || success ? (
           <div className="mb-4">
             <MessageBar error={error} success={success} />
           </div>
         ) : null}
 
-        {/* Ladeanzeige */}
         {submitting ? (
-          <div className="mb-4 text-center text-sm text-emerald-600 dark:text-emerald-400">Anmeldung wird geprueft...</div>
+          <div className="mb-4 text-center text-sm text-emerald-600 dark:text-emerald-400">{l("kiosk.checking")}</div>
         ) : null}
 
         {/* Zahlentastatur */}
@@ -92,17 +108,15 @@ export function KioskLoginScreen({
             </button>
           ))}
 
-          {/* Löschen */}
           <button
             type="button"
             disabled={submitting}
             onClick={clearPin}
             className="flex h-16 items-center justify-center rounded-2xl border border-black/10 bg-slate-200/70 text-sm font-medium text-slate-600 shadow-sm transition-all hover:bg-slate-200 hover:text-slate-950 active:scale-95 disabled:opacity-50 dark:border-white/10 dark:bg-slate-800/50 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
           >
-            Loeschen
+            {l("kiosk.clear")}
           </button>
 
-          {/* 0 */}
           <button
             type="button"
             disabled={submitting}
@@ -112,7 +126,6 @@ export function KioskLoginScreen({
             0
           </button>
 
-          {/* Backspace */}
           <button
             type="button"
             disabled={submitting}
@@ -125,7 +138,6 @@ export function KioskLoginScreen({
           </button>
         </div>
 
-        {/* Anmelden-Button */}
         <form onSubmit={onKioskLogin} className="mt-4">
           <input type="hidden" name="pin" value={loginPin} />
           <button
@@ -133,12 +145,12 @@ export function KioskLoginScreen({
             disabled={submitting || loginPin.length < 4}
             className="w-full rounded-2xl bg-emerald-600 py-4 text-lg font-semibold text-white transition-all active:scale-[0.98] hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {submitting ? "Wird geprueft..." : "Anmelden"}
+            {submitting ? l("kiosk.checking") : l("kiosk.login")}
           </button>
         </form>
 
         <p className="mt-3 text-center text-xs text-slate-500 dark:text-slate-600">
-          PIN-Eingabe fuer Monteure und Projektleiter
+          {l("kiosk.pinHint")}
         </p>
       </div>
 
@@ -150,18 +162,17 @@ export function KioskLoginScreen({
           onClick={() => setShowAdmin(!showAdmin)}
           className="text-xs text-slate-500 transition hover:text-slate-700 dark:text-slate-600 dark:hover:text-slate-400"
         >
-          {showAdmin ? "Admin ausblenden" : "Admin-Login"}
+          {showAdmin ? l("kiosk.adminHide") : l("kiosk.adminToggle")}
         </button>
         <div className="h-px flex-1 bg-slate-300 dark:bg-slate-800" />
       </div>
 
-      {/* Admin-Login (kompakt, eingeklappt) */}
       {showAdmin ? (
         <form
           onSubmit={onAdminLogin}
           className="w-full max-w-sm rounded-2xl border border-black/10 bg-white/90 p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900/80"
         >
-          <h2 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-400">Benutzer-Anmeldung</h2>
+          <h2 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-400">{l("kiosk.adminTitle")}</h2>
           <div className="grid gap-3">
             <div className="grid gap-1">
               <label className="text-xs text-slate-500">E-Mail</label>
@@ -175,14 +186,14 @@ export function KioskLoginScreen({
               />
             </div>
             <div className="grid gap-1">
-              <label className="text-xs text-slate-500">Passwort</label>
+              <label className="text-xs text-slate-500">{lang === "en" ? "Password" : "Passwort"}</label>
               <input
                 type="password"
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
                 autoComplete="current-password"
                 className="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-slate-950 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-600"
-                placeholder="Passwort"
+                placeholder={lang === "en" ? "Password" : "Passwort"}
               />
             </div>
             <button
@@ -190,7 +201,7 @@ export function KioskLoginScreen({
               disabled={submitting}
               className="rounded-xl bg-slate-800 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600"
             >
-              {submitting ? "Anmeldung..." : "Admin anmelden"}
+              {submitting ? l("kiosk.adminLoggingIn") : l("kiosk.adminLogin")}
             </button>
           </div>
           {error || success ? (
@@ -199,7 +210,6 @@ export function KioskLoginScreen({
         </form>
       ) : null}
 
-      {/* Theme Toggle */}
       <div className="mt-6">
         <ThemeToggle />
       </div>

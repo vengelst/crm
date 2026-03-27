@@ -537,11 +537,31 @@ export class SettingsService {
     return entries;
   }
 
-  deleteBackup(id: string) {
-    const backupPath = join(this.backupDir, id);
+  private validateBackupId(id: string): string {
+    // Strenge ID-Validierung: nur alphanumerisch, Bindestrich, Unterstrich, Punkt
+    if (!/^[\w.-]+$/.test(id)) {
+      throw new BadRequestException(
+        'Ungueltige Backup-ID. Nur alphanumerische Zeichen, Bindestrich, Unterstrich und Punkt erlaubt.',
+      );
+    }
+
+    const backupPath = resolve(this.backupDir, id);
+
+    // Pfad-Traversal-Schutz: resolved path muss im Backup-Verzeichnis liegen
+    const normalizedBase = resolve(this.backupDir);
+    if (!backupPath.startsWith(normalizedBase + '/') && !backupPath.startsWith(normalizedBase + '\\')) {
+      throw new BadRequestException('Ungueltige Backup-ID.');
+    }
+
     if (!existsSync(backupPath)) {
       throw new BadRequestException('Backup nicht gefunden.');
     }
+
+    return backupPath;
+  }
+
+  deleteBackup(id: string) {
+    const backupPath = this.validateBackupId(id);
     rmSync(backupPath, { recursive: true, force: true });
     return { deleted: true };
   }
@@ -550,10 +570,7 @@ export class SettingsService {
     id: string,
     options: { database: boolean; documents: boolean; settings: boolean },
   ) {
-    const backupPath = join(this.backupDir, id);
-    if (!existsSync(backupPath)) {
-      throw new BadRequestException('Backup nicht gefunden.');
-    }
+    const backupPath = this.validateBackupId(id);
 
     const results: string[] = [];
 

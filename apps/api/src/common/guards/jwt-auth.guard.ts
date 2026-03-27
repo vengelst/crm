@@ -58,6 +58,13 @@ export class JwtAuthGuard implements CanActivate {
         await this.jwtService.verifyAsync<AuthenticatedUser>(token);
       request.user = payload;
 
+      // ── Rollenprüfung (gilt fuer alle Token-Typen) ──
+      const requiredRoles =
+        this.reflector.getAllAndOverride<RoleCode[]>(ROLES_KEY, [
+          context.getHandler(),
+          context.getClass(),
+        ]) ?? [];
+
       if (payload.type === 'user' || payload.type === 'kiosk-user') {
         const user = await this.prisma.user.findUnique({
           where: { id: payload.sub },
@@ -74,12 +81,6 @@ export class JwtAuthGuard implements CanActivate {
           throw new UnauthorizedException('Benutzer nicht aktiv.');
         }
 
-        const requiredRoles =
-          this.reflector.getAllAndOverride<RoleCode[]>(ROLES_KEY, [
-            context.getHandler(),
-            context.getClass(),
-          ]) ?? [];
-
         if (requiredRoles.length > 0) {
           const userRoles = user.roles.map((entry) => entry.role.code);
           const hasRole = requiredRoles.some((role) =>
@@ -92,7 +93,7 @@ export class JwtAuthGuard implements CanActivate {
         }
 
         // kiosk-user: bei rollengeschuetzten Endpunkten nur explizit
-        // freigegebene erlauben (Endpunkte ohne @Roles bleiben offen)
+        // freigegebene erlauben
         if (payload.type === 'kiosk-user' && requiredRoles.length > 0) {
           const kioskAllowed =
             this.reflector.getAllAndOverride<boolean>(KIOSK_ALLOWED_KEY, [
@@ -104,6 +105,18 @@ export class JwtAuthGuard implements CanActivate {
             throw new ForbiddenException(
               'Dieser Endpunkt ist fuer Kiosk-Benutzer nicht freigegeben.',
             );
+          }
+        }
+      } else if (payload.type === 'worker') {
+        // Worker: JWT-Rollen gegen @Roles pruefen
+        if (requiredRoles.length > 0) {
+          const tokenRoles = payload.roles ?? [];
+          const hasRole = requiredRoles.some((role) =>
+            tokenRoles.includes(role),
+          );
+
+          if (!hasRole) {
+            throw new ForbiddenException('Fehlende Berechtigung.');
           }
         }
       }
