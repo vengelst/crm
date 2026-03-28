@@ -1,7 +1,8 @@
 "use client";
 
+import { useI18n } from "../../../i18n-context";
 import Link from "next/link";
-import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useState, useCallback } from "react";
 import type {
   Customer, Project, CustomerFinancials, DocumentItem,
   DocumentFormState, TimesheetItem,
@@ -9,6 +10,7 @@ import type {
 import { cx, formatAddress, mapsUrlFromParts, SectionCard, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow } from "../shared";
 import { DocumentPanel } from "../documents";
 import { TimesheetList, FinancialKpi } from "../projects";
+import { InlineNotesSection } from "../notes";
 
 export function CustomerDetailCard({
   customer,
@@ -39,6 +41,7 @@ export function CustomerDetailCard({
   onUpload: () => void;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
+  const { t: l, locale } = useI18n();
   const [customerTimesheets, setCustomerTimesheets] = useState<TimesheetItem[]>([]);
 
   useEffect(() => {
@@ -65,15 +68,8 @@ export function CustomerDetailCard({
   ]);
 
   const statusLabel = (status?: string) => {
-    switch (status) {
-      case "DRAFT": return "Entwurf";
-      case "PLANNED": return "Geplant";
-      case "ACTIVE": return "Aktiv";
-      case "PAUSED": return "Pausiert";
-      case "COMPLETED": return "Abgeschlossen";
-      case "CANCELED": return "Storniert";
-      default: return status ?? "-";
-    }
+    if (!status) return "-";
+    return l(`status.${status}`) !== `status.${status}` ? l(`status.${status}`) : status;
   };
 
   const statusColor = (status?: string) => {
@@ -90,20 +86,20 @@ export function CustomerDetailCard({
     const addr = formatAddress([customer.addressLine1, customer.addressLine2, customer.postalCode, customer.city, customer.country]);
     const branches = customer.branches.map((b) => `<tr><td>${b.name}</td><td>${formatAddress([b.addressLine1, b.postalCode, b.city])}</td><td>${b.phone ?? "-"}</td><td>${b.email ?? "-"}</td></tr>`).join("");
     const contacts = customer.contacts.map((c) => `<tr><td>${c.firstName} ${c.lastName}</td><td>${c.role ?? "-"}</td><td>${c.phoneMobile ?? "-"}</td><td>${c.email ?? "-"}</td></tr>`).join("");
-    openPrintWindow(`Kunde ${customer.companyName}`, `
+    openPrintWindow(`${l("print.customer")} ${customer.companyName}`, `
       <h1>${customer.companyName}</h1>
       <p class="meta">${customer.customerNumber} · ${customer.status ?? ""}</p>
-      <h2>Stammdaten</h2>
+      <h2>${l("print.masterData")}</h2>
       <div class="grid">
-        <span class="label">Adresse</span><span>${addr || "-"}</span>
-        <span class="label">Telefon</span><span>${customer.phone ?? "-"}</span>
-        <span class="label">E-Mail</span><span>${customer.email ?? "-"}</span>
-        <span class="label">Website</span><span>${customer.website ?? "-"}</span>
-        <span class="label">USt-IdNr</span><span>${customer.vatId ?? "-"}</span>
+        <span class="label">${l("print.address")}</span><span>${addr || "-"}</span>
+        <span class="label">${l("print.phone")}</span><span>${customer.phone ?? "-"}</span>
+        <span class="label">${l("print.email")}</span><span>${customer.email ?? "-"}</span>
+        <span class="label">${l("print.website")}</span><span>${customer.website ?? "-"}</span>
+        <span class="label">${l("print.vatId")}</span><span>${customer.vatId ?? "-"}</span>
       </div>
-      ${customer.branches.length > 0 ? `<h2>Niederlassungen</h2><table><thead><tr><th>Name</th><th>Adresse</th><th>Telefon</th><th>E-Mail</th></tr></thead><tbody>${branches}</tbody></table>` : ""}
-      ${customer.contacts.length > 0 ? `<h2>Ansprechpartner</h2><table><thead><tr><th>Name</th><th>Rolle</th><th>Mobil</th><th>E-Mail</th></tr></thead><tbody>${contacts}</tbody></table>` : ""}
-      ${customer.notes ? `<h2>Notizen</h2><p>${customer.notes}</p>` : ""}
+      ${customer.branches.length > 0 ? `<h2>${l("cust.branches")}</h2><table><thead><tr><th>${l("print.name")}</th><th>${l("print.address")}</th><th>${l("print.phone")}</th><th>${l("print.email")}</th></tr></thead><tbody>${branches}</tbody></table>` : ""}
+      ${customer.contacts.length > 0 ? `<h2>${l("cust.contacts")}</h2><table><thead><tr><th>${l("print.name")}</th><th>${l("print.role")}</th><th>${l("print.mobile")}</th><th>${l("print.email")}</th></tr></thead><tbody>${contacts}</tbody></table>` : ""}
+      ${customer.notes ? `<h2>${l("print.notes")}</h2><p>${customer.notes}</p>` : ""}
     `);
   }
 
@@ -117,21 +113,21 @@ export function CustomerDetailCard({
             <p className="text-sm text-slate-500">{customer.customerNumber}</p>
           </div>
           <div className="flex gap-2">
-            {customerMapsUrl ? <MapLinkButton href={customerMapsUrl}>Google Maps</MapLinkButton> : null}
-            <PrintButton onClick={printCustomer} label="Stammblatt drucken" />
+            {customerMapsUrl ? <MapLinkButton href={customerMapsUrl}>{l("common.googleMaps")}</MapLinkButton> : null}
+            <PrintButton onClick={printCustomer} label={l("cust.printSheet")} />
           </div>
         </div>
         <div className="grid gap-1 text-sm text-slate-500">
-          <div>{formatAddress([customer.addressLine1, customer.addressLine2, customer.postalCode, customer.city, customer.country]) || "Keine Adresse hinterlegt."}</div>
-          <div>{customer.email ?? "Keine E-Mail"} · {customer.phone ?? "Kein Telefon"}</div>
+          <div>{formatAddress([customer.addressLine1, customer.addressLine2, customer.postalCode, customer.city, customer.country]) || l("cust.noAddress")}</div>
+          <div>{customer.email ?? l("common.noEmail")} · {customer.phone ?? l("common.noPhone")}</div>
         </div>
       </div>
 
       {/* ── Niederlassungen ────────────────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-        <h4 className="mb-3 text-base font-semibold">Niederlassungen</h4>
+        <h4 className="mb-3 text-base font-semibold">{l("cust.branches")}</h4>
         {customer.branches.length === 0 ? (
-          <p className="text-sm text-slate-500">Keine Niederlassungen vorhanden.</p>
+          <p className="text-sm text-slate-500">{l("cust.noBranches")}</p>
         ) : (
           <div className="grid gap-2">
             {customer.branches.map((branch, index) => {
@@ -152,7 +148,7 @@ export function CustomerDetailCard({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="font-medium">{branch.name}</div>
                     {branchMapsUrl ? (
-                      <MapLinkButton href={branchMapsUrl}>Google Maps</MapLinkButton>
+                      <MapLinkButton href={branchMapsUrl}>{l("common.googleMaps")}</MapLinkButton>
                     ) : null}
                   </div>
                   <div className="text-sm text-slate-500">
@@ -162,10 +158,10 @@ export function CustomerDetailCard({
                       branch.postalCode,
                       branch.city,
                       branch.country,
-                    ]) || "Keine Adresse"}
+                    ]) || l("common.noAddress")}
                   </div>
                   <div className="text-sm text-slate-500">
-                    {branch.phone || "Kein Telefon"} · {branch.email || "Keine E-Mail"}
+                    {branch.phone || l("common.noPhone")} · {branch.email || l("common.noEmail")}
                   </div>
                 </div>
               );
@@ -176,24 +172,18 @@ export function CustomerDetailCard({
 
       {/* ── Ansprechpartner ────────────────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-        <h4 className="mb-3 text-base font-semibold">Ansprechpartner</h4>
+        <h4 className="mb-3 text-base font-semibold">{l("cust.contacts")}</h4>
         {customer.contacts.length === 0 ? (
-          <p className="text-sm text-slate-500">Keine Ansprechpartner vorhanden.</p>
+          <p className="text-sm text-slate-500">{l("cust.noContacts")}</p>
         ) : (
           <div className="grid gap-2">
             {customer.contacts.map((contact, index) => (
-              <div
+              <ContactCardWithNotes
                 key={`${contact.id ?? `${contact.firstName}-${contact.lastName}`}-${index}`}
-                className="grid gap-1 rounded-xl bg-slate-50/70 p-3 text-sm dark:bg-slate-950/40"
-              >
-                <div className="font-medium">
-                  {contact.firstName} {contact.lastName}
-                </div>
-                <div className="text-slate-500">
-                  {contact.email || "Keine E-Mail"} · Mobil: {contact.phoneMobile || "-"} · Buero:{" "}
-                  {contact.phoneLandline || "-"}
-                </div>
-              </div>
+                contact={contact}
+                customerId={customer.id}
+                apiFetch={apiFetch}
+              />
             ))}
           </div>
         )}
@@ -201,19 +191,19 @@ export function CustomerDetailCard({
 
       {/* ── Zugeordnete Projekte ───────────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-        <h4 className="mb-3 text-base font-semibold">Zugeordnete Projekte</h4>
+        <h4 className="mb-3 text-base font-semibold">{l("cust.currentProjects")}</h4>
         {customerProjects.length === 0 ? (
-          <p className="text-sm text-slate-500">Keine Projekte zugeordnet.</p>
+          <p className="text-sm text-slate-500">{l("cust.noProjects")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
-                  <th className="pb-2 pr-3">Nr.</th>
-                  <th className="pb-2 pr-3">Titel</th>
-                  <th className="pb-2 pr-3">Status</th>
-                  <th className="pb-2 pr-3 text-right">Wochenpauschale</th>
-                  <th className="pb-2 text-right">Stundensatz</th>
+                  <th className="pb-2 pr-3">{l("table.nr")}</th>
+                  <th className="pb-2 pr-3">{l("table.title")}</th>
+                  <th className="pb-2 pr-3">{l("table.status")}</th>
+                  <th className="pb-2 pr-3 text-right">{l("table.weeklyFlat")}</th>
+                  <th className="pb-2 text-right">{l("table.hourlyRate")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -247,42 +237,42 @@ export function CustomerDetailCard({
       {/* ── Kunden-Auswertung ──────────────────────────────────── */}
       {financials ? (
         <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-          <h4 className="mb-3 text-base font-semibold">Auswertung gesamt</h4>
+          <h4 className="mb-3 text-base font-semibold">{l("reports.title")}</h4>
           <div className="grid gap-4">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <FinancialKpi label="Stunden gesamt" value={`${financials.totalHours} h`} />
-              <FinancialKpi label="davon Ueberstunden" value={`${financials.overtimeHours} h`} />
-              <FinancialKpi label="Umsatz gesamt" value={`${financials.totalRevenue.toFixed(2)} EUR`} highlight />
-              <FinancialKpi label="Monteurkosten" value={`${financials.totalCosts.toFixed(2)} EUR`} />
-              <FinancialKpi label="Deckungsbeitrag" value={`${financials.margin.toFixed(2)} EUR`} highlight={financials.margin >= 0} warn={financials.margin < 0} />
+              <FinancialKpi label={l("kpi.totalHours")} value={`${financials.totalHours} h`} />
+              <FinancialKpi label={l("kpi.overtime")} value={`${financials.overtimeHours} h`} />
+              <FinancialKpi label={l("kpi.totalRevenue")} value={`${financials.totalRevenue.toFixed(2)} EUR`} highlight />
+              <FinancialKpi label={l("kpi.workerCosts")} value={`${financials.totalCosts.toFixed(2)} EUR`} />
+              <FinancialKpi label={l("kpi.margin")} value={`${financials.margin.toFixed(2)} EUR`} highlight={financials.margin >= 0} warn={financials.margin < 0} />
             </div>
 
             <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
-              <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Aufschluesselung</h5>
+              <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("kpi.breakdown")}</h5>
               <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
-                <span className="text-slate-500">Grundumsatz</span>
+                <span className="text-slate-500">{l("kpi.baseRevenue")}</span>
                 <span className="text-right font-mono">{financials.baseRevenue.toFixed(2)} EUR</span>
-                <span className="text-slate-500">Ueberstundenumsatz</span>
+                <span className="text-slate-500">{l("kpi.overtimeRevenue")}</span>
                 <span className="text-right font-mono">{financials.overtimeRevenue.toFixed(2)} EUR</span>
-                <span className="text-slate-500">Monteurkosten</span>
+                <span className="text-slate-500">{l("kpi.workerCosts")}</span>
                 <span className="text-right font-mono">-{financials.totalCosts.toFixed(2)} EUR</span>
-                <span className="font-medium">Deckungsbeitrag</span>
+                <span className="font-medium">{l("kpi.margin")}</span>
                 <span className={cx("text-right font-mono font-medium", financials.margin >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{financials.margin.toFixed(2)} EUR</span>
               </div>
             </div>
 
             {financials.projects.length > 0 ? (
               <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
-                <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Pro Projekt</h5>
+                <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("kpi.perProject")}</h5>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="text-xs text-slate-500">
-                        <th className="pb-1 pr-3">Projekt</th>
-                        <th className="pb-1 pr-3 text-right">Stunden</th>
-                        <th className="pb-1 pr-3 text-right">Umsatz</th>
-                        <th className="pb-1 pr-3 text-right">Kosten</th>
-                        <th className="pb-1 text-right">Marge</th>
+                        <th className="pb-1 pr-3">{l("kpi.project")}</th>
+                        <th className="pb-1 pr-3 text-right">{l("kpi.hours")}</th>
+                        <th className="pb-1 pr-3 text-right">{l("kpi.revenue")}</th>
+                        <th className="pb-1 pr-3 text-right">{l("kpi.costs")}</th>
+                        <th className="pb-1 text-right">{l("kpi.marginShort")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -307,8 +297,17 @@ export function CustomerDetailCard({
         </div>
       ) : null}
 
+      {/* ── Notizen (Kunde) ──────────────────────────────────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <InlineNotesSection
+          entityType="CUSTOMER"
+          customerId={customer.id}
+          apiFetch={apiFetch}
+        />
+      </div>
+
       {/* ── Stundenzettel ────────────────────────────────────── */}
-      <TimesheetList timesheets={customerTimesheets} apiFetch={apiFetch} title="Stundenzettel (alle Projekte)" />
+      <TimesheetList timesheets={customerTimesheets} apiFetch={apiFetch} title={l("ts.title")} />
 
       {/* ── Dokumente und Bilder ───────────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
@@ -328,6 +327,55 @@ export function CustomerDetailCard({
   );
 }
 
+
+function ContactCardWithNotes({
+  contact,
+  customerId,
+  apiFetch,
+}: {
+  contact: { id?: string; firstName: string; lastName: string; email?: string; phoneMobile?: string; phoneLandline?: string; role?: string };
+  customerId: string;
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+}) {
+  const { t: l } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="rounded-xl bg-slate-50/70 p-3 text-sm dark:bg-slate-950/40">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="font-medium">
+            {contact.firstName} {contact.lastName}
+            {contact.role ? <span className="ml-2 text-xs text-slate-400">({contact.role})</span> : null}
+          </div>
+          <div className="text-slate-500">
+            {contact.email || l("common.noEmail")} · {l("common.mobile") + ":"} {contact.phoneMobile || "-"} · {l("common.office") + ":"}{" "}
+            {contact.phoneLandline || "-"}
+          </div>
+        </div>
+        {contact.id ? (
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="shrink-0 rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+          >
+            {expanded ? l("notes.title") + " ▲" : l("notes.title") + " ▼"}
+          </button>
+        ) : null}
+      </div>
+      {expanded && contact.id ? (
+        <div className="mt-3 border-t border-black/10 pt-3 dark:border-white/10">
+          <InlineNotesSection
+            entityType="CONTACT"
+            customerId={customerId}
+            contactId={contact.id}
+            apiFetch={apiFetch}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 // ProjectDetailCard, ProjectNoticesSection, ProjectChecklistSection, FinancialKpi → ./crm-app/projects/
 

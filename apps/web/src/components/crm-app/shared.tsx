@@ -92,13 +92,16 @@ export function IconNavLink({
       aria-label={label}
       title={label}
       className={cx(
-        "inline-flex h-10 w-10 items-center justify-center rounded-xl border transition",
+        "group relative inline-flex h-11 w-11 items-center justify-center rounded-xl border transition",
         active
           ? "border-slate-900 bg-slate-900 !text-white dark:border-slate-300 dark:bg-slate-200 dark:!text-slate-950"
           : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
       )}
     >
       {children}
+      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-950 px-2 py-1 text-xs font-medium text-white opacity-0 shadow transition group-hover:opacity-100 dark:bg-slate-200 dark:text-slate-950">
+        {label}
+      </span>
     </Link>
   );
 }

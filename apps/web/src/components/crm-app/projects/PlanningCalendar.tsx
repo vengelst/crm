@@ -3,8 +3,10 @@
 import { type Dispatch, type SetStateAction, useMemo, useState } from "react";
 import type { Project, Worker, TeamItem } from "../types";
 import { cx, SectionCard, SecondaryButton, MessageBar, FormRow, Field, SelectField } from "../shared";
+import { useI18n } from "../../../i18n-context";
 
 export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataChanged }: { projects: Project[]; workers: Worker[]; teams: TeamItem[]; apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>; onDataChanged: () => void }) {
+  const { t: l, locale } = useI18n();
   const [viewMonth, setViewMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [planForm, setPlanForm] = useState({ projectId: "", startDate: "", endDate: "", teamId: "", workerIds: [] as string[] });
@@ -43,7 +45,7 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
         const pEnd = p.plannedEndDate ? new Date(p.plannedEndDate) : null;
         const overlap = start <= (pEnd ?? new Date("9999-12-31")) && (end ?? new Date("9999-12-31")) >= pStart;
         if (overlap) {
-          issues.push(`${w.firstName} ${w.lastName} kollidiert mit ${p.projectNumber} (${p.plannedStartDate.slice(0, 10)} - ${p.plannedEndDate?.slice(0, 10) ?? "offen"})`);
+          issues.push(`${w.firstName} ${w.lastName} ${l("plan.conflictsWith")} ${p.projectNumber} (${p.plannedStartDate.slice(0, 10)} - ${p.plannedEndDate?.slice(0, 10) ?? l("worker.open")})`);
         }
       }
     }
@@ -53,7 +55,7 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
   async function savePlan() {
     const conflicts = checkConflicts();
     setPlanConflicts(conflicts);
-    if (conflicts.length > 0 && !window.confirm(`Es gibt ${conflicts.length} Ueberschneidung(en). Trotzdem speichern?`)) return;
+    if (conflicts.length > 0 && !window.confirm(l("plan.conflicts").replace("{count}", String(conflicts.length)))) return;
     setPlanSaving(true); setPlanErr(null); setPlanMsg(null);
     try {
       // 1. Zeitraum speichern
@@ -80,7 +82,7 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
       // Formular mit den tatsaechlich gespeicherten Daten aktualisieren
       setPlanForm((c) => ({ ...c, workerIds: [...planForm.workerIds] }));
       setSelectedProject(null);
-    } catch (e) { setPlanErr(e instanceof Error ? e.message : "Fehler beim Speichern."); }
+    } catch (e) { setPlanErr(e instanceof Error ? e.message : l("plan.saveError")); }
     finally { setPlanSaving(false); }
   }
 
@@ -203,7 +205,7 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
           const d = new Date(year, month - 2, 1);
           setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
         }}>&#8592;</SecondaryButton>
-        <h2 className="text-xl font-semibold">{new Date(year, month - 1).toLocaleDateString("de-DE", { month: "long", year: "numeric" })}</h2>
+        <h2 className="text-xl font-semibold">{new Date(year, month - 1).toLocaleDateString(locale, { month: "long", year: "numeric" })}</h2>
         <SecondaryButton onClick={() => {
           const d = new Date(year, month, 1);
           setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
@@ -213,10 +215,10 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
       {/* Projekt einplanen */}
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid gap-1">
-          <label className="text-xs font-medium text-slate-500">Projekt waehlen und einplanen</label>
+          <label className="text-xs font-medium text-slate-500">{l("plan.selectProject")}</label>
           <select onChange={(e) => { const p = projects.find((x) => x.id === e.target.value); if (p) openPlanForm(p); e.target.value = ""; }}
             className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900">
-            <option value="">Projekt waehlen...</option>
+            <option value="">{l("plan.selectProjectPlaceholder")}</option>
             {projects.map((p) => <option key={p.id} value={p.id}>{p.projectNumber} – {p.title}</option>)}
           </select>
         </div>
@@ -225,7 +227,7 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
       {/* Konflikte */}
       {conflicts.length > 0 ? (
         <div className="rounded-2xl border border-red-300 bg-red-50/60 p-4 dark:border-red-500/40 dark:bg-red-500/5">
-          <h3 className="mb-2 text-sm font-semibold text-red-700 dark:text-red-400">Ueberschneidungen</h3>
+          <h3 className="mb-2 text-sm font-semibold text-red-700 dark:text-red-400">{l("plan.conflictsTitle")}</h3>
           {conflicts.map((c, i) => (
             <div key={i} className="text-xs text-red-600 dark:text-red-300">
               Tag {c.day}: {c.workerName} in {c.projects.join(" + ")}
@@ -282,7 +284,7 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
                     <button type="button"
                       onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); handleDragStart(p.id, day, "resize-end"); }}
                       className="hidden w-2 cursor-ew-resize rounded-r bg-black/10 group-hover:block dark:bg-white/20"
-                      title="Ende anpassen">&nbsp;</button>
+                      title={l("plan.adjustEnd")}>&nbsp;</button>
                   </div>
                 ))}
                 {dayProjects.length > 3 ? <div className="text-[9px] text-slate-400">+{dayProjects.length - 3}</div> : null}
@@ -291,18 +293,18 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
           })}
         </div>
         {dragState ? <div className="mt-2 text-center text-xs text-blue-600 dark:text-blue-400">
-          {dragState.mode === "move" ? "Verschieben" : "Ende anpassen"}: Tag {dragState.startDay} → {dragState.currentDay} ({dragState.currentDay - dragState.startDay > 0 ? "+" : ""}{dragState.currentDay - dragState.startDay} Tage)
+          {dragState.mode === "move" ? l("plan.moving") : l("plan.adjustEnd")}: Tag {dragState.startDay} → {dragState.currentDay} ({dragState.currentDay - dragState.startDay > 0 ? "+" : ""}{dragState.currentDay - dragState.startDay} Tage)
         </div> : null}
         {drawState ? <div className="mt-2 text-center text-xs text-blue-600 dark:text-blue-400">
-          Neuer Termin: Tag {Math.min(drawState.startDay, drawState.currentDay)} – {Math.max(drawState.startDay, drawState.currentDay)}
+          {l("plan.newDate")} Tag {Math.min(drawState.startDay, drawState.currentDay)} – {Math.max(drawState.startDay, drawState.currentDay)}
         </div> : null}
       </div>
 
       {/* Aufgezogenen Termin einem Projekt zuweisen */}
       {drawProjectPicker ? (
-        <SectionCard title="Neuen Termin zuweisen" subtitle={`${drawProjectPicker.startDay}. – ${drawProjectPicker.endDay}. ${new Date(year, month - 1).toLocaleDateString("de-DE", { month: "long", year: "numeric" })}`}>
+        <SectionCard title="Neuen Termin zuweisen" subtitle={`${drawProjectPicker.startDay}. – ${drawProjectPicker.endDay}. ${new Date(year, month - 1).toLocaleDateString(locale, { month: "long", year: "numeric" })}`}>
           <div className="grid gap-3">
-            <p className="text-sm text-slate-500">Bitte Projekt fuer diesen Zeitraum waehlen:</p>
+            <p className="text-sm text-slate-500">{l("plan.selectProjectForPeriod")}</p>
             {projects.filter((p) => !p.plannedStartDate).map((p) => (
               <button key={p.id} type="button" onClick={async () => {
                 const startDate = `${year}-${String(month).padStart(2, "0")}-${String(drawProjectPicker.startDay).padStart(2, "0")}`;
@@ -318,27 +320,27 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
               </button>
             ))}
             {projects.filter((p) => !p.plannedStartDate).length === 0 ? <p className="text-sm text-slate-500">Alle Projekte haben bereits einen Zeitraum.</p> : null}
-            <SecondaryButton onClick={() => setDrawProjectPicker(null)}>Abbrechen</SecondaryButton>
+            <SecondaryButton onClick={() => setDrawProjectPicker(null)}>{l("common.cancel")}</SecondaryButton>
           </div>
         </SectionCard>
       ) : null}
 
       {/* Planungsformular */}
       {selectedProject ? (
-        <SectionCard title={`Planung: ${selectedProject.title}`} subtitle={`${selectedProject.projectNumber} · ${selectedProject.customer?.companyName ?? ""}`}>
+        <SectionCard title={`${l("plan.planningLabel")} ${selectedProject.title}`} subtitle={`${selectedProject.projectNumber} · ${selectedProject.customer?.companyName ?? ""}`}>
           <MessageBar error={planErr} success={planMsg} />
           <div className="grid gap-4">
             <FormRow>
-              <Field label="Startdatum" type="date" value={planForm.startDate} onChange={(e) => setPlanForm((c) => ({ ...c, startDate: e.target.value }))} />
-              <Field label="Enddatum" type="date" value={planForm.endDate} onChange={(e) => setPlanForm((c) => ({ ...c, endDate: e.target.value }))} />
+              <Field label={l("plan.startDate")} type="date" value={planForm.startDate} onChange={(e) => setPlanForm((c) => ({ ...c, startDate: e.target.value }))} />
+              <Field label={l("plan.endDate")} type="date" value={planForm.endDate} onChange={(e) => setPlanForm((c) => ({ ...c, endDate: e.target.value }))} />
             </FormRow>
             {teams.length > 0 ? (
-              <SelectField label="Team zuordnen" value={planForm.teamId}
+              <SelectField label={l("plan.assignTeam")} value={planForm.teamId}
                 onChange={(e) => { setPlanForm((c) => ({ ...c, teamId: e.target.value })); if (e.target.value) applyTeam(e.target.value); }}
-                options={teams.map((t) => ({ value: t.id, label: `${t.name} (${t.members.length} Monteure)` }))} />
+                options={teams.map((t) => ({ value: t.id, label: `${t.name} (${t.members.length} ${l("plan.workers")})` }))} />
             ) : null}
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Monteure</label>
+              <label className="text-sm font-medium">{l("plan.workers")}</label>
               <div className="flex flex-wrap gap-2">
                 {workers.filter((w) => w.active !== false).map((w) => (
                   <label key={w.id} className="inline-flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
@@ -353,7 +355,7 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
             {/* Konflikte */}
             {(() => { const c = checkConflicts(); return c.length > 0 ? (
               <div className="rounded-xl border border-red-300 bg-red-50/60 p-3 dark:border-red-500/30 dark:bg-red-500/5">
-                <h4 className="mb-1 text-xs font-semibold uppercase text-red-700 dark:text-red-400">Ueberschneidungen</h4>
+                <h4 className="mb-1 text-xs font-semibold uppercase text-red-700 dark:text-red-400">{l("plan.conflictsTitle")}</h4>
                 {c.map((x, i) => <div key={i} className="text-xs text-red-600 dark:text-red-300">{x}</div>)}
               </div>
             ) : null; })()}
@@ -361,21 +363,21 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
             <div className="flex gap-3">
               <button type="button" disabled={planSaving} onClick={() => void savePlan()}
                 className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white">
-                {planSaving ? "Speichert ..." : "Planung speichern"}
+                {planSaving ? l("plan.saving") : l("plan.savePlan")}
               </button>
-              <SecondaryButton onClick={() => setSelectedProject(null)}>Schliessen</SecondaryButton>
+              <SecondaryButton onClick={() => setSelectedProject(null)}>{l("common.close")}</SecondaryButton>
             </div>
           </div>
         </SectionCard>
       ) : null}
 
       {/* Projektliste unter Kalender */}
-      <SectionCard title="Geplante Projekte" subtitle={`${plannable.length} Projekte mit Zeitraum`}>
+      <SectionCard title={l("plan.plannedProjects")} subtitle={`${plannable.length} ${l("plan.projectsWithPeriod")}`}>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
-                <th className="pb-2 pr-2">Nr.</th><th className="pb-2 pr-2">Titel</th><th className="pb-2 pr-2">Kunde</th><th className="pb-2 pr-2">Status</th><th className="pb-2 pr-2">Zeitraum</th><th className="pb-2">Monteure</th>
+                <th className="pb-2 pr-2">{l("table.nr")}</th><th className="pb-2 pr-2">{l("table.title")}</th><th className="pb-2 pr-2">{l("table.customer")}</th><th className="pb-2 pr-2">{l("table.status")}</th><th className="pb-2 pr-2">{l("table.period")}</th><th className="pb-2">{l("table.workers")}</th>
               </tr>
             </thead>
             <tbody>
@@ -385,7 +387,7 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
                   <td className="py-2 pr-2 text-xs">{p.title}</td>
                   <td className="py-2 pr-2 text-xs">{p.customer?.companyName ?? "-"}</td>
                   <td className="py-2 pr-2 text-xs">{p.status}</td>
-                  <td className="py-2 pr-2 font-mono text-xs">{p.plannedStartDate?.slice(0, 10) ?? "-"} – {p.plannedEndDate?.slice(0, 10) ?? "offen"}</td>
+                  <td className="py-2 pr-2 font-mono text-xs">{p.plannedStartDate?.slice(0, 10) ?? "-"} – {p.plannedEndDate?.slice(0, 10) ?? l("worker.open")}</td>
                   <td className="py-2 text-xs">{(p.assignments ?? []).map((a) => `${a.worker.firstName} ${a.worker.lastName}`).join(", ") || "-"}</td>
                 </tr>
               ))}

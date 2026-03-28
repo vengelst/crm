@@ -45,24 +45,67 @@ export class CustomersService {
     return customer;
   }
 
+  /**
+   * Atomically increment the CUSTOMER counter and return the next number.
+   * Uses UPDATE ... RETURNING inside a transaction to prevent race conditions.
+   * Retries up to 3 times on unique-constraint violations.
+   */
+  private async nextCustomerNumber(
+    tx: Parameters<Parameters<typeof this.prisma.$transaction>[0]>[0],
+  ): Promise<string> {
+    const result = await tx.$queryRawUnsafe<{ prefix: string; current: number }[]>(
+      `UPDATE "Counter" SET "current" = "current" + 1 WHERE "id" = 'CUSTOMER' RETURNING "prefix", "current"`,
+    );
+    if (!result.length) {
+      throw new BadRequestException('Counter CUSTOMER nicht gefunden.');
+    }
+    return `${result[0].prefix}${result[0].current}`;
+  }
+
   async create(dto: SaveCustomerDto) {
-    if (!dto.companyName || !dto.customerNumber) {
-      throw new BadRequestException(
-        'companyName und customerNumber sind Pflichtfelder.',
-      );
+    if (!dto.companyName) {
+      throw new BadRequestException('companyName ist Pflichtfeld.');
     }
 
-    const existing = await this.prisma.customer.findFirst({
-      where: { customerNumber: dto.customerNumber, deletedAt: null },
-    });
-    if (existing) {
-      throw new BadRequestException('Kundennummer bereits vergeben.');
+    // Manual customer number: validate uniqueness outside transaction
+    if (dto.customerNumber?.trim()) {
+      const existing = await this.prisma.customer.findFirst({
+        where: { customerNumber: dto.customerNumber.trim(), deletedAt: null },
+      });
+      if (existing) {
+        throw new BadRequestException('Kundennummer bereits vergeben.');
+      }
     }
 
-    const customerNumber = dto.customerNumber;
     const companyName = dto.companyName;
+    const MAX_RETRIES = 3;
 
-    return this.prisma.$transaction(async (tx) => {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const customerNumber = dto.customerNumber?.trim() || await this.nextCustomerNumber(tx);
+          return this._createInTx(tx, dto, customerNumber, companyName);
+        });
+      } catch (e: unknown) {
+        // Prisma unique constraint violation: P2002
+        const isPrismaUnique = e && typeof e === 'object' && 'code' in e && (e as { code: string }).code === 'P2002';
+        if (isPrismaUnique && attempt < MAX_RETRIES - 1 && !dto.customerNumber?.trim()) {
+          continue; // retry with next counter value
+        }
+        throw e;
+      }
+    }
+
+    throw new BadRequestException('Kundennummer konnte nicht vergeben werden.');
+  }
+
+  private async _createInTx(
+    tx: Parameters<Parameters<typeof this.prisma.$transaction>[0]>[0],
+    dto: SaveCustomerDto,
+    customerNumber: string,
+    companyName: string,
+  ) {
+    {
       const customer = await tx.customer.create({
         data: {
           customerNumber,
@@ -143,7 +186,7 @@ export class CustomersService {
           contacts: true,
         },
       });
-    });
+    }
   }
 
   async update(id: string, dto: SaveCustomerDto) {

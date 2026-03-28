@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "../../../i18n-context";
 
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
 import type { ProjectNotice } from "../types";
@@ -10,6 +11,7 @@ export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }
   isAdmin: boolean;
   workerId?: string;
 }) {
+  const { locale, t: l } = useI18n();
   const [notices, setNotices] = useState<ProjectNotice[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
@@ -36,7 +38,7 @@ export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }
       });
       setNewTitle(""); setNewBody(""); setNewRequired(false); setNewRequireSig(false);
       await load();
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : l("common.error")); }
   }
 
   async function acknowledge(noticeId: string, signatureImagePath?: string) {
@@ -48,7 +50,7 @@ export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }
       });
       setSigningNoticeId(null);
       await load();
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : l("common.error")); }
   }
 
   function initSignCanvas(canvas: HTMLCanvasElement | null) {
@@ -84,11 +86,11 @@ export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }
 
   return (
     <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-      <h4 className="mb-3 text-base font-semibold">Baustellenhinweise</h4>
+      <h4 className="mb-3 text-base font-semibold">{l("notice.siteNotices")}</h4>
       {msg ? <div className="mb-2 text-xs text-red-600">{msg}</div> : null}
 
       {notices.length === 0 ? (
-        <p className="text-sm text-slate-500">Keine Hinweise vorhanden.</p>
+        <p className="text-sm text-slate-500">{l("notice.noNotices")}</p>
       ) : (
         <div className="grid gap-4">
           {notices.map((n) => {
@@ -98,10 +100,10 @@ export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }
                 <div className="mb-1 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold">{n.title}</span>
-                    {n.required ? <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-500/20 dark:text-red-400">Pflicht</span> : null}
-                    {n.requireSignature ? <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400">Unterschrift</span> : null}
+                    {n.required ? <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-500/20 dark:text-red-400">{l("notice.required")}</span> : null}
+                    {n.requireSignature ? <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400">{l("notice.signature")}</span> : null}
                   </div>
-                  {isAdmin ? <button type="button" onClick={() => void removeNotice(n.id)} className="text-xs text-red-500 hover:underline">Deaktivieren</button> : null}
+                  {isAdmin ? <button type="button" onClick={() => void removeNotice(n.id)} className="text-xs text-red-500 hover:underline">{l("notice.deactivate")}</button> : null}
                 </div>
                 <div className="mb-3 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400">{n.body}</div>
 
@@ -109,31 +111,31 @@ export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }
                 {!isAdmin && workerId ? (
                   ack?.acknowledged ? (
                     <div className="text-xs text-emerald-600 dark:text-emerald-400">
-                      {ack.signatureImagePath ? "Unterschrieben" : "Bestaetigt"} am {ack.acknowledgedAt ? new Date(ack.acknowledgedAt).toLocaleString("de-DE") : ""}
+                      {ack.signatureImagePath ? l("notice.signed") : l("notice.acknowledged")} am {ack.acknowledgedAt ? new Date(ack.acknowledgedAt).toLocaleString(locale) : ""}
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2">
                       {n.requireSignature ? (
                         signingNoticeId === n.id ? (
                           <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 dark:border-indigo-500/30 dark:bg-indigo-500/5">
-                            <p className="mb-2 text-xs font-medium">Unterschrift</p>
+                            <p className="mb-2 text-xs font-medium">{l("notice.signature")}</p>
                             <canvas ref={initSignCanvas} width={400} height={120} className="w-full rounded-lg border border-black/10 bg-white" style={{ touchAction: "none" }} />
                             <div className="mt-2 flex gap-2">
                               <button type="button" onClick={() => { if (sigCanvasRef) void acknowledge(n.id, sigCanvasRef.toDataURL("image/png")); }}
-                                className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500">Unterschreiben</button>
-                              <SecondaryButton onClick={() => setSigningNoticeId(null)}>Abbrechen</SecondaryButton>
+                                className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500">{l("notice.signature")}</button>
+                              <SecondaryButton onClick={() => setSigningNoticeId(null)}>{l("common.cancel")}</SecondaryButton>
                             </div>
                           </div>
                         ) : (
                           <button type="button" onClick={() => setSigningNoticeId(n.id)}
                             className="w-fit rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500">
-                            Unterschreiben und bestaetigen
+                            {l("notice.sign")}
                           </button>
                         )
                       ) : (
                         <button type="button" onClick={() => void acknowledge(n.id)}
                           className="w-fit rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500">
-                          Bestaetigen
+                          {l("notice.acknowledge")}
                         </button>
                       )}
                     </div>
@@ -143,7 +145,7 @@ export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }
                 {/* Admin: Nachweis-Tabelle */}
                 {isAdmin && n.acknowledgements.length > 0 ? (
                   <div className="mt-3 border-t border-black/10 pt-2 dark:border-white/10">
-                    <p className="mb-1 text-xs font-medium text-slate-500">Bestaetigungen:</p>
+                    <p className="mb-1 text-xs font-medium text-slate-500">{l("notice.confirmations")}</p>
                     <div className="grid gap-1">
                       {n.acknowledgements.map((a) => (
                         <div key={a.id} className="flex items-center gap-2 text-xs">
@@ -152,9 +154,9 @@ export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }
                           <span className="text-slate-400">({a.worker?.workerNumber})</span>
                           {a.acknowledged ? (
                             <span className="text-emerald-600 dark:text-emerald-400">
-                              {a.signatureImagePath ? "unterschrieben" : "bestaetigt"} {a.acknowledgedAt ? `am ${new Date(a.acknowledgedAt).toLocaleDateString("de-DE")}` : ""}
+                              {a.signatureImagePath ? l("notice.signedOn") : l("notice.confirmedOn")} {a.acknowledgedAt ? `${new Date(a.acknowledgedAt).toLocaleDateString(locale)}` : ""}
                             </span>
-                          ) : <span className="text-slate-400">offen</span>}
+                          ) : <span className="text-slate-400">{l("notice.open")}</span>}
                         </div>
                       ))}
                     </div>
@@ -168,14 +170,14 @@ export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }
 
       {isAdmin ? (
         <div className="mt-4 grid gap-3 rounded-xl border border-black/10 p-3 dark:border-white/10">
-          <p className="text-sm font-medium">Neuen Hinweis anlegen</p>
-          <Field label="Titel" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
-          <TextArea label="Text" value={newBody} onChange={(e) => setNewBody(e.target.value)} />
+          <p className="text-sm font-medium">{l("notice.addNotice")}</p>
+          <Field label={l("notice.title")} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+          <TextArea label={l("notice.text")} value={newBody} onChange={(e) => setNewBody(e.target.value)} />
           <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={newRequired} onChange={() => setNewRequired(!newRequired)} /> Pflicht</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={newRequireSig} onChange={() => setNewRequireSig(!newRequireSig)} /> Unterschrift erforderlich</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={newRequired} onChange={() => setNewRequired(!newRequired)} /> {l("notice.required")}</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={newRequireSig} onChange={() => setNewRequireSig(!newRequireSig)} /> {l("notice.signatureRequired")}</label>
           </div>
-          <SecondaryButton onClick={() => void addNotice()}>Hinweis anlegen</SecondaryButton>
+          <SecondaryButton onClick={() => void addNotice()}>{l("notice.addNotice")}</SecondaryButton>
         </div>
       ) : null}
     </div>

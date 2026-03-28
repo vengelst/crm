@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "../../../i18n-context";
 
 import { type ChangeEvent, type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useState } from "react";
 import type {
@@ -39,6 +40,7 @@ export function SettingsPanel({
   error: string | null;
   success: string | null;
 }) {
+  const { t: l } = useI18n();
   const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "company" | "pdfconfig" | "smtp" | "backup" | "gcal" | "devices" | "templates" | "reminders">("general");
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState("");
@@ -79,16 +81,16 @@ export function SettingsPanel({
     setPanelError(null); setPanelSuccess(null);
     try {
       await apiFetch(`/settings/roles/${selectedRoleId}/permissions`, { method: "PUT", body: JSON.stringify({ permissionIds: rolePermissionIds }) });
-      setPanelSuccess("Rechte gespeichert.");
-    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+      setPanelSuccess(l("settings.permissionsSaved"));
+    } catch (e) { setPanelError(e instanceof Error ? e.message : l("common.error")); }
   }
 
   async function saveSmtp(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setPanelError(null); setPanelSuccess(null);
     try {
       await apiFetch("/settings/smtp", { method: "PUT", body: JSON.stringify({ ...smtpForm, port: Number(smtpForm.port) }) });
-      setPanelSuccess("SMTP gespeichert.");
-    } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler"); }
+      setPanelSuccess(l("common.success"));
+    } catch (err) { setPanelError(err instanceof Error ? err.message : l("common.error")); }
   }
 
   async function testSmtp() {
@@ -103,9 +105,9 @@ export function SettingsPanel({
           recipient,
         }),
       });
-      setPanelSuccess(`Test-E-Mail erfolgreich an ${recipient} gesendet.`);
+      setPanelSuccess(l("common.success"));
     } catch (err) {
-      setPanelError(err instanceof Error ? err.message : "Fehler");
+      setPanelError(err instanceof Error ? err.message : l("common.error"));
     } finally {
       setSmtpTesting(false);
     }
@@ -115,16 +117,16 @@ export function SettingsPanel({
     e.preventDefault(); setPanelError(null); setPanelSuccess(null);
     try {
       await apiFetch("/settings/company", { method: "PUT", body: JSON.stringify(companyForm) });
-      setPanelSuccess("Firmeninformationen gespeichert.");
-    } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler"); }
+      setPanelSuccess(l("settings.companyInfoSaved"));
+    } catch (err) { setPanelError(err instanceof Error ? err.message : l("common.error")); }
   }
 
   async function savePdfConfig(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setPanelError(null); setPanelSuccess(null);
     try {
       await apiFetch("/settings/pdf-config", { method: "PUT", body: JSON.stringify(pdfConfigForm) });
-      setPanelSuccess("PDF-Konfiguration gespeichert.");
-    } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler"); }
+      setPanelSuccess(l("common.success"));
+    } catch (err) { setPanelError(err instanceof Error ? err.message : l("common.error")); }
   }
 
   async function saveBackupConfig(e: FormEvent<HTMLFormElement>) {
@@ -134,22 +136,22 @@ export function SettingsPanel({
         method: "PUT",
         body: JSON.stringify({ ...backupForm, keepCount: Number(backupForm.keepCount) }),
       });
-      setPanelSuccess("Backup-Konfiguration gespeichert.");
-    } catch (err) { setPanelError(err instanceof Error ? err.message : "Fehler"); }
+      setPanelSuccess(l("settings.backupConfigSaved"));
+    } catch (err) { setPanelError(err instanceof Error ? err.message : l("common.error")); }
   }
 
   const tabs: { key: typeof settingsTab; label: string }[] = [
-    { key: "general", label: "Allgemein" },
-    ...(canManageUsers ? [{ key: "users" as const, label: "Benutzer" }] : []),
-    ...(canManageUsers ? [{ key: "roles" as const, label: "Rollen & Rechte" }] : []),
-    { key: "company" as const, label: "Firma" },
-    { key: "pdfconfig" as const, label: "PDF" },
-    { key: "smtp", label: "E-Mail / SMTP" },
-    { key: "backup", label: "Backup" },
-    { key: "gcal" as const, label: "Google Kalender" },
-    { key: "devices" as const, label: "Kiosk-Geraete" },
-    { key: "templates" as const, label: "Vorlagen" },
-    { key: "reminders" as const, label: "Erinnerungen" },
+    { key: "general", label: l("settings.general") },
+    ...(canManageUsers ? [{ key: "users" as const, label: l("settings.users") }] : []),
+    ...(canManageUsers ? [{ key: "roles" as const, label: l("settings.roles") }] : []),
+    { key: "company" as const, label: l("settings.company") },
+    { key: "pdfconfig" as const, label: l("settings.pdfConfig") },
+    { key: "smtp", label: l("settings.smtp") },
+    { key: "backup", label: l("settings.backup") },
+    { key: "gcal" as const, label: l("settings.gcal") },
+    { key: "devices" as const, label: l("settings.devices") },
+    { key: "templates" as const, label: l("settings.templates") },
+    { key: "reminders" as const, label: l("settings.reminders") },
   ];
 
   const permissionsByCategory = permissions.reduce<Record<string, PermissionItem[]>>((acc, p) => {
@@ -173,37 +175,41 @@ export function SettingsPanel({
       <MessageBar error={panelError ?? error} success={panelSuccess ?? success} />
 
       {settingsTab === "general" ? (
-        <SectionCard title="Allgemeine Einstellungen" subtitle="Passwort, Kiosk-PIN, Theme">
+        <SectionCard title={l("settings.generalTitle")} subtitle={l("settings.generalSub")}>
           <form className="grid gap-4 md:max-w-2xl" onSubmit={onSettingsSubmit}>
             <FormRow>
-              <Field label="Minimale Passwortlaenge" type="number" value={String(settingsForm.passwordMinLength)} onChange={(e) => setSettingsForm((c) => ({ ...c, passwordMinLength: Number(e.target.value || 0) }))} />
-              <Field label="Kiosk-PIN Laenge" type="number" value={String(settingsForm.kioskCodeLength)} onChange={(e) => setSettingsForm((c) => ({ ...c, kioskCodeLength: Number(e.target.value || 0) }))} />
+              <Field label={l("settings.minPwLength")} type="number" value={String(settingsForm.passwordMinLength)} onChange={(e) => setSettingsForm((c) => ({ ...c, passwordMinLength: Number(e.target.value || 0) }))} />
+              <Field label={l("settings.kioskPinLength")} type="number" value={String(settingsForm.kioskCodeLength)} onChange={(e) => setSettingsForm((c) => ({ ...c, kioskCodeLength: Number(e.target.value || 0) }))} />
             </FormRow>
-            <SelectField label="Standard Theme" value={settingsForm.defaultTheme} onChange={(e) => setSettingsForm((c) => ({ ...c, defaultTheme: e.target.value as AppSettings["defaultTheme"] }))} options={[{ value: "dark", label: "Dunkel" }, { value: "light", label: "Hell" }]} />
-            <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "Einstellungen speichern"}</PrimaryButton>
+            <SelectField label={l("settings.defaultTheme")} value={settingsForm.defaultTheme} onChange={(e) => setSettingsForm((c) => ({ ...c, defaultTheme: e.target.value as AppSettings["defaultTheme"] }))} options={[{ value: "dark", label: l("settings.dark") }, { value: "light", label: l("settings.light") }]} />
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={settingsForm.navAsIcons} onChange={(e) => setSettingsForm((c) => ({ ...c, navAsIcons: e.target.checked }))} />
+              {l("settings.navAsIcons")}
+            </label>
+            <PrimaryButton disabled={submitting}>{submitting ? l("common.saving") : l("settings.saveSettings")}</PrimaryButton>
           </form>
         </SectionCard>
       ) : null}
 
       {settingsTab === "users" && canManageUsers ? (
         <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <SectionCard title="Benutzer" subtitle="Benutzer verwalten, Rollen zuweisen.">
+          <SectionCard title={l("settings.users")} subtitle={l("settings.userManage")}>
             <EntityList items={users} title={(i) => i.displayName}
               subtitle={(i) => `${i.email} · ${i.roles.map((r) => r.role.name).join(", ")}${i.isActive ? "" : " (inaktiv)"}`}
-              editLabel="Bearbeiten" deleteLabel="Loeschen"
+              editLabel={l("common.edit")} deleteLabel={l("common.delete")}
               onEdit={(i) => setUserForm({ id: i.id, email: i.email, displayName: i.displayName, password: "", kioskCode: "", roleCodes: i.roles.map((r) => r.role.code), isActive: i.isActive })}
               onDelete={(i) => onDeleteUser(i.id)} />
           </SectionCard>
-          <SectionCard title={userForm.id ? "Benutzer bearbeiten" : "Benutzer anlegen"} subtitle="Login, Passwort, Kiosk-PIN und Rollen. Die Kiosk-PIN ermoeglicht eine schnelle Anmeldung am Kiosk-Terminal.">
+          <SectionCard title={userForm.id ? l("settings.userEdit") : l("settings.userCreate")} subtitle={l("settings.userSub")}>
             <form className="grid gap-4" onSubmit={onUserSubmit}>
-              <Field label="Anzeigename" value={userForm.displayName} onChange={(e) => setUserForm((c) => ({ ...c, displayName: e.target.value }))} />
-              <Field label="E-Mail" value={userForm.email} onChange={(e) => setUserForm((c) => ({ ...c, email: e.target.value }))} />
+              <Field label={l("settings.displayName")} value={userForm.displayName} onChange={(e) => setUserForm((c) => ({ ...c, displayName: e.target.value }))} />
+              <Field label={l("common.email")} value={userForm.email} onChange={(e) => setUserForm((c) => ({ ...c, email: e.target.value }))} />
               <FormRow>
-                <Field label="Passwort" type="password" autoComplete="new-password" value={userForm.password} onChange={(e) => setUserForm((c) => ({ ...c, password: e.target.value }))} />
-                <Field label="Kiosk-PIN (fuer Kiosk-Anmeldung)" type="password" autoComplete="new-password" value={userForm.kioskCode} onChange={(e) => setUserForm((c) => ({ ...c, kioskCode: e.target.value }))} />
+                <Field label={l("common.password")} type="password" autoComplete="new-password" value={userForm.password} onChange={(e) => setUserForm((c) => ({ ...c, password: e.target.value }))} />
+                <Field label={l("settings.kioskPin")} type="password" autoComplete="new-password" value={userForm.kioskCode} onChange={(e) => setUserForm((c) => ({ ...c, kioskCode: e.target.value }))} />
               </FormRow>
               <div className="grid gap-2">
-                <label className="text-sm font-medium">Rollen</label>
+                <label className="text-sm font-medium">{l("settings.roles")}</label>
                 <div className="flex flex-wrap gap-2">
                   {roles.map((role) => (
                     <label key={role.id} className="inline-flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
@@ -215,8 +221,8 @@ export function SettingsPanel({
                 </div>
               </div>
               <div className="flex gap-3">
-                <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "Benutzer speichern"}</PrimaryButton>
-                <SecondaryButton onClick={() => setUserForm({ id: undefined, email: "", displayName: "", password: "", kioskCode: "", roleCodes: [], isActive: true })}>Zuruecksetzen</SecondaryButton>
+                <PrimaryButton disabled={submitting}>{submitting ? l("common.saving") : l("settings.userSave")}</PrimaryButton>
+                <SecondaryButton onClick={() => setUserForm({ id: undefined, email: "", displayName: "", password: "", kioskCode: "", roleCodes: [], isActive: true })}>{l("common.reset")}</SecondaryButton>
               </div>
             </form>
           </SectionCard>
@@ -224,9 +230,9 @@ export function SettingsPanel({
       ) : null}
 
       {settingsTab === "roles" && canManageUsers ? (
-        <SectionCard title="Rollen & Rechte" subtitle="Rechte pro Rolle konfigurieren.">
+        <SectionCard title={l("settings.rolesTitle")} subtitle={l("settings.rolesSub")}>
           <div className="grid gap-4">
-            <SelectField label="Rolle waehlen" value={selectedRoleId}
+            <SelectField label={l("settings.selectRole")} value={selectedRoleId}
               onChange={(e) => setSelectedRoleId(e.target.value)}
               options={roles.map((r) => ({ value: r.id, label: r.name }))} />
             {selectedRoleId ? (
@@ -245,7 +251,7 @@ export function SettingsPanel({
                     </div>
                   </div>
                 ))}
-                <SecondaryButton onClick={() => void saveRolePermissions()}>Rechte speichern</SecondaryButton>
+                <SecondaryButton onClick={() => void saveRolePermissions()}>{l("settings.savePermissions")}</SecondaryButton>
               </div>
             ) : null}
           </div>
@@ -257,45 +263,45 @@ export function SettingsPanel({
       ) : null}
 
       {settingsTab === "pdfconfig" ? (
-        <SectionCard title="PDF-Konfiguration" subtitle="Darstellung fuer Stundenzettel und Dokumente.">
+        <SectionCard title={l("settings.pdfConfig")} subtitle={l("settings.pdfSub")}>
           <form className="grid gap-4 md:max-w-2xl" onSubmit={(e) => void savePdfConfig(e)}>
-            <Field label="PDF-Kopfzeile" value={pdfConfigForm.header} onChange={(e) => setPdfConfigForm((c) => ({ ...c, header: e.target.value }))} />
-            <Field label="PDF-Fusszeile" value={pdfConfigForm.footer} onChange={(e) => setPdfConfigForm((c) => ({ ...c, footer: e.target.value }))} />
-            <TextArea label="Zusatztext / Freitext" value={pdfConfigForm.extraText} onChange={(e) => setPdfConfigForm((c) => ({ ...c, extraText: e.target.value }))} />
+            <Field label={l("settings.pdfHeader")} value={pdfConfigForm.header} onChange={(e) => setPdfConfigForm((c) => ({ ...c, header: e.target.value }))} />
+            <Field label={l("settings.pdfFooter")} value={pdfConfigForm.footer} onChange={(e) => setPdfConfigForm((c) => ({ ...c, footer: e.target.value }))} />
+            <TextArea label={l("settings.pdfExtraText")} value={pdfConfigForm.extraText} onChange={(e) => setPdfConfigForm((c) => ({ ...c, extraText: e.target.value }))} />
             <label className="inline-flex items-center gap-2 text-sm">
               <input type="checkbox" checked={pdfConfigForm.useLogo} onChange={(e) => setPdfConfigForm((c) => ({ ...c, useLogo: e.target.checked }))} />
-              Logo im PDF verwenden
+              {l("settings.pdfUseLogo")}
             </label>
-            <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "PDF-Konfiguration speichern"}</PrimaryButton>
+            <PrimaryButton disabled={submitting}>{submitting ? l("common.saving") : l("settings.pdfSave")}</PrimaryButton>
           </form>
         </SectionCard>
       ) : null}
 
       {settingsTab === "smtp" ? (
-        <SectionCard title="E-Mail / SMTP" subtitle="Mailserver fuer Stundenzettel-Versand konfigurieren.">
+        <SectionCard title={l("settings.smtp")} subtitle={l("settings.smtpSub")}>
           <form className="grid gap-4 md:max-w-2xl" onSubmit={(e) => void saveSmtp(e)}>
             <FormRow>
-              <Field label="SMTP Host" value={smtpForm.host} onChange={(e) => setSmtpForm((c) => ({ ...c, host: e.target.value }))} />
-              <Field label="SMTP Port" value={smtpForm.port} onChange={(e) => setSmtpForm((c) => ({ ...c, port: e.target.value }))} />
+              <Field label={l("settings.smtpHost")} value={smtpForm.host} onChange={(e) => setSmtpForm((c) => ({ ...c, host: e.target.value }))} />
+              <Field label={l("settings.smtpPort")} value={smtpForm.port} onChange={(e) => setSmtpForm((c) => ({ ...c, port: e.target.value }))} />
             </FormRow>
             <FormRow>
-              <Field label="SMTP Benutzer" value={smtpForm.user} onChange={(e) => setSmtpForm((c) => ({ ...c, user: e.target.value }))} />
-              <Field label="SMTP Passwort" type="password" autoComplete="new-password" value={smtpForm.password} onChange={(e) => setSmtpForm((c) => ({ ...c, password: e.target.value }))} />
+              <Field label={l("settings.smtpUser")} value={smtpForm.user} onChange={(e) => setSmtpForm((c) => ({ ...c, user: e.target.value }))} />
+              <Field label={l("settings.smtpPassword")} type="password" autoComplete="new-password" value={smtpForm.password} onChange={(e) => setSmtpForm((c) => ({ ...c, password: e.target.value }))} />
             </FormRow>
-            <Field label="Absenderadresse" value={smtpForm.fromEmail} onChange={(e) => setSmtpForm((c) => ({ ...c, fromEmail: e.target.value }))} />
+            <Field label={l("settings.smtpFrom")} value={smtpForm.fromEmail} onChange={(e) => setSmtpForm((c) => ({ ...c, fromEmail: e.target.value }))} />
             <label className="inline-flex items-center gap-2 text-sm">
               <input type="checkbox" checked={smtpForm.secure} onChange={(e) => setSmtpForm((c) => ({ ...c, secure: e.target.checked }))} />
-              TLS / SSL verwenden
+              {l("settings.smtpSecure")}
             </label>
             <Field
-              label="Test-E-Mail an"
+              label={l("settings.smtpTestRecipient")}
               value={smtpTestRecipient}
               onChange={(e) => setSmtpTestRecipient(e.target.value)}
             />
             <div className="flex flex-wrap gap-3">
-              <PrimaryButton disabled={submitting}>{submitting ? "Speichert ..." : "SMTP speichern"}</PrimaryButton>
+              <PrimaryButton disabled={submitting}>{submitting ? l("common.saving") : l("settings.smtpSave")}</PrimaryButton>
               <SecondaryButton onClick={() => void testSmtp()}>
-                {smtpTesting ? "Testet ..." : "SMTP testen"}
+                {smtpTesting ? l("settings.smtpTesting") : l("settings.smtpTest")}
               </SecondaryButton>
             </div>
           </form>

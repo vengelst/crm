@@ -3,12 +3,14 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
 import type { TimesheetItem } from "../types";
 import { cx, SectionCard, SecondaryButton, MessageBar, Field } from "../shared";
+import { useI18n } from "../../../i18n-context";
 
 export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }: {
   timesheets: TimesheetItem[];
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   title?: string;
 }) {
+  const { t: l } = useI18n();
   const [emailTsId, setEmailTsId] = useState<string | null>(null);
   const [emailRecipient, setEmailRecipient] = useState("");
   const [sending, setSending] = useState(false);
@@ -19,12 +21,12 @@ export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }:
       const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
       const token = typeof window !== "undefined" ? (JSON.parse(window.localStorage.getItem("crm-admin-auth") ?? "{}") as { accessToken?: string }).accessToken ?? "" : "";
       const response = await fetch(`${apiRoot}/api/timesheets/${tsId}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!response.ok) throw new Error("PDF-Fehler");
+      if (!response.ok) throw new Error(l("ts.pdfError"));
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = `stundenzettel-${tsId}.pdf`; a.click();
       URL.revokeObjectURL(url);
-    } catch { setTsMsg("PDF konnte nicht geladen werden."); }
+    } catch { setTsMsg(l("ts.pdfLoadError")); }
   }
 
   async function sendEmail() {
@@ -32,13 +34,13 @@ export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }:
     setSending(true); setTsMsg(null);
     try {
       await apiFetch(`/timesheets/${emailTsId}/send-email`, { method: "POST", body: JSON.stringify({ recipients: emailRecipient.split(",").map((r) => r.trim()).filter(Boolean) }) });
-      setTsMsg("E-Mail gesendet."); setEmailTsId(null); setEmailRecipient("");
-    } catch (e) { setTsMsg(e instanceof Error ? e.message : "Fehler"); }
+      setTsMsg(l("ts.emailSent")); setEmailTsId(null); setEmailRecipient("");
+    } catch (e) { setTsMsg(e instanceof Error ? e.message : l("common.error")); }
     finally { setSending(false); }
   }
 
   const statusLabel = (s: string) => {
-    switch (s) { case "DRAFT": return "Entwurf"; case "WORKER_SIGNED": return "Monteur signiert"; case "CUSTOMER_SIGNED": return "Kunde signiert"; case "COMPLETED": return "Fertig"; case "APPROVED": return "Freigegeben"; case "BILLED": return "Abgerechnet"; case "LOCKED": return "Gesperrt"; default: return s; }
+    switch (s) { case "DRAFT": return l("ts.draft"); case "WORKER_SIGNED": return l("ts.workerSigned"); case "CUSTOMER_SIGNED": return l("ts.customerSigned"); case "COMPLETED": return l("ts.completed"); case "APPROVED": return l("ts.approved"); case "BILLED": return l("ts.billed"); case "LOCKED": return l("ts.locked"); default: return s; }
   };
 
   const statusColor = (s: string) => {
@@ -58,16 +60,16 @@ export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }:
     setTsMsg(null);
     try {
       await apiFetch(`/timesheets/${tsId}/approve`, { method: "POST", body: JSON.stringify({}) });
-      setTsMsg("Stundenzettel freigegeben.");
-    } catch (e) { setTsMsg(e instanceof Error ? e.message : "Fehler"); }
+      setTsMsg(l("ts.approvedMsg"));
+    } catch (e) { setTsMsg(e instanceof Error ? e.message : l("common.error")); }
   }
 
   async function markBilledTs(tsId: string) {
     setTsMsg(null);
     try {
       await apiFetch(`/timesheets/${tsId}/mark-billed`, { method: "POST", body: JSON.stringify({}) });
-      setTsMsg("Stundenzettel als abgerechnet markiert.");
-    } catch (e) { setTsMsg(e instanceof Error ? e.message : "Fehler"); }
+      setTsMsg(l("ts.billedMsg"));
+    } catch (e) { setTsMsg(e instanceof Error ? e.message : l("common.error")); }
   }
 
   return (
@@ -75,19 +77,19 @@ export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }:
       <h4 className="mb-3 text-base font-semibold">{title}</h4>
       {tsMsg ? <div className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{tsMsg}</div> : null}
       {timesheets.length === 0 ? (
-        <p className="text-sm text-slate-500">Keine Stundenzettel vorhanden.</p>
+        <p className="text-sm text-slate-500">{l("ts.noTimesheets")}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
-                <th className="pb-2 pr-2">KW</th>
-                <th className="pb-2 pr-2">Monteur</th>
-                <th className="pb-2 pr-2">Projekt</th>
-                <th className="pb-2 pr-2 text-right">Netto</th>
-                <th className="pb-2 pr-2">Status</th>
-                <th className="pb-2 pr-2">Signiert</th>
-                <th className="pb-2">Aktionen</th>
+                <th className="pb-2 pr-2">{l("table.cw")}</th>
+                <th className="pb-2 pr-2">{l("table.worker")}</th>
+                <th className="pb-2 pr-2">{l("table.project")}</th>
+                <th className="pb-2 pr-2 text-right">{l("table.netto")}</th>
+                <th className="pb-2 pr-2">{l("table.status")}</th>
+                <th className="pb-2 pr-2">{l("table.signed")}</th>
+                <th className="pb-2">{l("table.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -124,10 +126,10 @@ export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }:
       {emailTsId ? (
         <div className="mt-3 rounded-xl border-2 border-blue-300 bg-blue-50/50 p-3 dark:border-blue-500/30 dark:bg-blue-500/5">
           <div className="grid gap-2">
-            <Field label="Empfaenger (Komma-getrennt)" value={emailRecipient} onChange={(e) => setEmailRecipient(e.target.value)} />
+            <Field label={l("ts.recipientShort")} value={emailRecipient} onChange={(e) => setEmailRecipient(e.target.value)} />
             <div className="flex gap-2">
-              <button type="button" disabled={sending} onClick={() => void sendEmail()} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-60">{sending ? "Sendet..." : "Senden"}</button>
-              <SecondaryButton onClick={() => setEmailTsId(null)}>Abbrechen</SecondaryButton>
+              <button type="button" disabled={sending} onClick={() => void sendEmail()} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-60">{sending ? l("ts.sending") : l("ts.send")}</button>
+              <SecondaryButton onClick={() => setEmailTsId(null)}>{l("common.cancel")}</SecondaryButton>
             </div>
           </div>
         </div>

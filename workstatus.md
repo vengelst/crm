@@ -32,6 +32,25 @@
 - Bei Unsicherheit zwischen Planung und direkter Umsetzung erst rueckfragen.
 - Prozessaenderungen immer auch hier festhalten.
 - **Dev-Docker nach Claude-Umsetzung (verbindlich):** Direkt nach jeder Umsetzung durch Claude muss der lokale Dev-Docker-Stand die Aenderungen sichtbar unter **http://localhost:3800** liefern. Alte oder produktionsnahe Containerstaende gelten nicht als Dev-Referenz; nur der laufende Dev-Stack auf dem Umsetzungsrechner ist massgeblich.
+- **i18n-Regel (verbindlich):**
+  - Fuer dieses Projekt werden Uebersetzungen **nicht** ueber eine Datenbank, sondern **dateibasiert** gepflegt.
+  - Wenn ein UI-Bereich mehrsprachig umgesetzt wird, muessen dort **alle sichtbaren festen Systemtexte** ueber i18n laufen.
+  - In mehrsprachigen Bereichen duerfen **keine harten deutschen Resttexte** verbleiben.
+  - Das gilt insbesondere fuer:
+    - Ueberschriften
+    - Buttons
+    - Labels
+    - Platzhalter
+    - Statusmeldungen
+    - Empty States
+    - Dialogtexte
+    - Tabellenkoepfe
+    - Tooltips
+    - Druck-/Preview-Texte
+    - Hilfstexte
+  - Nicht automatisch zu uebersetzen sind frei eingegebene Inhalte oder fachliche Nutzdaten, z. B. kundenspezifische Texte oder Baustellenhinweise.
+  - Neue sichtbare UI-Texte duerfen nur noch mit passendem i18n-Key eingebaut werden.
+  - Codex prueft bei Abnahmen zusaetzlich, ob in den geaenderten mehrsprachigen Komponenten noch harte sichtbare Texte verblieben sind.
 
 ## Aenderungshistorie
 

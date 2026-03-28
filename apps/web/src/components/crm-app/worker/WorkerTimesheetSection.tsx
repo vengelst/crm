@@ -3,6 +3,7 @@
 import { type ChangeEvent, useCallback, useEffect, useState } from "react";
 import type { TimesheetItem } from "../types";
 import { SectionCard, SecondaryButton, MessageBar, Field } from "../shared";
+import { useI18n } from "../../../i18n-context";
 
 export function WorkerTimesheetSection({
   workerId,
@@ -13,6 +14,7 @@ export function WorkerTimesheetSection({
   projects: { id: string; projectNumber: string; title: string }[];
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
+  const { t: l } = useI18n();
   const [timesheets, setTimesheets] = useState<TimesheetItem[]>([]);
   const [generating, setGenerating] = useState(false);
   const [signing, setSigning] = useState(false);
@@ -45,9 +47,9 @@ export function WorkerTimesheetSection({
         method: "POST",
         body: JSON.stringify({ workerId, projectId, weekYear: currentWeekYear, weekNumber: currentWeekNumber }),
       });
-      setTsSuccess("Stundenzettel erzeugt.");
+      setTsSuccess(l("ts.generatedMsg"));
       await loadTimesheets();
-    } catch (e) { setTsError(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setTsError(e instanceof Error ? e.message : l("common.error")); }
     finally { setGenerating(false); }
   }
 
@@ -60,15 +62,15 @@ export function WorkerTimesheetSection({
         method: "POST",
         body: JSON.stringify({ signerName: "Monteur", signatureImagePath, deviceInfo: "web" }),
       });
-      setTsSuccess("Unterschrieben.");
+      setTsSuccess(l("ts.signedMsg"));
       setSigningTsId(null);
       await loadTimesheets();
-    } catch (e) { setTsError(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setTsError(e instanceof Error ? e.message : l("common.error")); }
     finally { setSigning(false); }
   }
 
   async function sendTimesheetEmail() {
-    if (!emailTsId || !emailRecipient.trim()) { setTsError("Bitte Empfaenger eingeben."); return; }
+    if (!emailTsId || !emailRecipient.trim()) { setTsError(l("ts.enterRecipient")); return; }
     setSending(true); setTsError(null); setTsSuccess(null);
     try {
       const recipients = emailRecipient.split(",").map((r) => r.trim()).filter(Boolean);
@@ -76,10 +78,10 @@ export function WorkerTimesheetSection({
         method: "POST",
         body: JSON.stringify({ recipients }),
       });
-      setTsSuccess(`E-Mail gesendet an ${recipients.join(", ")}.`);
+      setTsSuccess(`${l("ts.emailSentTo")} ${recipients.join(", ")}.`);
       setEmailTsId(null);
       setEmailRecipient("");
-    } catch (e) { setTsError(e instanceof Error ? e.message : "Versand fehlgeschlagen."); }
+    } catch (e) { setTsError(e instanceof Error ? e.message : l("ts.sendFailed")); }
     finally { setSending(false); }
   }
 
@@ -88,13 +90,13 @@ export function WorkerTimesheetSection({
       const response = await fetch(`${(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "")}/api/timesheets/${tsId}/pdf`, {
         headers: { Authorization: `Bearer ${typeof window !== "undefined" ? JSON.parse(window.localStorage.getItem("crm-admin-auth") ?? "{}").accessToken ?? "" : ""}` },
       });
-      if (!response.ok) throw new Error("PDF konnte nicht geladen werden.");
+      if (!response.ok) throw new Error(l("ts.pdfLoadError"));
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = `stundenzettel-${tsId}.pdf`; a.click();
       URL.revokeObjectURL(url);
-    } catch (e) { setTsError(e instanceof Error ? e.message : "PDF-Fehler"); }
+    } catch (e) { setTsError(e instanceof Error ? e.message : l("ts.pdfError")); }
   }
 
   function getCanvasPoint(canvas: HTMLCanvasElement, event: PointerEvent) {
@@ -135,24 +137,24 @@ export function WorkerTimesheetSection({
 
   const statusLabel = (s: string) => {
     switch (s) {
-      case "DRAFT": return "Entwurf";
-      case "WORKER_SIGNED": return "Monteur unterschrieben";
-      case "CUSTOMER_SIGNED": return "Kunde unterschrieben";
-      case "COMPLETED": return "Abgeschlossen";
-      case "LOCKED": return "Gesperrt";
+      case "DRAFT": return l("ts.draft");
+      case "WORKER_SIGNED": return l("ts.workerSignedShort");
+      case "CUSTOMER_SIGNED": return l("ts.customerSignedShort");
+      case "COMPLETED": return l("ts.completed");
+      case "LOCKED": return l("ts.locked");
       default: return s;
     }
   };
 
   return (
-    <SectionCard title="Stundenzettel" subtitle="Wochenzettel erzeugen, unterschreiben und herunterladen.">
+    <SectionCard title={l("ts.title")} subtitle={l("ts.subtitle")}>
       <MessageBar error={tsError} success={tsSuccess} />
 
       <div className="grid gap-3">
         <div className="flex flex-wrap gap-2">
           {projects.map((p) => (
             <SecondaryButton key={p.id} onClick={() => void generateTimesheet(p.id)}>
-              {generating ? "Erzeugt ..." : `KW ${currentWeekNumber} · ${p.projectNumber}`}
+              {generating ? l("ts.generating") : `KW ${currentWeekNumber} · ${p.projectNumber}`}
             </SecondaryButton>
           ))}
         </div>
@@ -186,39 +188,39 @@ export function WorkerTimesheetSection({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-500">Noch keine Stundenzettel vorhanden.</p>
+          <p className="text-sm text-slate-500">{l("ts.noTimesheets")}</p>
         )}
 
         {signingTsId ? (
           <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50/50 p-4 dark:border-emerald-500/30 dark:bg-emerald-500/5">
-            <h4 className="mb-2 text-sm font-semibold">Unterschrift</h4>
+            <h4 className="mb-2 text-sm font-semibold">{l("ts.signatureTitle")}</h4>
             <canvas ref={initSignCanvas} width={400} height={150}
               className="w-full rounded-lg border border-black/10 bg-white" style={{ touchAction: "none" }} />
             <div className="mt-3 flex gap-2">
               <button type="button" disabled={signing} onClick={() => void signTimesheet()}
                 className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60">
-                {signing ? "Unterschreibt ..." : "Bestaetigen"}
+                {signing ? l("ts.signing") : l("ts.confirm")}
               </button>
-              <SecondaryButton onClick={() => setSigningTsId(null)}>Abbrechen</SecondaryButton>
+              <SecondaryButton onClick={() => setSigningTsId(null)}>{l("common.cancel")}</SecondaryButton>
             </div>
           </div>
         ) : null}
 
         {emailTsId ? (
           <div className="rounded-xl border-2 border-blue-300 bg-blue-50/50 p-4 dark:border-blue-500/30 dark:bg-blue-500/5">
-            <h4 className="mb-2 text-sm font-semibold">Stundenzettel per E-Mail senden</h4>
+            <h4 className="mb-2 text-sm font-semibold">{l("ts.emailTitle")}</h4>
             <div className="grid gap-3">
               <Field
-                label="Empfaenger (E-Mail, mehrere mit Komma trennen)"
+                label={l("ts.recipientLabel")}
                 value={emailRecipient}
                 onChange={(e) => setEmailRecipient(e.target.value)}
               />
               <div className="flex gap-2">
                 <button type="button" disabled={sending} onClick={() => void sendTimesheetEmail()}
                   className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60">
-                  {sending ? "Sendet ..." : "Senden"}
+                  {sending ? l("ts.sending") : l("ts.send")}
                 </button>
-                <SecondaryButton onClick={() => setEmailTsId(null)}>Abbrechen</SecondaryButton>
+                <SecondaryButton onClick={() => setEmailTsId(null)}>{l("common.cancel")}</SecondaryButton>
               </div>
             </div>
           </div>

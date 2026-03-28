@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "../../../i18n-context";
 
 import Image from "next/image";
 import { type ChangeEvent, type Dispatch, type SetStateAction, useEffect, useState } from "react";
@@ -19,7 +20,7 @@ export function DocumentPanel({
   authToken,
   onUpload,
   allowDelete = true,
-  uploadLabel = "Datei / Bild hochladen",
+  uploadLabel,
   onApproveDocument,
   onRejectDocument,
   onSubmitDocument,
@@ -39,6 +40,7 @@ export function DocumentPanel({
   onRejectDocument?: (documentId: string) => void;
   onSubmitDocument?: (documentId: string) => void;
 }) {
+  const { t: l } = useI18n();
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
   const [thumbnailErrors, setThumbnailErrors] = useState<Record<string, string>>({});
   const [drawingDraft, setDrawingDraft] = useState<{
@@ -77,7 +79,7 @@ export function DocumentPanel({
             });
 
             if (!response.ok) {
-              let errorMessage = "Datei nicht verfuegbar";
+              let errorMessage = l("doc.fileMissing");
               try {
                 const body = (await response.json()) as { message?: string };
                 if (body.message) errorMessage = body.message;
@@ -96,7 +98,7 @@ export function DocumentPanel({
             createdUrls.push(url);
             return { kind: "url", id: document.id, url };
           } catch {
-            return { kind: "error", id: document.id, error: "Datei nicht verfuegbar" };
+            return { kind: "error", id: document.id, error: l("doc.fileMissing") };
           }
         }),
       );
@@ -129,10 +131,10 @@ export function DocumentPanel({
 
   return (
     <div className="grid gap-4">
-      <h4 className="text-base font-semibold">Dokumente und Bilder</h4>
+      <h4 className="text-base font-semibold">{l("doc.docsTitle")}</h4>
       <div className="grid gap-2">
         {documents.length === 0 ? (
-          <p className="text-sm text-slate-500">Keine Dokumente vorhanden.</p>
+          <p className="text-sm text-slate-500">{l("doc.none")}</p>
         ) : (
           documents.map((document) => {
             const fileError = thumbnailErrors[document.id];
@@ -168,7 +170,7 @@ export function DocumentPanel({
                     </div>
                     {uploaderLabel ? (
                       <div className="text-xs text-slate-500">
-                        Hochgeladen von: {uploaderLabel}
+                        {l("doc.uploadedBy")} {uploaderLabel}
                       </div>
                     ) : null}
                     {document.approvalStatus && document.approvalStatus !== "DRAFT" ? (
@@ -179,10 +181,10 @@ export function DocumentPanel({
                         document.approvalStatus === "ARCHIVED" ? "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400" :
                         "bg-slate-100 text-slate-600"
                       )}>
-                        {document.approvalStatus === "SUBMITTED" ? "Eingereicht" :
-                         document.approvalStatus === "APPROVED" ? "Freigegeben" :
-                         document.approvalStatus === "REJECTED" ? "Abgelehnt" :
-                         document.approvalStatus === "ARCHIVED" ? "Archiviert" :
+                        {document.approvalStatus === "SUBMITTED" ? l("doc.submitted") :
+                         document.approvalStatus === "APPROVED" ? l("doc.approved") :
+                         document.approvalStatus === "REJECTED" ? l("doc.rejected") :
+                         document.approvalStatus === "ARCHIVED" ? l("doc.archived") :
                          document.approvalStatus}
                       </span>
                     ) : null}
@@ -195,40 +197,40 @@ export function DocumentPanel({
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <SecondaryButton onClick={() => onOpenDocument(document)}>
-                    Anzeigen
+                    {l("doc.show")}
                   </SecondaryButton>
-                  <SecondaryButton onClick={() => onPrintDocument(document)}>Drucken</SecondaryButton>
+                  <SecondaryButton onClick={() => onPrintDocument(document)}>{l("doc.print")}</SecondaryButton>
                   <SecondaryButton
                     onClick={() => onDownload(document.id, document.originalFilename)}
                   >
-                    Download
+                    {l("doc.download")}
                   </SecondaryButton>
                   {document.mimeType.startsWith("image/") && thumbnailUrls[document.id] ? (
                     <SecondaryButton
                       onClick={() =>
                         setDrawingDraft({
-                          title: `${document.title || document.originalFilename} - Anmerkung`,
+                          title: `${document.title || document.originalFilename} - ${l("doc.annotation")}`,
                           sourceUrl: thumbnailUrls[document.id],
                           sourceDocumentId: document.id,
-                          description: `Anmerkung zu ${document.title || document.originalFilename}`,
+                          description: `${l("doc.annotationOf")} ${document.title || document.originalFilename}`,
                         })
                       }
                     >
-                      Anmerken
+                      {l("doc.annotate")}
                     </SecondaryButton>
                   ) : null}
                   {onSubmitDocument && (!document.approvalStatus || document.approvalStatus === "DRAFT" || document.approvalStatus === "REJECTED") ? (
-                    <SecondaryButton onClick={() => onSubmitDocument(document.id)}>Einreichen</SecondaryButton>
+                    <SecondaryButton onClick={() => onSubmitDocument(document.id)}>{l("doc.submit")}</SecondaryButton>
                   ) : null}
                   {onApproveDocument && document.approvalStatus === "SUBMITTED" ? (
-                    <SecondaryButton onClick={() => onApproveDocument(document.id)}>Freigeben</SecondaryButton>
+                    <SecondaryButton onClick={() => onApproveDocument(document.id)}>{l("doc.approve")}</SecondaryButton>
                   ) : null}
                   {onRejectDocument && document.approvalStatus === "SUBMITTED" ? (
-                    <SecondaryButton onClick={() => onRejectDocument(document.id)}>Ablehnen</SecondaryButton>
+                    <SecondaryButton onClick={() => onRejectDocument(document.id)}>{l("doc.reject")}</SecondaryButton>
                   ) : null}
                   {allowDelete ? (
                     <SecondaryButton onClick={() => onDeleteDocument(document.id)}>
-                      Loeschen
+                      {l("common.delete")}
                     </SecondaryButton>
                   ) : null}
                 </div>
@@ -239,7 +241,7 @@ export function DocumentPanel({
       </div>
       <div className="grid gap-3 rounded-2xl border border-black/10 p-3 dark:border-white/10">
         <Field
-          label="Titel"
+          label={l("doc.title")}
           value={documentForm.title}
           onChange={(event) =>
             setDocumentForm((current) => ({
@@ -249,7 +251,7 @@ export function DocumentPanel({
           }
         />
         <Field
-          label="Typ"
+          label={l("doc.type")}
           value={documentForm.documentType}
           onChange={(event) =>
             setDocumentForm((current) => ({
@@ -259,7 +261,7 @@ export function DocumentPanel({
           }
         />
         <TextArea
-          label="Beschreibung"
+          label={l("doc.description")}
           value={documentForm.description}
           onChange={(event) =>
             setDocumentForm((current) => ({
@@ -269,7 +271,7 @@ export function DocumentPanel({
           }
         />
         <div className="grid gap-2">
-          <label className="text-sm font-medium">Datei oder Bild</label>
+          <label className="text-sm font-medium">{l("doc.fileOrImage")}</label>
           <input
             type="file"
             accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
@@ -283,22 +285,22 @@ export function DocumentPanel({
             className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900"
           />
           <p className="text-xs text-slate-500">
-            Auf dem Handy koennen Bilder direkt mit der Kamera aufgenommen werden.
+            {l("doc.cameraHint")}
           </p>
         </div>
         <div>
-          <SecondaryButton onClick={onUpload}>{uploadLabel}</SecondaryButton>
+          <SecondaryButton onClick={onUpload}>{uploadLabel || l("doc.upload")}</SecondaryButton>
         </div>
         <div>
           <SecondaryButton
             onClick={() =>
               setDrawingDraft({
-                title: "Neue Zeichnung",
-                description: "Freihandzeichnung",
+                title: l("doc.newDrawing"),
+                description: l("doc.freehandDrawing"),
               })
             }
           >
-            Zeichnung erstellen
+            {l("doc.createDrawing")}
           </SecondaryButton>
         </div>
       </div>

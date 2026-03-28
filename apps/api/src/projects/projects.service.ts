@@ -93,58 +93,98 @@ export class ProjectsService {
     return project;
   }
 
+  /**
+   * Atomically increment the PROJECT counter and return the next number.
+   * Uses UPDATE ... RETURNING inside a transaction to prevent race conditions.
+   */
+  private async nextProjectNumber(
+    tx: Parameters<Parameters<typeof this.prisma.$transaction>[0]>[0],
+  ): Promise<string> {
+    const result = await tx.$queryRawUnsafe<{ prefix: string; current: number }[]>(
+      `UPDATE "Counter" SET "current" = "current" + 1 WHERE "id" = 'PROJECT' RETURNING "prefix", "current"`,
+    );
+    if (!result.length) {
+      throw new BadRequestException('Counter PROJECT nicht gefunden.');
+    }
+    return `${result[0].prefix}${result[0].current}`;
+  }
+
   async create(dto: SaveProjectDto) {
-    if (!dto.projectNumber || !dto.customerId || !dto.title) {
+    if (!dto.customerId || !dto.title) {
       throw new BadRequestException(
-        'projectNumber, customerId und title sind Pflichtfelder.',
+        'customerId und title sind Pflichtfelder.',
       );
     }
 
-    const existing = await this.prisma.project.findFirst({
-      where: { projectNumber: dto.projectNumber, deletedAt: null },
-    });
-    if (existing) {
-      throw new BadRequestException('Projektnummer bereits vergeben.');
+    const customerId = dto.customerId;
+
+    // Manual project number: validate uniqueness outside transaction
+    if (dto.projectNumber?.trim()) {
+      const existing = await this.prisma.project.findFirst({
+        where: { projectNumber: dto.projectNumber.trim(), deletedAt: null },
+      });
+      if (existing) {
+        throw new BadRequestException('Projektnummer bereits vergeben.');
+      }
     }
 
-    return this.prisma.project.create({
-      data: {
-        projectNumber: dto.projectNumber,
-        customerId: dto.customerId,
-        branchId: dto.branchId,
-        title: dto.title,
-        description: dto.description,
-        serviceType: dto.serviceType,
-        status: dto.status,
-        priority: dto.priority ?? 0,
-        siteName: dto.siteName,
-        siteAddressLine1: dto.siteAddressLine1,
-        sitePostalCode: dto.sitePostalCode,
-        siteCity: dto.siteCity,
-        siteCountry: dto.siteCountry,
-        siteLatitude: dto.siteLatitude,
-        siteLongitude: dto.siteLongitude,
-        accommodationAddress: dto.accommodationAddress,
-        weeklyFlatRate: dto.weeklyFlatRate,
-        includedHoursPerWeek: dto.includedHoursPerWeek,
-        hourlyRateUpTo40h: dto.hourlyRateUpTo40h,
-        overtimeRate: dto.overtimeRate,
-        plannedStartDate: dto.plannedStartDate
-          ? new Date(dto.plannedStartDate)
-          : undefined,
-        plannedEndDate: dto.plannedEndDate
-          ? new Date(dto.plannedEndDate)
-          : undefined,
-        internalProjectManagerUserId: dto.internalProjectManagerUserId,
-        primaryCustomerContactId: dto.primaryCustomerContactId,
-        pauseRuleId: dto.pauseRuleId,
-        notes: dto.notes,
-      },
-      include: {
-        customer: true,
-        branch: true,
-      },
-    });
+    const title = dto.title;
+    const MAX_RETRIES = 3;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const projectNumber = dto.projectNumber?.trim() || await this.nextProjectNumber(tx);
+
+          return tx.project.create({
+            data: {
+              projectNumber,
+              customerId,
+              branchId: dto.branchId,
+              title,
+              description: dto.description,
+              serviceType: dto.serviceType,
+              status: dto.status,
+              priority: dto.priority ?? 0,
+              siteName: dto.siteName,
+              siteAddressLine1: dto.siteAddressLine1,
+              sitePostalCode: dto.sitePostalCode,
+              siteCity: dto.siteCity,
+              siteCountry: dto.siteCountry,
+              siteLatitude: dto.siteLatitude,
+              siteLongitude: dto.siteLongitude,
+              accommodationAddress: dto.accommodationAddress,
+              weeklyFlatRate: dto.weeklyFlatRate,
+              includedHoursPerWeek: dto.includedHoursPerWeek,
+              hourlyRateUpTo40h: dto.hourlyRateUpTo40h,
+              overtimeRate: dto.overtimeRate,
+              plannedStartDate: dto.plannedStartDate
+                ? new Date(dto.plannedStartDate)
+                : undefined,
+              plannedEndDate: dto.plannedEndDate
+                ? new Date(dto.plannedEndDate)
+                : undefined,
+              internalProjectManagerUserId: dto.internalProjectManagerUserId,
+              primaryCustomerContactId: dto.primaryCustomerContactId,
+              pauseRuleId: dto.pauseRuleId,
+              notes: dto.notes,
+            },
+            include: {
+              customer: true,
+              branch: true,
+            },
+          });
+        });
+      } catch (e: unknown) {
+        const isPrismaUnique = e && typeof e === 'object' && 'code' in e && (e as { code: string }).code === 'P2002';
+        if (isPrismaUnique && attempt < MAX_RETRIES - 1 && !dto.projectNumber?.trim()) {
+          continue;
+        }
+        throw e;
+      }
+    }
+
+    throw new BadRequestException('Projektnummer konnte nicht vergeben werden.');
   }
 
   async update(id: string, dto: SaveProjectDto) {

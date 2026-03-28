@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
+import { useI18n } from "../../../i18n-context";
 import type { Worker, DocumentItem, DocumentFormState, WorkerTimeStatus } from "../types";
 import { cx, formatAddress, mapsUrlFromParts, SectionCard, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow } from "../shared";
 import { DocumentPanel } from "../documents";
@@ -34,6 +35,7 @@ export function WorkerDetailCard({
   onUpload: () => void;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
+  const { t: l, locale } = useI18n();
   const [timeStatus, setTimeStatus] = useState<WorkerTimeStatus | null>(null);
 
   useEffect(() => {
@@ -74,7 +76,7 @@ export function WorkerDetailCard({
 
   const formatDateRange = (a: { startDate: string; endDate?: string | null }) => {
     const s = a.startDate.slice(0, 10);
-    const e = a.endDate ? a.endDate.slice(0, 10) : "offen";
+    const e = a.endDate ? a.endDate.slice(0, 10) : l("worker.open");
     return `${s} bis ${e}`;
   };
 
@@ -83,16 +85,16 @@ export function WorkerDetailCard({
     const projs = allAssignments.map((a) => `<tr><td>${a.project.projectNumber}</td><td>${a.project.title}</td><td>${formatDateRange(a)}</td></tr>`).join("");
     openPrintWindow(`Monteur ${worker.firstName} ${worker.lastName}`, `
       <h1>${worker.firstName} ${worker.lastName}</h1>
-      <p class="meta">${worker.workerNumber} · ${worker.active === false ? "deaktiviert" : "aktiv"}</p>
-      <h2>Stammdaten</h2>
+      <p class="meta">${worker.workerNumber} · ${worker.active === false ? l("work.deactivated") : l("common.active")}</p>
+      <h2>${l("print.masterData")}</h2>
       <div class="grid">
-        <span class="label">Adresse</span><span>${addr || "-"}</span>
-        <span class="label">Mobil</span><span>${worker.phoneMobile ?? worker.phone ?? "-"}</span>
-        <span class="label">Buero</span><span>${worker.phoneOffice ?? "-"}</span>
-        <span class="label">E-Mail</span><span>${worker.email ?? "-"}</span>
-        <span class="label">Stundensatz intern</span><span>${worker.internalHourlyRate != null ? worker.internalHourlyRate.toFixed(2) + " EUR/h" : "-"}</span>
+        <span class="label">${l("print.address")}</span><span>${addr || "-"}</span>
+        <span class="label">${l("print.mobile")}</span><span>${worker.phoneMobile ?? worker.phone ?? "-"}</span>
+        <span class="label">${l("common.office")}</span><span>${worker.phoneOffice ?? "-"}</span>
+        <span class="label">${l("print.email")}</span><span>${worker.email ?? "-"}</span>
+        <span class="label">${l("work.hourlyRate")}</span><span>${worker.internalHourlyRate != null ? worker.internalHourlyRate.toFixed(2) + " EUR/h" : "-"}</span>
       </div>
-      ${projs ? `<h2>Projekte</h2><table><thead><tr><th>Nr.</th><th>Titel</th><th>Zeitraum</th></tr></thead><tbody>${projs}</tbody></table>` : ""}
+      ${projs ? `<h2>${l("proj.title")}</h2><table><thead><tr><th>Nr.</th><th>Titel</th><th>Zeitraum</th></tr></thead><tbody>${projs}</tbody></table>` : ""}
     `);
   }
 
@@ -113,10 +115,10 @@ export function WorkerDetailCard({
           </div>
         </div>
         <div className="mt-2 grid gap-1 text-sm text-slate-500">
-          <div>{formatAddress([worker.addressLine1, worker.addressLine2, worker.postalCode, worker.city, worker.country]) || "Keine Adresse hinterlegt."}</div>
+          <div>{formatAddress([worker.addressLine1, worker.addressLine2, worker.postalCode, worker.city, worker.country]) || l("work.noAddress")}</div>
           <div>
-            {worker.email ?? "Keine E-Mail"} · Mobil: {worker.phoneMobile ?? worker.phone ?? "-"} ·
-            Buero: {worker.phoneOffice ?? "-"}
+            {worker.email ?? l("work.noEmail")} · Mobil: {worker.phoneMobile ?? worker.phone ?? "-"} ·
+            {l("common.office")}: {worker.phoneOffice ?? "-"}
           </div>
         </div>
       </div>
@@ -124,16 +126,16 @@ export function WorkerDetailCard({
       {/* ── Arbeitsstatus ──────────────────────────────── */}
       {timeStatus?.hasOpenWork && timeStatus.openEntry ? (
         <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50/60 p-4 dark:border-emerald-500/40 dark:bg-emerald-500/5">
-          <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Arbeitet aktuell</div>
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">{l("work.workingNow")}</div>
           <div className="font-semibold">{timeStatus.openEntry.projectTitle} ({timeStatus.openEntry.projectNumber})</div>
           <WorkerElapsedTime startedAt={timeStatus.openEntry.startedAt} />
           {timeStatus.todayStats ? (
-            <div className="mt-2 text-sm text-slate-500">Heute gesamt: {formatMinutes(timeStatus.todayStats.totalMinutes)}</div>
+            <div className="mt-2 text-sm text-slate-500">{l("work.todayTotal")} {formatMinutes(timeStatus.todayStats.totalMinutes)}</div>
           ) : null}
         </div>
       ) : timeStatus?.todayStats && timeStatus.todayStats.completedMinutes > 0 ? (
         <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-          <div className="text-sm text-slate-500">Heute gearbeitet: <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">{formatMinutes(timeStatus.todayStats.completedMinutes)}</span></div>
+          <div className="text-sm text-slate-500">{l("work.todayWorked")} <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">{formatMinutes(timeStatus.todayStats.completedMinutes)}</span></div>
         </div>
       ) : null}
 
@@ -141,17 +143,16 @@ export function WorkerDetailCard({
       {hasOnlyFuture ? (
         <div className="rounded-2xl border border-amber-300 bg-amber-50/60 p-4 dark:border-amber-500/40 dark:bg-amber-500/5">
           <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
-            Dieser Monteur hat derzeit kein aktives Projekt. Die Zuordnung beginnt erst in der Zukunft.
-            Ein Login per PIN ist trotzdem moeglich.
+            {l("work.noFutureHint")}
           </p>
         </div>
       ) : null}
 
       {/* ── Aktuelle Projekte ───────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-        <h4 className="mb-3 text-base font-semibold">Aktuelle Projekte</h4>
+        <h4 className="mb-3 text-base font-semibold">{l("work.currentProjects")}</h4>
         {currentAssignments.length === 0 ? (
-          <p className="text-sm text-slate-500">Keine laufenden Projekte.</p>
+          <p className="text-sm text-slate-500">{l("work.noProjects")}</p>
         ) : (
           <div className="grid gap-2">
             {currentAssignments.map((a) => (
@@ -171,7 +172,7 @@ export function WorkerDetailCard({
       {/* ── Zukuenftige Projekte ────────────────────────── */}
       {futureAssignments.length > 0 ? (
         <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-          <h4 className="mb-3 text-base font-semibold">Zukuenftige Projekte</h4>
+          <h4 className="mb-3 text-base font-semibold">{l("work.futureProjects")}</h4>
           <div className="grid gap-2">
             {futureAssignments.map((a) => (
               <Link
@@ -190,7 +191,7 @@ export function WorkerDetailCard({
       {/* ── Vergangene Projekte ─────────────────────────── */}
       {pastAssignments.length > 0 ? (
         <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-          <h4 className="mb-3 text-base font-semibold text-slate-400">Vergangene Projekte</h4>
+          <h4 className="mb-3 text-base font-semibold text-slate-400">{l("work.pastProjects")}</h4>
           <div className="grid gap-2">
             {pastAssignments.map((a) => (
               <Link

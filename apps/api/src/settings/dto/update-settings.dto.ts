@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, Min } from 'class-validator';
 
 export class UpdateSettingsDto {
   @Type(() => Number)
@@ -14,4 +14,7 @@ export class UpdateSettingsDto {
 
   @IsIn(['light', 'dark'])
   defaultTheme!: 'light' | 'dark';
+
+  @IsBoolean()
+  navAsIcons!: boolean;
 }

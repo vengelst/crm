@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "../../../i18n-context";
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -6,6 +7,7 @@ import type { NotificationItem } from "../types";
 import { cx } from "../shared";
 
 export function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, init?: RequestInit) => Promise<T> }) {
+  const { locale } = useI18n();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -96,7 +98,7 @@ export function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, ini
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{n.title}</div>
                       {n.body ? <div className="mt-0.5 text-xs text-slate-500">{n.body}</div> : null}
-                      <div className="mt-1 text-[10px] text-slate-400">{new Date(n.createdAt).toLocaleString("de-DE")}</div>
+                      <div className="mt-1 text-[10px] text-slate-400">{new Date(n.createdAt).toLocaleString(locale)}</div>
                     </div>
                     {!n.read ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-blue-500" /> : null}
                   </div>

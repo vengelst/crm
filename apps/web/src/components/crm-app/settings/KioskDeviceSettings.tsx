@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "../../../i18n-context";
 
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
 import type { KioskDevice, DeviceBindingConfig, Worker, UserItem } from "../types";
@@ -11,6 +12,7 @@ export function KioskDeviceSettings({ apiFetch, workers, users, setPanelSuccess,
   setPanelSuccess: Dispatch<SetStateAction<string | null>>;
   setPanelError: Dispatch<SetStateAction<string | null>>;
 }) {
+  const { t: l, locale } = useI18n();
   const [config, setConfig] = useState<DeviceBindingConfig>({ mode: "off", appliesTo: "both" });
   const [devices, setDevices] = useState<KioskDevice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,8 +44,8 @@ export function KioskDeviceSettings({ apiFetch, workers, users, setPanelSuccess,
         body: JSON.stringify(config),
       });
       setConfig(updated);
-      setPanelSuccess("Geraetebindung gespeichert.");
-    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+      setPanelSuccess(l("settings.deviceBindingSaved"));
+    } catch (e) { setPanelError(e instanceof Error ? e.message : l("common.error")); }
     setSaving(false);
   }
 
@@ -71,9 +73,9 @@ export function KioskDeviceSettings({ apiFetch, workers, users, setPanelSuccess,
         }),
       });
       setEditingId(null);
-      setPanelSuccess("Geraet aktualisiert.");
+      setPanelSuccess(l("settings.devicesUpdated"));
       await loadData();
-    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setPanelError(e instanceof Error ? e.message : l("common.error")); }
   }
 
   async function toggleActive(d: KioskDevice) {
@@ -83,18 +85,18 @@ export function KioskDeviceSettings({ apiFetch, workers, users, setPanelSuccess,
         method: "PATCH",
         body: JSON.stringify({ active: !d.active }),
       });
-      setPanelSuccess(d.active ? "Geraet deaktiviert." : "Geraet freigegeben.");
+      setPanelSuccess(d.active ? l("settings.devicesBlockedMsg") : l("settings.devicesApprovedMsg"));
       await loadData();
-    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setPanelError(e instanceof Error ? e.message : l("common.error")); }
   }
 
   async function deleteDevice(id: string) {
     setPanelError(null);
     try {
       await apiFetch(`/devices/${id}`, { method: "DELETE" });
-      setPanelSuccess("Geraet entfernt.");
+      setPanelSuccess(l("settings.devicesRemovedMsg"));
       await loadData();
-    } catch (e) { setPanelError(e instanceof Error ? e.message : "Fehler"); }
+    } catch (e) { setPanelError(e instanceof Error ? e.message : l("common.error")); }
   }
 
   const filtered = devices.filter((d) => {
@@ -105,34 +107,34 @@ export function KioskDeviceSettings({ apiFetch, workers, users, setPanelSuccess,
 
   const activeWorkers = workers.filter((w) => w.active !== false);
 
-  if (loading) return <SectionCard title="Kiosk-Geraete"><p className="text-sm text-slate-500">Laden...</p></SectionCard>;
+  if (loading) return <SectionCard title={l("settings.devices")}><p className="text-sm text-slate-500">{l("common.loading")}</p></SectionCard>;
 
   return (
     <div className="grid gap-6">
-      <SectionCard title="Geraetebindung" subtitle="Kiosk-Logins und Zeitbuchungen optional an bekannte Geraete binden.">
+      <SectionCard title={l("settings.deviceBindingTitle")} subtitle={l("settings.devicesSub")}>
         <div className="grid gap-4 md:max-w-2xl">
-          <SelectField label="Modus" value={config.mode} onChange={(e) => setConfig((c) => ({ ...c, mode: e.target.value as DeviceBindingConfig["mode"] }))}
+          <SelectField label={l("settings.devicesMode")} value={config.mode} onChange={(e) => setConfig((c) => ({ ...c, mode: e.target.value as DeviceBindingConfig["mode"] }))}
             options={[
-              { value: "off", label: "Geraetebindung aus" },
-              { value: "warn", label: "Unbekannte Geraete nur warnen" },
-              { value: "enforce", label: "Nur freigegebene Geraete erlauben" },
+              { value: "off", label: l("settings.devicesModeOff") },
+              { value: "warn", label: l("settings.devicesModeWarn") },
+              { value: "enforce", label: l("settings.devicesModeEnforce") },
             ]}
           />
-          <SelectField label="Gilt fuer" value={config.appliesTo} onChange={(e) => setConfig((c) => ({ ...c, appliesTo: e.target.value as DeviceBindingConfig["appliesTo"] }))}
+          <SelectField label={l("settings.devicesAppliesTo")} value={config.appliesTo} onChange={(e) => setConfig((c) => ({ ...c, appliesTo: e.target.value as DeviceBindingConfig["appliesTo"] }))}
             options={[
-              { value: "both", label: "Login und Zeitbuchung" },
-              { value: "login", label: "Nur Login" },
-              { value: "time", label: "Nur Zeitbuchung" },
+              { value: "both", label: l("settings.devicesAppliesToBoth") },
+              { value: "login", label: l("settings.devicesAppliesToLogin") },
+              { value: "time", label: l("settings.devicesAppliesToTime") },
             ]}
           />
           <button type="button" disabled={saving} onClick={() => void saveConfig()}
             className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">
-            {saving ? "Speichert ..." : "Konfiguration speichern"}
+            {saving ? l("common.saving") : l("settings.devicesSaveConfig")}
           </button>
         </div>
       </SectionCard>
 
-      <SectionCard title="Bekannte Geraete" subtitle={`${devices.length} Geraet(e) registriert, ${devices.filter((d) => d.active).length} freigegeben.`}>
+      <SectionCard title={l("settings.devicesTitle")} subtitle={`${devices.length} ${l("settings.devicesRegisteredCount")}, ${devices.filter((d) => d.active).length} ${l("settings.devicesApprovedCount")}`}>
         <div className="mb-4 flex flex-wrap gap-2">
           {(["all", "active", "inactive"] as const).map((f) => (
             <button key={f} type="button" onClick={() => setFilter(f)}
@@ -141,13 +143,13 @@ export function KioskDeviceSettings({ apiFetch, workers, users, setPanelSuccess,
                   ? "border-slate-900 bg-slate-900 !text-white dark:border-slate-300 dark:bg-slate-200 dark:!text-slate-950"
                   : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
               )}>
-              {f === "all" ? "Alle" : f === "active" ? "Freigegeben" : "Nicht freigegeben"}
+              {f === "all" ? l("common.all") : f === "active" ? l("settings.devicesApproved") : l("settings.devicesNotApproved")}
             </button>
           ))}
         </div>
 
         {filtered.length === 0 ? (
-          <p className="text-sm text-slate-500">Keine Geraete gefunden.</p>
+          <p className="text-sm text-slate-500">{l("settings.devicesNone")}</p>
         ) : (
           <div className="grid gap-3">
             {filtered.map((d) => (
@@ -155,21 +157,21 @@ export function KioskDeviceSettings({ apiFetch, workers, users, setPanelSuccess,
                 {editingId === d.id ? (
                   <div className="grid gap-3">
                     <FormRow>
-                      <Field label="Anzeigename" value={editForm.displayName} onChange={(e) => setEditForm((c) => ({ ...c, displayName: e.target.value }))} />
+                      <Field label={l("settings.devicesDisplayName")} value={editForm.displayName} onChange={(e) => setEditForm((c) => ({ ...c, displayName: e.target.value }))} />
                     </FormRow>
                     <FormRow>
-                      <SelectField label="Zugeordneter Monteur" value={editForm.assignedWorkerId} onChange={(e) => setEditForm((c) => ({ ...c, assignedWorkerId: e.target.value }))}
-                        options={[{ value: "", label: "- Kein -" }, ...activeWorkers.map((w) => ({ value: w.id, label: `${w.firstName} ${w.lastName} (${w.workerNumber})` }))]}
+                      <SelectField label={l("settings.devicesAssignWorker")} value={editForm.assignedWorkerId} onChange={(e) => setEditForm((c) => ({ ...c, assignedWorkerId: e.target.value }))}
+                        options={[{ value: "", label: l("common.noneOption") }, ...activeWorkers.map((w) => ({ value: w.id, label: `${w.firstName} ${w.lastName} (${w.workerNumber})` }))]}
                       />
-                      <SelectField label="Zugeordneter Benutzer" value={editForm.assignedUserId} onChange={(e) => setEditForm((c) => ({ ...c, assignedUserId: e.target.value }))}
-                        options={[{ value: "", label: "- Kein -" }, ...users.filter((u) => u.isActive).map((u) => ({ value: u.id, label: `${u.displayName} (${u.email})` }))]}
+                      <SelectField label={l("settings.devicesAssignUser")} value={editForm.assignedUserId} onChange={(e) => setEditForm((c) => ({ ...c, assignedUserId: e.target.value }))}
+                        options={[{ value: "", label: l("common.noneOption") }, ...users.filter((u) => u.isActive).map((u) => ({ value: u.id, label: `${u.displayName} (${u.email})` }))]}
                       />
                     </FormRow>
-                    <Field label="Notizen" value={editForm.notes} onChange={(e) => setEditForm((c) => ({ ...c, notes: e.target.value }))} />
+                    <Field label={l("settings.devicesNotes")} value={editForm.notes} onChange={(e) => setEditForm((c) => ({ ...c, notes: e.target.value }))} />
                     <div className="flex gap-2">
                       <button type="button" onClick={() => void saveDevice()}
-                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">Speichern</button>
-                      <SecondaryButton onClick={() => setEditingId(null)}>Abbrechen</SecondaryButton>
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">{l("common.save")}</button>
+                      <SecondaryButton onClick={() => setEditingId(null)}>{l("common.cancel")}</SecondaryButton>
                     </div>
                   </div>
                 ) : (
@@ -179,35 +181,35 @@ export function KioskDeviceSettings({ apiFetch, workers, users, setPanelSuccess,
                         <span className={cx("inline-block h-2.5 w-2.5 rounded-full", d.active ? "bg-emerald-500" : "bg-slate-400")} />
                         <span className="font-medium">{d.displayName || d.deviceUuid.slice(0, 12) + "..."}</span>
                         <span className={cx("rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase", d.active ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400")}>
-                          {d.active ? "Freigegeben" : "Nicht freigegeben"}
+                          {d.active ? l("settings.devicesApproved") : l("settings.devicesNotApproved")}
                         </span>
                       </div>
                       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
-                        {d.platform ? <span>Plattform: {d.platform}</span> : null}
-                        {d.browser ? <span>Browser: {d.browser}</span> : null}
-                        <span>Erstmals: {new Date(d.firstSeenAt).toLocaleDateString("de-DE")}</span>
-                        <span>Zuletzt: {new Date(d.lastSeenAt).toLocaleString("de-DE")}</span>
+                        {d.platform ? <span>{l("settings.devicesPlatform")} {d.platform}</span> : null}
+                        {d.browser ? <span>{l("settings.devicesBrowser")} {d.browser}</span> : null}
+                        <span>{l("settings.devicesFirstSeen")} {new Date(d.firstSeenAt).toLocaleDateString(locale)}</span>
+                        <span>{l("settings.devicesLastSeen")} {new Date(d.lastSeenAt).toLocaleString(locale)}</span>
                       </div>
                       {d.assignedWorker ? (
                         <div className="mt-1 text-xs text-blue-600 dark:text-blue-400">
-                          Monteur: {d.assignedWorker.firstName} {d.assignedWorker.lastName} ({d.assignedWorker.workerNumber})
+                          {l("settings.devicesWorker")} {d.assignedWorker.firstName} {d.assignedWorker.lastName} ({d.assignedWorker.workerNumber})
                         </div>
                       ) : null}
                       {d.assignedUser ? (
                         <div className="mt-1 text-xs text-indigo-600 dark:text-indigo-400">
-                          Benutzer: {d.assignedUser.displayName} ({d.assignedUser.email})
+                          {l("settings.devicesUser")} {d.assignedUser.displayName} ({d.assignedUser.email})
                         </div>
                       ) : null}
                       {d.notes ? <div className="mt-1 text-xs text-slate-400 italic">{d.notes}</div> : null}
                     </div>
                     <div className="flex shrink-0 gap-1.5">
-                      <SecondaryButton onClick={() => startEdit(d)}>Bearbeiten</SecondaryButton>
+                      <SecondaryButton onClick={() => startEdit(d)}>{l("common.edit")}</SecondaryButton>
                       <SecondaryButton onClick={() => void toggleActive(d)}>
-                        {d.active ? "Sperren" : "Freigeben"}
+                        {d.active ? l("settings.devicesBlock") : l("settings.devicesApprove")}
                       </SecondaryButton>
                       <button type="button" onClick={() => void deleteDevice(d.id)}
                         className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20">
-                        Entfernen
+                        {l("settings.devicesRemove")}
                       </button>
                     </div>
                   </div>

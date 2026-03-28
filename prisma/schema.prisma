@@ -92,6 +92,7 @@ model User {
   auditLogs   AuditLog[]
   kioskDevices KioskDevice[]
   notifications Notification[]
+  createdNotes  Note[]           @relation("NoteCreator")
 }
 
 model Role {
@@ -176,6 +177,7 @@ model Customer {
   contacts       CustomerContact[]
   projects       Project[]
   callLogs       CustomerCallLog[]
+  crmNotes       Note[]
   customerNotes  CustomerNote[]
 }
 
@@ -214,6 +216,7 @@ model CustomerContact {
   customer            Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
   branch              CustomerBranch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
   primaryProjects     Project[]        @relation("ProjectPrimaryContact")
+  crmNotes            Note[]
 }
 
 model Project {
@@ -734,4 +737,32 @@ model ProjectNoticeAcknowledgement {
 
   @@unique([projectNoticeId, workerId])
   @@index([projectId, workerId])
+}
+
+model Note {
+  id              String           @id @default(cuid())
+  entityType      String           // CUSTOMER | CONTACT
+  customerId      String?
+  contactId       String?
+  title           String?
+  content         String
+  isPhoneNote     Boolean          @default(false)
+  transcriptSource String?
+  audioPath       String?
+  createdByUserId String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contact         CustomerContact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  createdBy       User             @relation("NoteCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([contactId])
+  @@index([createdAt])
+}
+
+model Counter {
+  id      String @id          // e.g. "CUSTOMER", "PROJECT"
+  prefix  String              // e.g. "K", "P"
+  current Int                 // last issued number
 }

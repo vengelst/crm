@@ -8,7 +8,8 @@ export type AppSection =
   | "planning"
   | "reports"
   | "settings"
-  | "users";
+  | "users"
+  | "notes";
 
 export type CrmAppProps = {
   section: AppSection;
@@ -269,6 +270,7 @@ export type AppSettings = {
   passwordMinLength: number;
   kioskCodeLength: number;
   defaultTheme: "light" | "dark";
+  navAsIcons: boolean;
 };
 
 export type CustomerFormState = {
@@ -476,6 +478,25 @@ export type ProjectNoticeAck = {
   signatureImagePath?: string | null;
   comment?: string | null;
   worker?: { id: string; firstName: string; lastName: string; workerNumber: string };
+};
+
+export type NoteItem = {
+  id: string;
+  entityType: string;
+  customerId?: string | null;
+  contactId?: string | null;
+  title?: string | null;
+  content: string;
+  isPhoneNote?: boolean;
+  createdAt: string;
+  createdBy?: { id: string; displayName: string; email: string } | null;
+  customer?: { id: string; companyName: string; customerNumber: string } | null;
+  contact?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    customer?: { id: string; companyName: string; customerNumber: string } | null;
+  } | null;
 };
 
 export type NotificationItem = {

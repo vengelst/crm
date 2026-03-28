@@ -19,6 +19,7 @@ import { ChecklistsModule } from './checklists/checklists.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { NotesModule } from './notes/notes.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     NotificationsModule,
     RemindersModule,
     ScheduleModule.forRoot(),
+    NotesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

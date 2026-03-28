@@ -19,18 +19,21 @@ export type AppSettings = {
   passwordMinLength: number;
   kioskCodeLength: number;
   defaultTheme: 'light' | 'dark';
+  navAsIcons: boolean;
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
   passwordMinLength: 8,
   kioskCodeLength: 6,
   defaultTheme: 'dark',
+  navAsIcons: false,
 };
 
 const SETTING_KEYS = {
   passwordMinLength: 'security.passwordMinLength',
   kioskCodeLength: 'security.kioskCodeLength',
   defaultTheme: 'appearance.defaultTheme',
+  navAsIcons: 'appearance.navAsIcons',
 } as const;
 
 @Injectable()
@@ -61,6 +64,10 @@ export class SettingsService {
         valueByKey.get(SETTING_KEYS.defaultTheme),
         DEFAULT_SETTINGS.defaultTheme,
       ),
+      navAsIcons: this.readBoolean(
+        valueByKey.get(SETTING_KEYS.navAsIcons),
+        DEFAULT_SETTINGS.navAsIcons,
+      ),
     };
   }
 
@@ -90,6 +97,14 @@ export class SettingsService {
           valueJson: dto.defaultTheme,
         },
       }),
+      this.prisma.setting.upsert({
+        where: { key: SETTING_KEYS.navAsIcons },
+        update: { valueJson: dto.navAsIcons },
+        create: {
+          key: SETTING_KEYS.navAsIcons,
+          valueJson: dto.navAsIcons,
+        },
+      }),
     ]);
 
     return this.getSettings();
@@ -101,6 +116,10 @@ export class SettingsService {
 
   private readTheme(value: unknown, fallback: AppSettings['defaultTheme']) {
     return value === 'light' || value === 'dark' ? value : fallback;
+  }
+
+  private readBoolean(value: unknown, fallback: boolean) {
+    return typeof value === 'boolean' ? value : fallback;
   }
 
   async getSmtpConfig() {

@@ -98,6 +98,15 @@ async function main() {
     },
   });
 
+  await prisma.setting.upsert({
+    where: { key: 'appearance.navAsIcons' },
+    update: { valueJson: false },
+    create: {
+      key: 'appearance.navAsIcons',
+      valueJson: false,
+    },
+  });
+
   const breakRule = await prisma.breakRule.upsert({
     where: { id: 'default-break-rule' },
     update: {},

@@ -24,6 +24,27 @@
 - Vor groesseren Aufgaben soll `workstatus.md` gelesen werden.
 - Nach groesseren Umsetzungen, Tests oder Pruefrunden wird `workstatus.md` aktualisiert.
 
+## Verbindliche i18n-Regel
+
+- Fuer dieses Projekt werden Uebersetzungen **nicht** ueber eine Datenbank, sondern **dateibasiert** gepflegt.
+- Wenn ein UI-Bereich mehrsprachig umgesetzt wird, muessen dort **alle sichtbaren festen Systemtexte** ueber i18n laufen.
+- In mehrsprachigen Bereichen duerfen **keine harten deutschen Resttexte** verbleiben.
+- Das gilt insbesondere fuer:
+  - Ueberschriften
+  - Buttons
+  - Labels
+  - Platzhalter
+  - Statusmeldungen
+  - Empty States
+  - Dialogtexte
+  - Tabellenkoepfe
+  - Tooltips
+  - Druck-/Preview-Texte
+  - Hilfstexte
+- Nicht automatisch zu uebersetzen sind frei eingegebene Inhalte oder fachliche Nutzdaten, z. B. kundenspezifische Texte oder Baustellenhinweise.
+- Neue sichtbare UI-Texte duerfen nur noch mit passendem i18n-Key eingebaut werden.
+- Codex prueft bei Abnahmen zusaetzlich, ob in den geaenderten mehrsprachigen Komponenten noch harte sichtbare Texte verblieben sind.
+
 ## Fachliche Leitplanken
 
 - Monteure arbeiten ausschliesslich ueber den `Kiosk / Monteur`-Modus mit persoenlicher PIN.

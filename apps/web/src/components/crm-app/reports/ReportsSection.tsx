@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useI18n } from "../../../i18n-context";
 import type { Project, Worker, TeamItem, Customer, CustomerFinancials, ProjectFinancials, TimesheetItem } from "../types";
 import { cx, SectionCard, SecondaryButton, MiniStat, FormRow, SelectField } from "../shared";
 import { TimesheetList, FinancialKpi } from "../projects";
@@ -17,6 +18,7 @@ export function ReportsSection({
   workers: Worker[];
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
+  const { t: l } = useI18n();
   const [customerFinancials, setCustomerFinancials] = useState<Record<string, { totalRevenue: number; totalCosts: number; margin: number; totalHours: number }>>({});
   const [loadingFinancials, setLoadingFinancials] = useState(true);
   const [allTimesheets, setAllTimesheets] = useState<TimesheetItem[]>([]);
@@ -74,26 +76,26 @@ export function ReportsSection({
     <div className="grid gap-6">
       {/* Kennzahlen */}
       <div className="grid gap-4 md:grid-cols-4">
-        <MiniStat title="Aktive Monteure" value={activeWorkers.length} />
-        <MiniStat title="Arbeiten gerade" value={workingCount} />
-        <MiniStat title="Aktive Projekte" value={projects.filter((p) => p.status === "ACTIVE").length} />
-        <MiniStat title="Kunden" value={customers.length} />
+        <MiniStat title={l("dash.activeWorkers")} value={activeWorkers.length} />
+        <MiniStat title={l("dash.working")} value={workingCount} />
+        <MiniStat title={l("dash.activeProjects")} value={projects.filter((p) => p.status === "ACTIVE").length} />
+        <MiniStat title={l("dash.customers")} value={customers.length} />
       </div>
 
       {/* Umsatzuebersicht pro Kunde */}
-      <SectionCard title="Umsatz pro Kunde" subtitle="Basierend auf erfassten Stunden und Projektpreisen">
+      <SectionCard title={l("reports.revenuePerCustomer")} subtitle={l("reports.basedOnHours")}>
         {loadingFinancials ? (
-          <p className="text-sm text-slate-500">Lade Auswertungsdaten ...</p>
+          <p className="text-sm text-slate-500">{l("reports.loadingData")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
-                  <th className="pb-2 pr-3">Kunde</th>
-                  <th className="pb-2 pr-3 text-right">Stunden</th>
-                  <th className="pb-2 pr-3 text-right">Umsatz</th>
-                  <th className="pb-2 pr-3 text-right">Kosten</th>
-                  <th className="pb-2 text-right">Marge</th>
+                  <th className="pb-2 pr-3">{l("table.customer")}</th>
+                  <th className="pb-2 pr-3 text-right">{l("kpi.hours")}</th>
+                  <th className="pb-2 pr-3 text-right">{l("kpi.revenue")}</th>
+                  <th className="pb-2 pr-3 text-right">{l("kpi.costs")}</th>
+                  <th className="pb-2 text-right">{l("kpi.marginShort")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -121,13 +123,13 @@ export function ReportsSection({
       </SectionCard>
 
       {/* Monteur-Arbeitsstatus */}
-      <SectionCard title="Monteur-Status" subtitle="Aktueller Arbeitsstatus aller aktiven Monteure">
+      <SectionCard title={l("dash.workerStatus")} subtitle={l("dash.workerStatusSub")}>
         <div className="grid gap-2">
           {activeWorkers.map((w) => {
             const isWorking = workerIsWorking(w);
             const hasProject = (w.assignments ?? []).length > 0;
             const statusColor = isWorking ? "bg-emerald-500" : hasProject ? "bg-red-500" : "bg-amber-500";
-            const statusLabel = isWorking ? "arbeitet" : hasProject ? "nicht gestartet" : "kein Projekt";
+            const statusLabel = isWorking ? l("reports.working") : hasProject ? l("reports.notStarted") : l("reports.noProject");
             return (
               <div key={w.id} className="flex items-center justify-between rounded-xl border border-black/10 px-4 py-2 dark:border-white/10">
                 <div>
@@ -148,24 +150,24 @@ export function ReportsSection({
       </SectionCard>
 
       {/* ── Stundenzettel zentral ──────────────────────── */}
-      <SectionCard title="Stundenzettel" subtitle="Zentrale Uebersicht aller Stundenzettel. PDF-Download und E-Mail-Versand direkt moeglich.">
+      <SectionCard title={l("ts.title")} subtitle={l("reports.tsSub")}>
         <div className="mb-4 flex flex-wrap gap-3">
-          <SelectField label="Kunde" value={tsFilter.customer} onChange={(e) => setTsFilter((c) => ({ ...c, customer: e.target.value }))}
+          <SelectField label={l("table.customer")} value={tsFilter.customer} onChange={(e) => setTsFilter((c) => ({ ...c, customer: e.target.value }))}
             options={customers.map((c) => ({ value: c.id, label: c.companyName }))} />
-          <SelectField label="Projekt" value={tsFilter.project} onChange={(e) => setTsFilter((c) => ({ ...c, project: e.target.value }))}
+          <SelectField label={l("table.project")} value={tsFilter.project} onChange={(e) => setTsFilter((c) => ({ ...c, project: e.target.value }))}
             options={projects.map((p) => ({ value: p.id, label: `${p.projectNumber} ${p.title}` }))} />
-          <SelectField label="Monteur" value={tsFilter.worker} onChange={(e) => setTsFilter((c) => ({ ...c, worker: e.target.value }))}
+          <SelectField label={l("table.worker")} value={tsFilter.worker} onChange={(e) => setTsFilter((c) => ({ ...c, worker: e.target.value }))}
             options={activeWorkers.map((w) => ({ value: w.id, label: `${w.firstName} ${w.lastName}` }))} />
-          <SelectField label="Status" value={tsFilter.status} onChange={(e) => setTsFilter((c) => ({ ...c, status: e.target.value }))}
+          <SelectField label={l("table.status")} value={tsFilter.status} onChange={(e) => setTsFilter((c) => ({ ...c, status: e.target.value }))}
             options={[
-              { value: "DRAFT", label: "Entwurf" },
-              { value: "WORKER_SIGNED", label: "Monteur signiert" },
-              { value: "CUSTOMER_SIGNED", label: "Kunde signiert" },
-              { value: "COMPLETED", label: "Abgeschlossen" },
-              { value: "LOCKED", label: "Gesperrt" },
+              { value: "DRAFT", label: l("ts.draft") },
+              { value: "WORKER_SIGNED", label: l("ts.workerSigned") },
+              { value: "CUSTOMER_SIGNED", label: l("ts.customerSigned") },
+              { value: "COMPLETED", label: l("ts.completed") },
+              { value: "LOCKED", label: l("ts.locked") },
             ]} />
         </div>
-        <TimesheetList timesheets={filteredTimesheets} apiFetch={apiFetch} title={`${filteredTimesheets.length} Stundenzettel`} />
+        <TimesheetList timesheets={filteredTimesheets} apiFetch={apiFetch} title={`${filteredTimesheets.length} ${l("ts.title")}`} />
       </SectionCard>
     </div>
   );
