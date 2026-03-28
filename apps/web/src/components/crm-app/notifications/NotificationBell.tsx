@@ -19,9 +19,14 @@ export function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, ini
   }, [apiFetch]);
 
   useEffect(() => {
-    void loadCount();
+    const timer = window.setTimeout(() => {
+      void loadCount();
+    }, 0);
     const interval = setInterval(() => void loadCount(), 60000);
-    return () => clearInterval(interval);
+    return () => {
+      window.clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [loadCount]);
 
   async function openPanel() {

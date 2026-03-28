@@ -169,13 +169,7 @@ export class NotificationsService {
         : `Kundenunterschrift ${weekLabel}`;
     const body = `${signerName} hat den Stundenzettel fuer ${projectNumber} (${weekLabel}) signiert.`;
 
-    await this.notifyAdmins(
-      'SIGNATURE',
-      title,
-      body,
-      'PROJECT',
-      projectId,
-    );
+    await this.notifyAdmins('SIGNATURE', title, body, 'PROJECT', projectId);
   }
 
   async onTimesheetApproved(
@@ -203,8 +197,7 @@ export class NotificationsService {
   ) {
     if (!uploadedByWorkerId) return;
 
-    const statusText =
-      status === 'APPROVED' ? 'freigegeben' : 'abgelehnt';
+    const statusText = status === 'APPROVED' ? 'freigegeben' : 'abgelehnt';
 
     await this.notifyWorker(
       uploadedByWorkerId,
@@ -216,7 +209,11 @@ export class NotificationsService {
     );
   }
 
-  async onBillingReady(projectId: string, projectNumber: string, projectTitle: string) {
+  async onBillingReady(
+    projectId: string,
+    projectNumber: string,
+    projectTitle: string,
+  ) {
     await this.notifyAdmins(
       'APPROVAL',
       `Projekt ${projectNumber} abrechnungsbereit`,

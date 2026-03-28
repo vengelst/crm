@@ -48,6 +48,7 @@ import { KioskLoginScreen } from "./crm-app/login";
 import { WorkerTimeView, WorkerDetailCard, KioskUserView, getDeviceUuid, getDeviceInfo } from "./crm-app/worker";
 import { CustomerDetailCard } from "./crm-app/customers";
 import { NoteDetailModal, SpeechButton } from "./crm-app/notes";
+import { appendSpeechTranscript } from "./crm-app/notes/speech-format";
 import { SettingsPanel } from "./crm-app/settings";
 import { DocumentPanel, DocumentPreviewModal } from "./crm-app/documents";
 import { DashboardSection, EntityList } from "./crm-app/dashboard";
@@ -2194,7 +2195,6 @@ function NotesSection({ customers, apiFetch, auth }: {
   const [formContent, setFormContent] = useState("");
   const [formTitle, setFormTitle] = useState("");
   const [formIsPhone, setFormIsPhone] = useState(false);
-  const [contacts, setContacts] = useState<{ id: string; firstName: string; lastName: string; customerId: string }[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedNote, setSelectedNote] = useState<NoteItem | null>(null);
@@ -2210,6 +2210,21 @@ function NotesSection({ customers, apiFetch, auth }: {
     const cust = customers.find((c) => c.id === customerFilter);
     return (cust?.contacts ?? []).filter((ct) => ct.id).map((ct) => ({ id: ct.id!, firstName: ct.firstName, lastName: ct.lastName, customerId: cust!.id }));
   }, [customers, customerFilter]);
+
+  const formContacts = useMemo(() => {
+    if (formEntityType !== "CONTACT" || !formCustomerId) {
+      return [];
+    }
+    const customer = customers.find((item) => item.id === formCustomerId);
+    return (customer?.contacts ?? [])
+      .filter((contact) => contact.id)
+      .map((contact) => ({
+        id: contact.id ?? "",
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        customerId: customer?.id ?? "",
+      }));
+  }, [customers, formCustomerId, formEntityType]);
 
   const load = useCallback(async () => {
     const params = new URLSearchParams();
@@ -2232,19 +2247,12 @@ function NotesSection({ customers, apiFetch, auth }: {
     setLoading(false);
   }, [apiFetch, search, entityFilter, customerFilter, contactFilter, phoneFilter, sortMode]);
 
-  useEffect(() => { void load(); }, [load]);
-
-  // Reset contact filter when customer changes
-  useEffect(() => { setContactFilter(""); }, [customerFilter]);
-
   useEffect(() => {
-    if (formEntityType === "CONTACT" && formCustomerId) {
-      const cust = customers.find((c) => c.id === formCustomerId);
-      if (cust?.contacts) {
-        setContacts(cust.contacts.map((c) => ({ id: c.id ?? "", firstName: c.firstName, lastName: c.lastName, customerId: cust.id })));
-      }
-    }
-  }, [formEntityType, formCustomerId, customers]);
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   async function saveNote() {
     if (!formContent.trim()) return;
@@ -2295,7 +2303,7 @@ function NotesSection({ customers, apiFetch, auth }: {
             className="flex-1 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" />
           <SelectField label={l("notes.entity")} value={entityFilter} onChange={(e) => setEntityFilter(e.target.value as typeof entityFilter)}
             options={[{ value: "", label: l("notes.all") }, { value: "CUSTOMER", label: l("notes.customer") }, { value: "CONTACT", label: l("notes.contact") }]} />
-          <SelectField label={l("notes.customer")} value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)}
+          <SelectField label={l("notes.customer")} value={customerFilter} onChange={(e) => { setCustomerFilter(e.target.value); setContactFilter(""); }}
             options={[{ value: "", label: l("notes.all") }, ...customers.map((c) => ({ value: c.id, label: c.companyName }))]} />
           <SelectField label={l("notes.filterContact")} value={contactFilter} onChange={(e) => setContactFilter(e.target.value)}
             options={[{ value: "", label: l("notes.allContacts") }, ...filterContacts.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName}` }))]} />
@@ -2329,7 +2337,7 @@ function NotesSection({ customers, apiFetch, auth }: {
               </FormRow>
               {formEntityType === "CONTACT" && formCustomerId ? (
                 <SelectField label={l("notes.contact")} value={formContactId} onChange={(e) => setFormContactId(e.target.value)}
-                  options={[{ value: "", label: l("notes.selectContact") }, ...contacts.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName}` }))]} />
+                  options={[{ value: "", label: l("notes.selectContact") }, ...formContacts.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName}` }))]} />
               ) : null}
               <Field label={l("doc.title")} value={formTitle} onChange={(e) => setFormTitle(e.target.value)} />
               <TextArea label={l("notes.content")} value={formContent} onChange={(e) => setFormContent(e.target.value)} />
@@ -2339,7 +2347,7 @@ function NotesSection({ customers, apiFetch, auth }: {
                     className="rounded border-slate-300 dark:border-slate-600" />
                   {l("notes.phoneNote")}
                 </label>
-                <SpeechButton lang={notesLang} l={l} onAppend={(text) => setFormContent((prev) => prev ? prev + " " + text : text)} />
+                <SpeechButton lang={notesLang} l={l} onAppend={(text) => setFormContent((prev) => appendSpeechTranscript(prev, text, notesLang))} />
               </div>
               <SecondaryButton onClick={() => void saveNote()}>{l("notes.save")}</SecondaryButton>
             </div>

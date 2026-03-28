@@ -100,7 +100,9 @@ export class ProjectsService {
   private async nextProjectNumber(
     tx: Parameters<Parameters<typeof this.prisma.$transaction>[0]>[0],
   ): Promise<string> {
-    const result = await tx.$queryRawUnsafe<{ prefix: string; current: number }[]>(
+    const result = await tx.$queryRawUnsafe<
+      { prefix: string; current: number }[]
+    >(
       `UPDATE "Counter" SET "current" = "current" + 1 WHERE "id" = 'PROJECT' RETURNING "prefix", "current"`,
     );
     if (!result.length) {
@@ -111,9 +113,7 @@ export class ProjectsService {
 
   async create(dto: SaveProjectDto) {
     if (!dto.customerId || !dto.title) {
-      throw new BadRequestException(
-        'customerId und title sind Pflichtfelder.',
-      );
+      throw new BadRequestException('customerId und title sind Pflichtfelder.');
     }
 
     const customerId = dto.customerId;
@@ -134,7 +134,8 @@ export class ProjectsService {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         return await this.prisma.$transaction(async (tx) => {
-          const projectNumber = dto.projectNumber?.trim() || await this.nextProjectNumber(tx);
+          const projectNumber =
+            dto.projectNumber?.trim() || (await this.nextProjectNumber(tx));
 
           return tx.project.create({
             data: {
@@ -176,15 +177,25 @@ export class ProjectsService {
           });
         });
       } catch (e: unknown) {
-        const isPrismaUnique = e && typeof e === 'object' && 'code' in e && (e as { code: string }).code === 'P2002';
-        if (isPrismaUnique && attempt < MAX_RETRIES - 1 && !dto.projectNumber?.trim()) {
+        const isPrismaUnique =
+          e &&
+          typeof e === 'object' &&
+          'code' in e &&
+          (e as { code: string }).code === 'P2002';
+        if (
+          isPrismaUnique &&
+          attempt < MAX_RETRIES - 1 &&
+          !dto.projectNumber?.trim()
+        ) {
           continue;
         }
         throw e;
       }
     }
 
-    throw new BadRequestException('Projektnummer konnte nicht vergeben werden.');
+    throw new BadRequestException(
+      'Projektnummer konnte nicht vergeben werden.',
+    );
   }
 
   async update(id: string, dto: SaveProjectDto) {
@@ -345,9 +356,7 @@ export class ProjectsService {
       where: { projectId },
     });
 
-    const currentWorkerIds = new Set(
-      currentAssignments.map((a) => a.workerId),
-    );
+    const currentWorkerIds = new Set(currentAssignments.map((a) => a.workerId));
     const newWorkerIds = new Set(data.workerIds);
 
     // 1. Entfernte Worker loeschen
@@ -478,7 +487,12 @@ export class ProjectsService {
     // Aggregiere pro Woche fuer die weeklyBreakdown-Response
     const weekAgg = new Map<
       string,
-      { hours: number; overtimeHours: number; baseRevenue: number; overtimeRevenue: number }
+      {
+        hours: number;
+        overtimeHours: number;
+        baseRevenue: number;
+        overtimeRevenue: number;
+      }
     >();
 
     for (const [compositeKey, wHours] of workerWeekHoursMap) {

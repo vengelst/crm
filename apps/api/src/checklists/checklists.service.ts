@@ -115,7 +115,12 @@ export class ChecklistsService {
 
   async completeItem(
     id: string,
-    data: { completed: boolean; comment?: string; completedByName?: string; completedById?: string },
+    data: {
+      completed: boolean;
+      comment?: string;
+      completedByName?: string;
+      completedById?: string;
+    },
   ) {
     return this.prisma.projectChecklistItem.update({
       where: { id },
@@ -266,7 +271,13 @@ export class ChecklistsService {
 
   async addTemplateNotice(
     templateId: string,
-    data: { title: string; body: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+    data: {
+      title: string;
+      body: string;
+      sortOrder?: number;
+      required?: boolean;
+      requireSignature?: boolean;
+    },
   ) {
     return this.prisma.checklistTemplateNotice.create({
       data: {
@@ -282,7 +293,13 @@ export class ChecklistsService {
 
   async updateTemplateNotice(
     id: string,
-    data: { title?: string; body?: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+    data: {
+      title?: string;
+      body?: string;
+      sortOrder?: number;
+      required?: boolean;
+      requireSignature?: boolean;
+    },
   ) {
     return this.prisma.checklistTemplateNotice.update({
       where: { id },
@@ -302,7 +319,14 @@ export class ChecklistsService {
       include: {
         acknowledgements: {
           include: {
-            worker: { select: { id: true, firstName: true, lastName: true, workerNumber: true } },
+            worker: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                workerNumber: true,
+              },
+            },
           },
         },
       },
@@ -312,22 +336,44 @@ export class ChecklistsService {
 
   async createProjectNotice(
     projectId: string,
-    data: { title: string; body: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+    data: {
+      title: string;
+      body: string;
+      sortOrder?: number;
+      required?: boolean;
+      requireSignature?: boolean;
+    },
   ) {
     return this.prisma.projectNotice.create({
-      data: { projectId, ...data, sortOrder: data.sortOrder ?? 0, required: data.required ?? false, requireSignature: data.requireSignature ?? false },
+      data: {
+        projectId,
+        ...data,
+        sortOrder: data.sortOrder ?? 0,
+        required: data.required ?? false,
+        requireSignature: data.requireSignature ?? false,
+      },
     });
   }
 
   async updateProjectNotice(
     id: string,
-    data: { title?: string; body?: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+    data: {
+      title?: string;
+      body?: string;
+      sortOrder?: number;
+      required?: boolean;
+      requireSignature?: boolean;
+    },
   ) {
-    const notice = await this.prisma.projectNotice.findUnique({ where: { id } });
+    const notice = await this.prisma.projectNotice.findUnique({
+      where: { id },
+    });
     if (!notice) throw new NotFoundException('Hinweis nicht gefunden.');
 
     // Bei relevanter Textaenderung alte Bestaetigungen zuruecksetzen
-    const textChanged = (data.title && data.title !== notice.title) || (data.body && data.body !== notice.body);
+    const textChanged =
+      (data.title && data.title !== notice.title) ||
+      (data.body && data.body !== notice.body);
 
     const result = await this.prisma.projectNotice.update({
       where: { id },

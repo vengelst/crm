@@ -16,6 +16,17 @@ export function SpeechButton({
   l: (key: string) => string;
 }) {
   const { status, supported, start, stop } = useSpeechInput(lang);
+  const helpLines = [
+    l("notes.speechHelpLineBreak"),
+    l("notes.speechHelpParagraph"),
+    l("notes.speechHelpHeading"),
+    l("notes.speechHelpBullets"),
+    l("notes.speechHelpNumbered"),
+    l("notes.speechHelpNextNumber"),
+    l("notes.speechHelpCheckbox"),
+    l("notes.speechHelpBold"),
+    l("notes.speechHelpItalic"),
+  ];
 
   if (!supported) {
     return (
@@ -29,6 +40,7 @@ export function SpeechButton({
     <div className="flex items-center gap-2">
       <button
         type="button"
+        title={l("notes.speechCommandsHint")}
         onClick={() => {
           if (recording) {
             stop();
@@ -60,6 +72,24 @@ export function SpeechButton({
           </>
         )}
       </button>
+      <div className="group relative">
+        <button
+          type="button"
+          aria-label={l("notes.speechCommandsHint")}
+          title={l("notes.speechCommandsHint")}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-black/10 bg-white text-xs font-semibold text-slate-500 transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          ?
+        </button>
+        <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-72 rounded-xl bg-slate-950 px-3 py-3 text-[11px] leading-5 text-white opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-slate-200 dark:text-slate-950">
+          <div className="mb-1 text-xs font-semibold">{l("notes.speechHelpTitle")}</div>
+          <div className="grid gap-0.5">
+            {helpLines.map((line) => (
+              <div key={line}>• {line}</div>
+            ))}
+          </div>
+        </div>
+      </div>
       {status === "denied" && <span className="text-xs text-red-500">{l("notes.speechDenied")}</span>}
       {status === "error" && <span className="text-xs text-red-500">{l("notes.speechError")}</span>}
       {recording && <span className="text-xs text-red-500 animate-pulse">{l("notes.speechRecording")}</span>}

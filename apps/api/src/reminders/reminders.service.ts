@@ -59,7 +59,9 @@ export class RemindersService {
   async updateConfig(data: Partial<ReminderConfig>): Promise<ReminderConfig> {
     const current = await this.getConfig();
     const next = { ...current, ...data };
-    const jsonValue = next as unknown as Parameters<typeof this.prisma.setting.create>[0]['data']['valueJson'];
+    const jsonValue = next as unknown as Parameters<
+      typeof this.prisma.setting.create
+    >[0]['data']['valueJson'];
     await this.prisma.setting.upsert({
       where: { key: CONFIG_KEY },
       update: { valueJson: jsonValue },
@@ -93,7 +95,7 @@ export class RemindersService {
     }
 
     if (cfg.openApprovals) {
-      const count = await this.remindOpenApprovals(cfg);
+      const count = await this.remindOpenApprovals();
       results.push(`Offene Freigaben: ${count} Erinnerungen`);
     }
 
@@ -123,7 +125,9 @@ export class RemindersService {
         },
       },
       include: {
-        worker: { select: { id: true, firstName: true, lastName: true, email: true } },
+        worker: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
         project: { select: { projectNumber: true, title: true } },
       },
     });
@@ -132,9 +136,7 @@ export class RemindersService {
     for (const sheet of sheets) {
       const entityId = sheet.id;
       const type =
-        sheet.status === 'DRAFT'
-          ? 'OPEN_WORKER_SIGN'
-          : 'OPEN_CUSTOMER_SIGN';
+        sheet.status === 'DRAFT' ? 'OPEN_WORKER_SIGN' : 'OPEN_CUSTOMER_SIGN';
 
       if (await this.alreadySent(type, entityId, sheet.workerId)) continue;
 
@@ -165,11 +167,7 @@ export class RemindersService {
       );
 
       if (cfg.emailEnabled) {
-        await this.sendReminderEmail(
-          sheet.worker.email,
-          title,
-          body,
-        );
+        await this.sendReminderEmail(sheet.worker.email, title, body);
       }
 
       await this.logSent(type, entityId, sheet.workerId);
@@ -180,7 +178,7 @@ export class RemindersService {
 
   // ── Offene Freigaben ──────────────────────
 
-  private async remindOpenApprovals(cfg: ReminderConfig): Promise<number> {
+  private async remindOpenApprovals(): Promise<number> {
     // Stundenzettel die COMPLETED sind, aber nicht APPROVED
     const sheets = await this.prisma.weeklyTimesheet.findMany({
       where: {
@@ -194,8 +192,7 @@ export class RemindersService {
 
     let count = 0;
     for (const sheet of sheets) {
-      if (await this.alreadySent('OPEN_APPROVAL', sheet.id, 'admins'))
-        continue;
+      if (await this.alreadySent('OPEN_APPROVAL', sheet.id, 'admins')) continue;
 
       const weekLabel = `KW${sheet.weekNumber}/${sheet.weekYear}`;
       await this.notifications.notifyAdmins(
@@ -248,15 +245,16 @@ export class RemindersService {
         startDate: { lte: tomorrow, gte: new Date() },
       },
       include: {
-        worker: { select: { id: true, firstName: true, lastName: true, email: true } },
+        worker: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
         project: { select: { id: true, projectNumber: true, title: true } },
       },
     });
 
     let count = 0;
     for (const a of assignments) {
-      if (await this.alreadySent('PROJECT_START', a.id, a.workerId))
-        continue;
+      if (await this.alreadySent('PROJECT_START', a.id, a.workerId)) continue;
 
       const title = `Projektstart morgen: ${a.project.projectNumber}`;
       const body = `Dein Einsatz auf "${a.project.title}" beginnt am ${a.startDate.toISOString().slice(0, 10)}.`;
@@ -298,7 +296,9 @@ export class RemindersService {
         OR: [{ endDate: null }, { endDate: { gte: yesterday } }],
       },
       include: {
-        worker: { select: { id: true, email: true, firstName: true, lastName: true } },
+        worker: {
+          select: { id: true, email: true, firstName: true, lastName: true },
+        },
       },
     });
 
@@ -321,12 +321,7 @@ export class RemindersService {
         const title = 'Fehlende Zeitbuchung';
         const body = `Fuer gestern (${dayKey}) liegen keine Zeitbuchungen vor.`;
 
-        await this.notifications.notifyWorker(
-          wid,
-          'MISSING_TIME',
-          title,
-          body,
-        );
+        await this.notifications.notifyWorker(wid, 'MISSING_TIME', title, body);
 
         if (cfg.emailEnabled && worker?.email) {
           await this.sendReminderEmail(worker.email, title, body);
@@ -359,11 +354,7 @@ export class RemindersService {
     return !!existing;
   }
 
-  private async logSent(
-    type: string,
-    entityId: string,
-    recipientId: string,
-  ) {
+  private async logSent(type: string, entityId: string, recipientId: string) {
     await this.prisma.reminderLog.upsert({
       where: {
         type_entityId_channel_recipientId: {

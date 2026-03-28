@@ -568,7 +568,10 @@ export class SettingsService {
 
     // Pfad-Traversal-Schutz: resolved path muss im Backup-Verzeichnis liegen
     const normalizedBase = resolve(this.backupDir);
-    if (!backupPath.startsWith(normalizedBase + '/') && !backupPath.startsWith(normalizedBase + '\\')) {
+    if (
+      !backupPath.startsWith(normalizedBase + '/') &&
+      !backupPath.startsWith(normalizedBase + '\\')
+    ) {
       throw new BadRequestException('Ungueltige Backup-ID.');
     }
 

@@ -13,6 +13,7 @@ import { Request } from 'express';
 import { RoleCode } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { NotesService } from './notes.service';
+import { CreateNoteDto, UpdateNoteDto } from './dto/save-note.dto';
 
 type RequestWithUser = Request & {
   user?: { sub: string; type: string };
@@ -32,7 +33,14 @@ export class NotesController {
     @Query('sort') sort?: string,
     @Query('phoneOnly') phoneOnly?: string,
   ) {
-    return this.notesService.list({ search, entityType, customerId, contactId, sort, phoneOnly });
+    return this.notesService.list({
+      search,
+      entityType,
+      customerId,
+      contactId,
+      sort,
+      phoneOnly,
+    });
   }
 
   @Get(':id')
@@ -41,17 +49,7 @@ export class NotesController {
   }
 
   @Post()
-  create(
-    @Body() body: {
-      entityType: string;
-      customerId?: string;
-      contactId?: string;
-      title?: string;
-      content: string;
-      isPhoneNote?: boolean;
-    },
-    @Req() request: RequestWithUser,
-  ) {
+  create(@Body() body: CreateNoteDto, @Req() request: RequestWithUser) {
     return this.notesService.create({
       ...body,
       createdByUserId: request.user!.sub,
@@ -59,10 +57,7 @@ export class NotesController {
   }
 
   @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() body: { title?: string; content?: string; isPhoneNote?: boolean },
-  ) {
+  update(@Param('id') id: string, @Body() body: UpdateNoteDto) {
     return this.notesService.update(id, body);
   }
 

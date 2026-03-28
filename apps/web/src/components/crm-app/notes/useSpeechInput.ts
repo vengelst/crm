@@ -33,6 +33,7 @@ export function useSpeechInput(lang: string) {
   const [supported, setSupported] = useState(false);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const onResultRef = useRef<(text: string) => void>(() => {});
+  const shouldRestartRef = useRef(false);
 
   function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | null {
     if (typeof window === "undefined") return null;
@@ -40,8 +41,20 @@ export function useSpeechInput(lang: string) {
   }
 
   useEffect(() => {
-    const SR = getSpeechRecognitionConstructor();
-    setSupported(!!SR);
+    const timer = window.setTimeout(() => {
+      setSupported(!!getSpeechRecognitionConstructor());
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      shouldRestartRef.current = false;
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {}
+        recognitionRef.current = null;
+      }
+    };
   }, []);
 
   const start = useCallback(
@@ -55,6 +68,7 @@ export function useSpeechInput(lang: string) {
       // Stop any existing session
       if (recognitionRef.current) {
         try { recognitionRef.current.abort(); } catch {}
+        recognitionRef.current = null;
       }
 
       const recognition = new SR();
@@ -64,6 +78,7 @@ export function useSpeechInput(lang: string) {
       recognition.maxAlternatives = 1;
 
       onResultRef.current = onResult;
+      shouldRestartRef.current = true;
 
       recognition.onresult = (event: BrowserSpeechRecognitionEvent) => {
         let transcript = "";
@@ -86,14 +101,20 @@ export function useSpeechInput(lang: string) {
         } else {
           setStatus("error");
         }
+        shouldRestartRef.current = false;
         recognitionRef.current = null;
       };
 
       recognition.onend = () => {
         // Auto-restart if still in recording mode (browser sometimes stops after silence)
-        if (recognitionRef.current === recognition && status === "recording") {
-          try { recognition.start(); } catch { setStatus("idle"); recognitionRef.current = null; }
+        if (recognitionRef.current === recognition && shouldRestartRef.current) {
+          try {
+            recognition.start();
+            return;
+          } catch {}
         }
+        recognitionRef.current = null;
+        setStatus("idle");
       };
 
       try {
@@ -101,13 +122,15 @@ export function useSpeechInput(lang: string) {
         recognitionRef.current = recognition;
         setStatus("recording");
       } catch {
+        shouldRestartRef.current = false;
         setStatus("error");
       }
     },
-    [lang, status],
+    [lang],
   );
 
   const stop = useCallback(() => {
+    shouldRestartRef.current = false;
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
       recognitionRef.current = null;

@@ -6,16 +6,27 @@ import { formatMinutes } from "./format-minutes";
 
 export function TodayStatsBar({ stats, lang = "de" as SupportedLang }: { stats: { completedMinutes: number; openSinceMinutes: number; totalMinutes: number }; lang?: SupportedLang }) {
   const l = (key: string) => t(key, lang);
-  const [liveTotal, setLiveTotal] = useState(stats.totalMinutes);
+  const [elapsedTicks, setElapsedTicks] = useState(0);
+  const liveTotal = stats.totalMinutes + (stats.openSinceMinutes > 0 ? elapsedTicks * 0.5 : 0);
 
   useEffect(() => {
-    setLiveTotal(stats.totalMinutes);
+    const resetTimer = window.setTimeout(() => {
+      setElapsedTicks(0);
+    }, 0);
+
     if (stats.openSinceMinutes > 0) {
       const interval = setInterval(() => {
-        setLiveTotal((prev) => prev + 0.5);
+        setElapsedTicks((prev) => prev + 1);
       }, 30000);
-      return () => clearInterval(interval);
+      return () => {
+        window.clearTimeout(resetTimer);
+        clearInterval(interval);
+      };
     }
+
+    return () => {
+      window.clearTimeout(resetTimer);
+    };
   }, [stats.totalMinutes, stats.openSinceMinutes]);
 
   return (

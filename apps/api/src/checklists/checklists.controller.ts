@@ -7,7 +7,6 @@ import {
   Param,
   Patch,
   Post,
-  Query,
   Req,
 } from '@nestjs/common';
 import { Request } from 'express';
@@ -26,7 +25,12 @@ type RequestWithUser = Request & {
 };
 
 @Controller('checklists')
-@Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER, RoleCode.WORKER)
+@Roles(
+  RoleCode.SUPERADMIN,
+  RoleCode.OFFICE,
+  RoleCode.PROJECT_MANAGER,
+  RoleCode.WORKER,
+)
 export class ChecklistsController {
   constructor(
     private readonly checklistsService: ChecklistsService,
@@ -120,7 +124,9 @@ export class ChecklistsController {
         where: { id: request.user.workerId ?? request.user.sub },
         select: { firstName: true, lastName: true },
       });
-      resolvedName = worker ? `${worker.firstName} ${worker.lastName}` : undefined;
+      resolvedName = worker
+        ? `${worker.firstName} ${worker.lastName}`
+        : undefined;
     } else if (request.user) {
       const user = await this.prisma.user.findUnique({
         where: { id: request.user.sub },
@@ -211,7 +217,14 @@ export class ChecklistsController {
   @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE)
   addTemplateNotice(
     @Param('templateId') templateId: string,
-    @Body() body: { title: string; body: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+    @Body()
+    body: {
+      title: string;
+      body: string;
+      sortOrder?: number;
+      required?: boolean;
+      requireSignature?: boolean;
+    },
   ) {
     return this.checklistsService.addTemplateNotice(templateId, body);
   }
@@ -220,7 +233,14 @@ export class ChecklistsController {
   @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE)
   updateTemplateNotice(
     @Param('id') id: string,
-    @Body() body: { title?: string; body?: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+    @Body()
+    body: {
+      title?: string;
+      body?: string;
+      sortOrder?: number;
+      required?: boolean;
+      requireSignature?: boolean;
+    },
   ) {
     return this.checklistsService.updateTemplateNotice(id, body);
   }
@@ -247,7 +267,14 @@ export class ChecklistsController {
   @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER)
   createProjectNotice(
     @Param('projectId') projectId: string,
-    @Body() body: { title: string; body: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+    @Body()
+    body: {
+      title: string;
+      body: string;
+      sortOrder?: number;
+      required?: boolean;
+      requireSignature?: boolean;
+    },
   ) {
     return this.checklistsService.createProjectNotice(projectId, body);
   }
@@ -256,7 +283,14 @@ export class ChecklistsController {
   @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER)
   updateProjectNotice(
     @Param('id') id: string,
-    @Body() body: { title?: string; body?: string; sortOrder?: number; required?: boolean; requireSignature?: boolean },
+    @Body()
+    body: {
+      title?: string;
+      body?: string;
+      sortOrder?: number;
+      required?: boolean;
+      requireSignature?: boolean;
+    },
   ) {
     return this.checklistsService.updateProjectNotice(id, body);
   }
@@ -289,7 +323,9 @@ export class ChecklistsController {
     await this.assertProjectAccess(request, notice.projectId);
 
     if (notice.requireSignature && !body.signatureImagePath) {
-      throw new ForbiddenException('Unterschrift ist fuer diesen Hinweis erforderlich.');
+      throw new ForbiddenException(
+        'Unterschrift ist fuer diesen Hinweis erforderlich.',
+      );
     }
 
     const workerId = request.user.workerId ?? request.user.sub;
@@ -304,7 +340,10 @@ export class ChecklistsController {
 
   // ── Helpers ───────────────────────────────────
 
-  private async assertProjectAccess(request: RequestWithUser, projectId: string) {
+  private async assertProjectAccess(
+    request: RequestWithUser,
+    projectId: string,
+  ) {
     if (request.user?.type === 'worker') {
       const workerId = request.user.workerId ?? request.user.sub;
       const assignment = await this.prisma.projectAssignment.findFirst({

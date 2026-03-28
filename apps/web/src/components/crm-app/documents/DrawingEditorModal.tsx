@@ -41,9 +41,12 @@ export function DrawingEditorModal({
   const toolRef = useRef(tool);
   const colorRef = useRef(color);
   const lineWidthRef = useRef(lineWidth);
-  toolRef.current = tool;
-  colorRef.current = color;
-  lineWidthRef.current = lineWidth;
+
+  useEffect(() => {
+    toolRef.current = tool;
+    colorRef.current = color;
+    lineWidthRef.current = lineWidth;
+  }, [tool, color, lineWidth]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

@@ -26,7 +26,12 @@ export function ChecklistTemplateSettings({ apiFetch, setPanelSuccess, setPanelE
     setLoading(false);
   }, [apiFetch]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   async function createTemplate() {
     if (!newName.trim()) return;

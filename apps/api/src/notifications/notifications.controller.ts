@@ -20,9 +20,7 @@ type RequestWithUser = Request & {
 
 @Controller('notifications')
 export class NotificationsController {
-  constructor(
-    private readonly notificationsService: NotificationsService,
-  ) {}
+  constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
   @KioskAllowed()
@@ -39,10 +37,16 @@ export class NotificationsController {
   async unreadCount(@Req() request: RequestWithUser) {
     if (request.user?.type === 'worker') {
       const workerId = request.user.workerId ?? request.user.sub;
-      const count = await this.notificationsService.countUnread('worker', workerId);
+      const count = await this.notificationsService.countUnread(
+        'worker',
+        workerId,
+      );
       return { count };
     }
-    const count = await this.notificationsService.countUnread('user', request.user!.sub);
+    const count = await this.notificationsService.countUnread(
+      'user',
+      request.user!.sub,
+    );
     return { count };
   }
 
@@ -63,19 +67,27 @@ export class NotificationsController {
     return this.notificationsService.markAllRead('user', request.user!.sub);
   }
 
-  private async assertOwnership(request: RequestWithUser, notificationId: string) {
-    const notification = await this.notificationsService.getById(notificationId);
+  private async assertOwnership(
+    request: RequestWithUser,
+    notificationId: string,
+  ) {
+    const notification =
+      await this.notificationsService.getById(notificationId);
     if (!notification) {
       throw new ForbiddenException('Benachrichtigung nicht gefunden.');
     }
     if (request.user?.type === 'worker') {
       const workerId = request.user.workerId ?? request.user.sub;
       if (notification.recipientWorkerId !== workerId) {
-        throw new ForbiddenException('Zugriff auf fremde Benachrichtigungen nicht erlaubt.');
+        throw new ForbiddenException(
+          'Zugriff auf fremde Benachrichtigungen nicht erlaubt.',
+        );
       }
     } else {
       if (notification.recipientUserId !== request.user?.sub) {
-        throw new ForbiddenException('Zugriff auf fremde Benachrichtigungen nicht erlaubt.');
+        throw new ForbiddenException(
+          'Zugriff auf fremde Benachrichtigungen nicht erlaubt.',
+        );
       }
     }
   }

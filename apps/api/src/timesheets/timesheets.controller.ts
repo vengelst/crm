@@ -27,7 +27,12 @@ type RequestWithUser = Request & {
 };
 
 @Controller('timesheets')
-@Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER, RoleCode.WORKER)
+@Roles(
+  RoleCode.SUPERADMIN,
+  RoleCode.OFFICE,
+  RoleCode.PROJECT_MANAGER,
+  RoleCode.WORKER,
+)
 export class TimesheetsController {
   constructor(private readonly timesheetsService: TimesheetsService) {}
 
@@ -122,11 +127,16 @@ export class TimesheetsController {
     return this.timesheetsService.markBilled(id, request.user!.sub);
   }
 
-  private async assertWorkerOwnership(request: RequestWithUser, timesheetId: string) {
+  private async assertWorkerOwnership(
+    request: RequestWithUser,
+    timesheetId: string,
+  ) {
     const ownId = request.user?.workerId ?? request.user?.sub;
     const sheet = await this.timesheetsService.getById(timesheetId);
     if (sheet.workerId !== ownId) {
-      throw new ForbiddenException('Zugriff nur auf eigene Stundenzettel erlaubt.');
+      throw new ForbiddenException(
+        'Zugriff nur auf eigene Stundenzettel erlaubt.',
+      );
     }
   }
 

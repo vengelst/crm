@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -12,7 +16,9 @@ export class NotesService {
         id: true,
         firstName: true,
         lastName: true,
-        customer: { select: { id: true, companyName: true, customerNumber: true } },
+        customer: {
+          select: { id: true, companyName: true, customerNumber: true },
+        },
       },
     },
     createdBy: { select: { id: true, displayName: true, email: true } },
@@ -41,7 +47,9 @@ export class NotesService {
     }
 
     const orderBy =
-      query.sort === 'asc' ? { createdAt: 'asc' as const } : { createdAt: 'desc' as const };
+      query.sort === 'asc'
+        ? { createdAt: 'asc' as const }
+        : { createdAt: 'desc' as const };
 
     return this.prisma.note.findMany({
       where,
@@ -70,10 +78,14 @@ export class NotesService {
     createdByUserId: string;
   }) {
     if (data.entityType === 'CUSTOMER' && !data.customerId) {
-      throw new BadRequestException('customerId ist erforderlich fuer Kundennotizen.');
+      throw new BadRequestException(
+        'customerId ist erforderlich fuer Kundennotizen.',
+      );
     }
     if (data.entityType === 'CONTACT' && !data.contactId) {
-      throw new BadRequestException('contactId ist erforderlich fuer Kontaktnotizen.');
+      throw new BadRequestException(
+        'contactId ist erforderlich fuer Kontaktnotizen.',
+      );
     }
 
     // If contact, resolve customer automatically
@@ -82,7 +94,8 @@ export class NotesService {
         where: { id: data.contactId },
         select: { customerId: true },
       });
-      if (!contact) throw new BadRequestException('Ansprechpartner nicht gefunden.');
+      if (!contact)
+        throw new BadRequestException('Ansprechpartner nicht gefunden.');
       data.customerId = contact.customerId;
     }
 
@@ -100,12 +113,16 @@ export class NotesService {
     });
   }
 
-  async update(id: string, data: { title?: string; content?: string; isPhoneNote?: boolean }) {
+  async update(
+    id: string,
+    data: { title?: string; content?: string; isPhoneNote?: boolean },
+  ) {
     await this.getById(id);
     const updateData: Record<string, unknown> = {};
     if (data.title !== undefined) updateData.title = data.title;
     if (data.content !== undefined) updateData.content = data.content;
-    if (data.isPhoneNote !== undefined) updateData.isPhoneNote = data.isPhoneNote;
+    if (data.isPhoneNote !== undefined)
+      updateData.isPhoneNote = data.isPhoneNote;
     return this.prisma.note.update({
       where: { id },
       data: updateData,

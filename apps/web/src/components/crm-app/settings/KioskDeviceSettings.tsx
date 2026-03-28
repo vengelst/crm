@@ -33,7 +33,12 @@ export function KioskDeviceSettings({ apiFetch, workers, users, setPanelSuccess,
     setLoading(false);
   }, [apiFetch]);
 
-  useEffect(() => { void loadData(); }, [loadData]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadData]);
 
   async function saveConfig() {
     setSaving(true);

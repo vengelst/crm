@@ -53,7 +53,9 @@ export class CustomersService {
   private async nextCustomerNumber(
     tx: Parameters<Parameters<typeof this.prisma.$transaction>[0]>[0],
   ): Promise<string> {
-    const result = await tx.$queryRawUnsafe<{ prefix: string; current: number }[]>(
+    const result = await tx.$queryRawUnsafe<
+      { prefix: string; current: number }[]
+    >(
       `UPDATE "Counter" SET "current" = "current" + 1 WHERE "id" = 'CUSTOMER' RETURNING "prefix", "current"`,
     );
     if (!result.length) {
@@ -83,13 +85,22 @@ export class CustomersService {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         return await this.prisma.$transaction(async (tx) => {
-          const customerNumber = dto.customerNumber?.trim() || await this.nextCustomerNumber(tx);
+          const customerNumber =
+            dto.customerNumber?.trim() || (await this.nextCustomerNumber(tx));
           return this._createInTx(tx, dto, customerNumber, companyName);
         });
       } catch (e: unknown) {
         // Prisma unique constraint violation: P2002
-        const isPrismaUnique = e && typeof e === 'object' && 'code' in e && (e as { code: string }).code === 'P2002';
-        if (isPrismaUnique && attempt < MAX_RETRIES - 1 && !dto.customerNumber?.trim()) {
+        const isPrismaUnique =
+          e &&
+          typeof e === 'object' &&
+          'code' in e &&
+          (e as { code: string }).code === 'P2002';
+        if (
+          isPrismaUnique &&
+          attempt < MAX_RETRIES - 1 &&
+          !dto.customerNumber?.trim()
+        ) {
           continue; // retry with next counter value
         }
         throw e;

@@ -3,8 +3,9 @@
 import { useI18n } from "../../../i18n-context";
 import { useState } from "react";
 import type { NoteItem } from "../types";
-import { SecondaryButton, TextArea, Field } from "../shared";
+import { SecondaryButton, TextArea, Field, MessageBar } from "../shared";
 import { SpeechButton } from "./SpeechButton";
+import { appendSpeechTranscript } from "./speech-format";
 
 export function NoteDetailModal({
   note,
@@ -24,13 +25,24 @@ export function NoteDetailModal({
   const [editContent, setEditContent] = useState(note.content);
   const [editIsPhone, setEditIsPhone] = useState(note.isPhoneNote ?? false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
     if (!editContent.trim()) return;
     setSaving(true);
-    await onSave(note.id, { title: editTitle || undefined, content: editContent, isPhoneNote: editIsPhone });
-    setSaving(false);
-    setEditing(false);
+    setError(null);
+    try {
+      await onSave(note.id, {
+        title: editTitle || undefined,
+        content: editContent,
+        isPhoneNote: editIsPhone,
+      });
+      setEditing(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : l("common.error"));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleDelete() {
@@ -55,6 +67,10 @@ export function NoteDetailModal({
             ) : null}
           </div>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-xl leading-none">&times;</button>
+        </div>
+
+        <div className="mb-4">
+          <MessageBar error={error} success={null} />
         </div>
 
         {/* Metadata */}
@@ -83,7 +99,7 @@ export function NoteDetailModal({
                   className="rounded border-slate-300 dark:border-slate-600" />
                 {l("notes.phoneNote")}
               </label>
-              <SpeechButton lang={lang} l={l} onAppend={(text) => setEditContent((prev) => prev ? prev + " " + text : text)} />
+              <SpeechButton lang={lang} l={l} onAppend={(text) => setEditContent((prev) => appendSpeechTranscript(prev, text, lang))} />
             </div>
             <div className="flex gap-2">
               <SecondaryButton onClick={() => void handleSave()}>

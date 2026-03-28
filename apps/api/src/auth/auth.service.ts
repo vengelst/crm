@@ -203,8 +203,8 @@ export class AuthService {
     const roles = kioskUser.roles.map((entry) => entry.role.code);
 
     // Backend-Rollen (SUPERADMIN, OFFICE) → normaler Backend-Login
-    const isBackendUser = roles.includes(RoleCode.SUPERADMIN) ||
-      roles.includes(RoleCode.OFFICE);
+    const isBackendUser =
+      roles.includes(RoleCode.SUPERADMIN) || roles.includes(RoleCode.OFFICE);
 
     const tokenType = isBackendUser ? 'user' : 'kiosk-user';
     const loginType = isBackendUser ? 'user' : 'kiosk-user';
@@ -218,7 +218,7 @@ export class AuthService {
 
     return {
       accessToken,
-      loginType: loginType as 'user' | 'kiosk-user',
+      loginType: loginType,
       user: {
         id: kioskUser.id,
         email: kioskUser.email,

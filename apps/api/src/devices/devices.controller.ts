@@ -23,7 +23,11 @@ export class DevicesController {
 
   @Put('config')
   updateConfig(
-    @Body() dto: { mode: 'off' | 'warn' | 'enforce'; appliesTo: 'login' | 'time' | 'both' },
+    @Body()
+    dto: {
+      mode: 'off' | 'warn' | 'enforce';
+      appliesTo: 'login' | 'time' | 'both';
+    },
   ) {
     return this.devicesService.updateDeviceBindingConfig(dto);
   }

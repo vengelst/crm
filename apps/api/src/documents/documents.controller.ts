@@ -34,7 +34,12 @@ type RequestWithUser = Request & {
 };
 
 @Controller('documents')
-@Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER, RoleCode.WORKER)
+@Roles(
+  RoleCode.SUPERADMIN,
+  RoleCode.OFFICE,
+  RoleCode.PROJECT_MANAGER,
+  RoleCode.WORKER,
+)
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
@@ -201,8 +206,15 @@ export class DocumentsController {
   @Post(':id/submit')
   @KioskAllowed()
   async submit(@Param('id') id: string, @Req() request: RequestWithUser) {
-    if (request.user?.type === 'worker' || request.user?.type === 'kiosk-user') {
-      await this.documentsService.assertKioskAccess(id, request.user.sub, request.user.type);
+    if (
+      request.user?.type === 'worker' ||
+      request.user?.type === 'kiosk-user'
+    ) {
+      await this.documentsService.assertKioskAccess(
+        id,
+        request.user.sub,
+        request.user.type,
+      );
     }
     return this.documentsService.setApprovalStatus(id, 'SUBMITTED');
   }
@@ -214,7 +226,12 @@ export class DocumentsController {
     @Body() body: { comment?: string },
     @Req() request: RequestWithUser,
   ) {
-    return this.documentsService.setApprovalStatus(id, 'APPROVED', request.user?.sub, body.comment);
+    return this.documentsService.setApprovalStatus(
+      id,
+      'APPROVED',
+      request.user?.sub,
+      body.comment,
+    );
   }
 
   @Post(':id/reject')
@@ -224,7 +241,12 @@ export class DocumentsController {
     @Body() body: { comment?: string },
     @Req() request: RequestWithUser,
   ) {
-    return this.documentsService.setApprovalStatus(id, 'REJECTED', request.user?.sub, body.comment);
+    return this.documentsService.setApprovalStatus(
+      id,
+      'REJECTED',
+      request.user?.sub,
+      body.comment,
+    );
   }
 
   @Post(':id/archive')

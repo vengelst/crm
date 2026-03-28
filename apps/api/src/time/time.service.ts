@@ -30,7 +30,11 @@ export class TimeService {
       { workerId: dto.workerId },
     );
 
-    const entry = await this.createEntry(TimeEntryType.CLOCK_IN, GpsEventType.CLOCK_IN, dto);
+    const entry = await this.createEntry(
+      TimeEntryType.CLOCK_IN,
+      GpsEventType.CLOCK_IN,
+      dto,
+    );
     return { ...entry, deviceWarning: deviceCheck.warning ?? null };
   }
 
@@ -134,10 +138,7 @@ export class TimeService {
         pendingClockIn = entry.occurredAtClient;
       } else if (entry.entryType === 'CLOCK_OUT' && pendingClockIn) {
         // Nur den heutigen Anteil des Blocks zaehlen
-        const blockStart = Math.max(
-          pendingClockIn.getTime(),
-          todayStartMs,
-        );
+        const blockStart = Math.max(pendingClockIn.getTime(), todayStartMs);
         const blockEnd = entry.occurredAtClient.getTime();
         if (blockEnd > todayStartMs) {
           const ms = blockEnd - blockStart;

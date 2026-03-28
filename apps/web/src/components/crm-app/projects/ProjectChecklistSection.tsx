@@ -27,11 +27,19 @@ export function ProjectChecklistSection({ projectId, apiFetch, isAdmin, workerNa
     setChecklists(data);
   }, [apiFetch, projectId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   useEffect(() => {
     if (isAdmin) {
-      void apiFetch<ChecklistTemplate[]>("/checklists/templates").then(setTemplates).catch(() => {});
+      const timer = window.setTimeout(() => {
+        void apiFetch<ChecklistTemplate[]>("/checklists/templates").then(setTemplates).catch(() => {});
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
   }, [apiFetch, isAdmin]);
 

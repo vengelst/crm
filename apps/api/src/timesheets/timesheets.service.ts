@@ -332,13 +332,12 @@ export class TimesheetsService {
       typeof logoRow?.valueJson === 'string' ? logoRow.valueJson : null;
 
     if (pdfCfg.useLogo && logoPath) {
-      const { existsSync: fileExists, readFileSync: readFile } =
-        await import('node:fs');
-      const { resolve: resolvePath } = await import('node:path');
-      const absLogoPath = resolvePath(process.cwd(), 'storage', logoPath);
-      if (fileExists(absLogoPath)) {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const absLogoPath = path.resolve(process.cwd(), 'storage', logoPath);
+      if (fs.existsSync(absLogoPath)) {
         try {
-          const logoBytes = readFile(absLogoPath);
+          const logoBytes = fs.readFileSync(absLogoPath);
           const isPng = logoPath.toLowerCase().endsWith('.png');
           const logoImage = isPng
             ? await pdf.embedPng(logoBytes)
@@ -462,7 +461,14 @@ export class TimesheetsService {
 
     // Tabellenkopf
     const cols = [margin, 120, 190, 260, 340, 420];
-    const headers = [l('pdf.date'), l('pdf.start'), l('pdf.end'), l('pdf.total'), l('pdf.break'), l('pdf.net')];
+    const headers = [
+      l('pdf.date'),
+      l('pdf.start'),
+      l('pdf.end'),
+      l('pdf.total'),
+      l('pdf.break'),
+      l('pdf.net'),
+    ];
     for (let i = 0; i < headers.length; i++) {
       text(headers[i], cols[i], 9, boldFont);
     }
@@ -504,7 +510,14 @@ export class TimesheetsService {
     // ── Signaturen ─────────────────────────────────
     hLine();
     y -= 16;
-    text(l('pdf.workerSignature').split(' ')[0] + ' / ' + l('pdf.customerSignature').split(' ')[0], margin, 12, boldFont);
+    text(
+      l('pdf.workerSignature').split(' ')[0] +
+        ' / ' +
+        l('pdf.customerSignature').split(' ')[0],
+      margin,
+      12,
+      boldFont,
+    );
     y -= 18;
 
     const workerSig = sheet.signatures.find((s) => s.signerType === 'WORKER');
@@ -517,9 +530,14 @@ export class TimesheetsService {
     y -= 14;
 
     if (workerSig) {
-      const workerSigImage = await loadSignatureImage(pdf, workerSig.signatureImagePath);
+      const workerSigImage = await loadSignatureImage(
+        pdf,
+        workerSig.signatureImagePath,
+      );
       if (workerSigImage) {
-        const dims = workerSigImage.scale(Math.min(36 / workerSigImage.height, 140 / workerSigImage.width));
+        const dims = workerSigImage.scale(
+          Math.min(36 / workerSigImage.height, 140 / workerSigImage.width),
+        );
         page.drawImage(workerSigImage, {
           x: margin,
           y: y - dims.height + 8,
@@ -537,9 +555,14 @@ export class TimesheetsService {
     }
 
     if (customerSig) {
-      const customerSigImage = await loadSignatureImage(pdf, customerSig.signatureImagePath);
+      const customerSigImage = await loadSignatureImage(
+        pdf,
+        customerSig.signatureImagePath,
+      );
       if (customerSigImage) {
-        const dims = customerSigImage.scale(Math.min(36 / customerSigImage.height, 140 / customerSigImage.width));
+        const dims = customerSigImage.scale(
+          Math.min(36 / customerSigImage.height, 140 / customerSigImage.width),
+        );
         page.drawImage(customerSigImage, {
           x: pageWidth / 2,
           y: y - dims.height + 8,
@@ -723,10 +746,7 @@ export class TimesheetsService {
     return result;
   }
 
-  async approve(
-    id: string,
-    data: { comment?: string; userId: string },
-  ) {
+  async approve(id: string, data: { comment?: string; userId: string }) {
     const sheet = await this.getById(id);
     if (
       sheet.status !== WeeklyTimesheetStatus.COMPLETED &&
@@ -798,7 +818,9 @@ async function loadSignatureImage(
 
   try {
     if (signatureImagePath.startsWith('data:image/')) {
-      const match = signatureImagePath.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+      const match = signatureImagePath.match(
+        /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/,
+      );
       if (!match) {
         return null;
       }
@@ -814,13 +836,13 @@ async function loadSignatureImage(
     }
 
     if (signatureImagePath.startsWith('/')) {
-      const { existsSync, readFileSync } = await import('node:fs');
-      const { resolve } = await import('node:path');
-      const absPath = resolve(process.cwd(), signatureImagePath.slice(1));
-      if (!existsSync(absPath)) {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const absPath = path.resolve(process.cwd(), signatureImagePath.slice(1));
+      if (!fs.existsSync(absPath)) {
         return null;
       }
-      const bytes = readFileSync(absPath);
+      const bytes = fs.readFileSync(absPath);
       const lowerPath = signatureImagePath.toLowerCase();
       if (lowerPath.endsWith('.png')) {
         return await pdf.embedPng(bytes);

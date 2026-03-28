@@ -455,48 +455,157 @@ async function main() {
   const pinHash6 = await hash('6789', 10);
 
   const testWorkers = [
-    { number: 'M-1001', first: 'Stefan', last: 'Berger', pin: pinHash2, lang: 'de' },
-    { number: 'M-1002', first: 'Thomas', last: 'Wagner', pin: pinHash3, lang: 'de' },
-    { number: 'M-1003', first: 'Andreas', last: 'Richter', pin: pinHash4, lang: 'en' },
-    { number: 'M-1004', first: 'Michael', last: 'Koch', pin: pinHash5, lang: 'de' },
-    { number: 'M-1005', first: 'Peter', last: 'Fischer', pin: pinHash6, lang: 'en' },
+    {
+      number: 'M-1001',
+      first: 'Stefan',
+      last: 'Berger',
+      pin: pinHash2,
+      lang: 'de',
+    },
+    {
+      number: 'M-1002',
+      first: 'Thomas',
+      last: 'Wagner',
+      pin: pinHash3,
+      lang: 'de',
+    },
+    {
+      number: 'M-1003',
+      first: 'Andreas',
+      last: 'Richter',
+      pin: pinHash4,
+      lang: 'en',
+    },
+    {
+      number: 'M-1004',
+      first: 'Michael',
+      last: 'Koch',
+      pin: pinHash5,
+      lang: 'de',
+    },
+    {
+      number: 'M-1005',
+      first: 'Peter',
+      last: 'Fischer',
+      pin: pinHash6,
+      lang: 'en',
+    },
   ];
 
   const createdWorkers = [worker]; // M-1000 already exists
   for (const tw of testWorkers) {
     const w = await prisma.worker.upsert({
       where: { workerNumber: tw.number },
-      update: { firstName: tw.first, lastName: tw.last, active: true, languageCode: tw.lang },
-      create: { workerNumber: tw.number, firstName: tw.first, lastName: tw.last, active: true, languageCode: tw.lang, internalHourlyRate: 30 + Math.floor(Math.random() * 20) },
+      update: {
+        firstName: tw.first,
+        lastName: tw.last,
+        active: true,
+        languageCode: tw.lang,
+      },
+      create: {
+        workerNumber: tw.number,
+        firstName: tw.first,
+        lastName: tw.last,
+        active: true,
+        languageCode: tw.lang,
+        internalHourlyRate: 30 + Math.floor(Math.random() * 20),
+      },
     });
-    await prisma.workerPin.updateMany({ where: { workerId: w.id, isActive: true }, data: { isActive: false, validTo: new Date() } });
-    await prisma.workerPin.create({ data: { workerId: w.id, pinHash: tw.pin, isActive: true } });
+    await prisma.workerPin.updateMany({
+      where: { workerId: w.id, isActive: true },
+      data: { isActive: false, validTo: new Date() },
+    });
+    await prisma.workerPin.create({
+      data: { workerId: w.id, pinHash: tw.pin, isActive: true },
+    });
     createdWorkers.push(w);
   }
 
   const testCustomers = [
-    { number: 'K-2001', name: 'Elektro Schulz GmbH', city: 'Hamburg', contacts: [{ first: 'Jens', last: 'Schulz', role: 'Geschaeftsfuehrer' }, { first: 'Sabine', last: 'Meier', role: 'Projektleiterin' }] },
-    { number: 'K-2002', name: 'Bau & Sicherheit AG', city: 'Muenchen', contacts: [{ first: 'Robert', last: 'Hartmann', role: 'Bauleitung' }, { first: 'Lisa', last: 'Becker', role: 'Disposition' }, { first: 'Klaus', last: 'Weber', role: 'Projektleiter' }] },
-    { number: 'K-2003', name: 'TechVision Systems', city: 'Frankfurt', contacts: [{ first: 'Martin', last: 'Klein', role: 'Projektleiter' }] },
-    { number: 'K-2004', name: 'Industriewerk Nord KG', city: 'Hannover', contacts: [{ first: 'Frank', last: 'Mueller', role: 'Bauleitung' }, { first: 'Petra', last: 'Schmidt', role: 'Disposition' }] },
-    { number: 'K-2005', name: 'Gebaeude Service Sued', city: 'Stuttgart', contacts: [{ first: 'Uwe', last: 'Hoffmann', role: 'Projektleiter' }, { first: 'Claudia', last: 'Neumann', role: 'Buchhaltung' }] },
+    {
+      number: 'K-2001',
+      name: 'Elektro Schulz GmbH',
+      city: 'Hamburg',
+      contacts: [
+        { first: 'Jens', last: 'Schulz', role: 'Geschaeftsfuehrer' },
+        { first: 'Sabine', last: 'Meier', role: 'Projektleiterin' },
+      ],
+    },
+    {
+      number: 'K-2002',
+      name: 'Bau & Sicherheit AG',
+      city: 'Muenchen',
+      contacts: [
+        { first: 'Robert', last: 'Hartmann', role: 'Bauleitung' },
+        { first: 'Lisa', last: 'Becker', role: 'Disposition' },
+        { first: 'Klaus', last: 'Weber', role: 'Projektleiter' },
+      ],
+    },
+    {
+      number: 'K-2003',
+      name: 'TechVision Systems',
+      city: 'Frankfurt',
+      contacts: [{ first: 'Martin', last: 'Klein', role: 'Projektleiter' }],
+    },
+    {
+      number: 'K-2004',
+      name: 'Industriewerk Nord KG',
+      city: 'Hannover',
+      contacts: [
+        { first: 'Frank', last: 'Mueller', role: 'Bauleitung' },
+        { first: 'Petra', last: 'Schmidt', role: 'Disposition' },
+      ],
+    },
+    {
+      number: 'K-2005',
+      name: 'Gebaeude Service Sued',
+      city: 'Stuttgart',
+      contacts: [
+        { first: 'Uwe', last: 'Hoffmann', role: 'Projektleiter' },
+        { first: 'Claudia', last: 'Neumann', role: 'Buchhaltung' },
+      ],
+    },
   ];
 
-  const statuses = [ProjectStatus.PLANNED, ProjectStatus.ACTIVE, ProjectStatus.ACTIVE, ProjectStatus.COMPLETED];
-  const serviceTypes = [ServiceType.VIDEO, ServiceType.ELECTRICAL, ServiceType.SERVICE, ServiceType.OTHER];
+  const statuses = [
+    ProjectStatus.PLANNED,
+    ProjectStatus.ACTIVE,
+    ProjectStatus.ACTIVE,
+    ProjectStatus.COMPLETED,
+  ];
+  const serviceTypes = [
+    ServiceType.VIDEO,
+    ServiceType.ELECTRICAL,
+    ServiceType.SERVICE,
+    ServiceType.OTHER,
+  ];
   let projIdx = 0;
 
   for (const tc of testCustomers) {
     const cust = await prisma.customer.upsert({
       where: { customerNumber: tc.number },
       update: { companyName: tc.name },
-      create: { customerNumber: tc.number, companyName: tc.name, city: tc.city, country: 'DE', email: `info@${tc.name.toLowerCase().replace(/[^a-z]/g, '')}.local` },
+      create: {
+        customerNumber: tc.number,
+        companyName: tc.name,
+        city: tc.city,
+        country: 'DE',
+        email: `info@${tc.name.toLowerCase().replace(/[^a-z]/g, '')}.local`,
+      },
     });
 
     for (const cc of tc.contacts) {
-      await prisma.customerContact.create({
-        data: { customerId: cust.id, firstName: cc.first, lastName: cc.last, role: cc.role, email: `${cc.first.toLowerCase()}.${cc.last.toLowerCase()}@${tc.name.toLowerCase().replace(/[^a-z]/g, '')}.local` },
-      }).catch(() => {}); // ignore if exists
+      await prisma.customerContact
+        .create({
+          data: {
+            customerId: cust.id,
+            firstName: cc.first,
+            lastName: cc.last,
+            role: cc.role,
+            email: `${cc.first.toLowerCase()}.${cc.last.toLowerCase()}@${tc.name.toLowerCase().replace(/[^a-z]/g, '')}.local`,
+          },
+        })
+        .catch(() => {}); // ignore if exists
     }
 
     // 1-3 Projekte je Kunde
@@ -504,12 +613,20 @@ async function main() {
     for (let pi = 0; pi < projectCount; pi++) {
       const startDay = 1 + projIdx * 7;
       const startMonth = startDay > 60 ? 4 : startDay > 31 ? 3 : 2; // Mar-May 2026
-      const dayInMonth = startDay > 60 ? startDay - 60 : startDay > 31 ? startDay - 31 : startDay;
+      const dayInMonth =
+        startDay > 60
+          ? startDay - 60
+          : startDay > 31
+            ? startDay - 31
+            : startDay;
       const start = new Date(2026, startMonth, Math.min(dayInMonth, 28));
-      const end = new Date(start); end.setDate(end.getDate() + 21 + projIdx * 3);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 21 + projIdx * 3);
 
       const proj = await prisma.project.upsert({
-        where: { projectNumber: `P-2026-T${String(projIdx + 10).padStart(2, '0')}` },
+        where: {
+          projectNumber: `P-2026-T${String(projIdx + 10).padStart(2, '0')}`,
+        },
         update: { customerId: cust.id },
         create: {
           projectNumber: `P-2026-T${String(projIdx + 10).padStart(2, '0')}`,
@@ -532,9 +649,17 @@ async function main() {
       const w1 = createdWorkers[projIdx % createdWorkers.length];
       const w2 = createdWorkers[(projIdx + 1) % createdWorkers.length];
       for (const w of [w1, w2]) {
-        await prisma.projectAssignment.create({
-          data: { projectId: proj.id, workerId: w.id, startDate: start, endDate: end, active: true },
-        }).catch(() => {});
+        await prisma.projectAssignment
+          .create({
+            data: {
+              projectId: proj.id,
+              workerId: w.id,
+              startDate: start,
+              endDate: end,
+              active: true,
+            },
+          })
+          .catch(() => {});
       }
 
       projIdx++;
@@ -545,10 +670,16 @@ async function main() {
   const tpl = await prisma.checklistTemplate.upsert({
     where: { id: 'seed-template-safety' },
     update: { name: 'Sicherheitsunterweisung Baustelle' },
-    create: { id: 'seed-template-safety', name: 'Sicherheitsunterweisung Baustelle', description: 'Standard-Sicherheitshinweise fuer Baustellen' },
+    create: {
+      id: 'seed-template-safety',
+      name: 'Sicherheitsunterweisung Baustelle',
+      description: 'Standard-Sicherheitshinweise fuer Baustellen',
+    },
   });
 
-  await prisma.checklistTemplateItem.deleteMany({ where: { templateId: tpl.id } });
+  await prisma.checklistTemplateItem.deleteMany({
+    where: { templateId: tpl.id },
+  });
   await prisma.checklistTemplateItem.createMany({
     data: [
       { templateId: tpl.id, title: 'PSA pruefen', sortOrder: 1 },
@@ -557,71 +688,115 @@ async function main() {
     ],
   });
 
-  await prisma.checklistTemplateNotice.deleteMany({ where: { templateId: tpl.id } });
+  await prisma.checklistTemplateNotice.deleteMany({
+    where: { templateId: tpl.id },
+  });
   await prisma.checklistTemplateNotice.createMany({
     data: [
-      { templateId: tpl.id, title: 'Sicherheitsregeln Baustelle', body: 'Auf dieser Baustelle gelten besondere Sicherheitsvorschriften. Schutzhelm und Sicherheitsschuhe sind Pflicht. Rauchen ist nur in ausgewiesenen Bereichen erlaubt.', sortOrder: 1, required: true, requireSignature: true },
-      { templateId: tpl.id, title: 'Zugangsregelung', body: 'Der Zutritt zur Baustelle ist nur mit gueltigem Baustellenausweis gestattet. Bitte melden Sie sich taeglich am Baubuero an.', sortOrder: 2, required: true, requireSignature: false },
-      { templateId: tpl.id, title: 'Notfallplan', body: 'Im Notfall: Sammelplatz auf dem Parkplatz vor dem Haupteingang. Ersthelfer: siehe Aushang im Baubuero.', sortOrder: 3, required: false, requireSignature: false },
+      {
+        templateId: tpl.id,
+        title: 'Sicherheitsregeln Baustelle',
+        body: 'Auf dieser Baustelle gelten besondere Sicherheitsvorschriften. Schutzhelm und Sicherheitsschuhe sind Pflicht. Rauchen ist nur in ausgewiesenen Bereichen erlaubt.',
+        sortOrder: 1,
+        required: true,
+        requireSignature: true,
+      },
+      {
+        templateId: tpl.id,
+        title: 'Zugangsregelung',
+        body: 'Der Zutritt zur Baustelle ist nur mit gueltigem Baustellenausweis gestattet. Bitte melden Sie sich taeglich am Baubuero an.',
+        sortOrder: 2,
+        required: true,
+        requireSignature: false,
+      },
+      {
+        templateId: tpl.id,
+        title: 'Notfallplan',
+        body: 'Im Notfall: Sammelplatz auf dem Parkplatz vor dem Haupteingang. Ersthelfer: siehe Aushang im Baubuero.',
+        sortOrder: 3,
+        required: false,
+        requireSignature: false,
+      },
     ],
   });
 
   // Apply template to first test project
-  const firstTestProject = await prisma.project.findFirst({ where: { projectNumber: 'P-2026-T10' } });
+  const firstTestProject = await prisma.project.findFirst({
+    where: { projectNumber: 'P-2026-T10' },
+  });
   if (firstTestProject) {
     // Create notices as project copies
-    const templateNotices = await prisma.checklistTemplateNotice.findMany({ where: { templateId: tpl.id }, orderBy: { sortOrder: 'asc' } });
+    const templateNotices = await prisma.checklistTemplateNotice.findMany({
+      where: { templateId: tpl.id },
+      orderBy: { sortOrder: 'asc' },
+    });
     for (const tn of templateNotices) {
-      await prisma.projectNotice.create({
-        data: {
-          projectId: firstTestProject.id,
-          sourceTemplateId: tpl.id,
-          sourceTemplateNoticeId: tn.id,
-          title: tn.title,
-          body: tn.body,
-          sortOrder: tn.sortOrder,
-          required: tn.required,
-          requireSignature: tn.requireSignature,
-        },
-      }).catch(() => {});
+      await prisma.projectNotice
+        .create({
+          data: {
+            projectId: firstTestProject.id,
+            sourceTemplateId: tpl.id,
+            sourceTemplateNoticeId: tn.id,
+            title: tn.title,
+            body: tn.body,
+            sortOrder: tn.sortOrder,
+            required: tn.required,
+            requireSignature: tn.requireSignature,
+          },
+        })
+        .catch(() => {});
     }
 
     // Create some acknowledgements
-    const projectNotices = await prisma.projectNotice.findMany({ where: { projectId: firstTestProject.id } });
-    const assignments = await prisma.projectAssignment.findMany({ where: { projectId: firstTestProject.id }, select: { workerId: true } });
+    const projectNotices = await prisma.projectNotice.findMany({
+      where: { projectId: firstTestProject.id },
+    });
+    const assignments = await prisma.projectAssignment.findMany({
+      where: { projectId: firstTestProject.id },
+      select: { workerId: true },
+    });
 
     if (projectNotices.length > 0 && assignments.length > 0) {
       // First worker acknowledges first notice (with signature)
-      await prisma.projectNoticeAcknowledgement.create({
-        data: {
-          projectNoticeId: projectNotices[0].id,
-          projectId: firstTestProject.id,
-          workerId: assignments[0].workerId,
-          acknowledged: true,
-          acknowledgedAt: new Date(),
-          signatureImagePath: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-        },
-      }).catch(() => {});
-
-      // First worker acknowledges second notice (without signature)
-      if (projectNotices.length > 1) {
-        await prisma.projectNoticeAcknowledgement.create({
+      await prisma.projectNoticeAcknowledgement
+        .create({
           data: {
-            projectNoticeId: projectNotices[1].id,
+            projectNoticeId: projectNotices[0].id,
             projectId: firstTestProject.id,
             workerId: assignments[0].workerId,
             acknowledged: true,
             acknowledgedAt: new Date(),
+            signatureImagePath:
+              'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
           },
-        }).catch(() => {});
+        })
+        .catch(() => {});
+
+      // First worker acknowledges second notice (without signature)
+      if (projectNotices.length > 1) {
+        await prisma.projectNoticeAcknowledgement
+          .create({
+            data: {
+              projectNoticeId: projectNotices[1].id,
+              projectId: firstTestProject.id,
+              workerId: assignments[0].workerId,
+              acknowledged: true,
+              acknowledgedAt: new Date(),
+            },
+          })
+          .catch(() => {});
       }
     }
   }
 
   console.log('Seed erfolgreich ausgefuehrt.');
   console.log('Admin Login: admin@example.local / admin12345');
-  console.log('Monteur PINs: M-1000/1234, M-1001/2345, M-1002/3456, M-1003/4567, M-1004/5678, M-1005/6789');
-  console.log(`Testdaten: ${testCustomers.length} Kunden, ${projIdx} Projekte, ${createdWorkers.length} Monteure`);
+  console.log(
+    'Monteur PINs: M-1000/1234, M-1001/2345, M-1002/3456, M-1003/4567, M-1004/5678, M-1005/6789',
+  );
+  console.log(
+    `Testdaten: ${testCustomers.length} Kunden, ${projIdx} Projekte, ${createdWorkers.length} Monteure`,
+  );
 }
 
 function getMonday(date: Date) {

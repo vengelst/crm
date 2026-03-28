@@ -152,7 +152,10 @@ export class DocumentsService {
                     entityId: dto.entityId,
                   },
                   ...(uploadedByWorkerId &&
-                  !(dto.entityType === 'WORKER' && dto.entityId === uploadedByWorkerId)
+                  !(
+                    dto.entityType === 'WORKER' &&
+                    dto.entityId === uploadedByWorkerId
+                  )
                     ? [
                         {
                           entityType: 'WORKER',
@@ -191,9 +194,7 @@ export class DocumentsService {
         where: { workerId: userId, active: true },
         select: { projectId: true },
       });
-      const allowedProjectIds = new Set(
-        assignments.map((a) => a.projectId),
-      );
+      const allowedProjectIds = new Set(assignments.map((a) => a.projectId));
       const hasAccess = document.links.some(
         (link) =>
           link.entityType === 'PROJECT' && allowedProjectIds.has(link.entityId),
@@ -242,10 +243,7 @@ export class DocumentsService {
       unlinkSync(oldAbsolutePath);
     }
 
-    const newStorageKey = join('uploads', file.filename).replaceAll(
-      '\\',
-      '/',
-    );
+    const newStorageKey = join('uploads', file.filename).replaceAll('\\', '/');
 
     return this.prisma.document.update({
       where: { id },
@@ -284,10 +282,7 @@ export class DocumentsService {
     comment?: string,
   ) {
     const doc = await this.getById(id);
-    this.assertStatusTransition(
-      doc.approvalStatus as DocumentApprovalStatus,
-      status,
-    );
+    this.assertStatusTransition(doc.approvalStatus, status);
     const result = await this.prisma.document.update({
       where: { id },
       data: {
@@ -297,9 +292,7 @@ export class DocumentsService {
             ? new Date()
             : undefined,
         approvedByUserId:
-          status === 'APPROVED' || status === 'REJECTED'
-            ? userId
-            : undefined,
+          status === 'APPROVED' || status === 'REJECTED' ? userId : undefined,
         approvalComment: comment,
       },
       include: this.documentInclude,

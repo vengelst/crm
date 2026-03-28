@@ -6,6 +6,7 @@ import type { NoteItem } from "../types";
 import { SecondaryButton, TextArea, Field } from "../shared";
 import { NoteDetailModal } from "./NoteDetailModal";
 import { SpeechButton } from "./SpeechButton";
+import { appendSpeechTranscript } from "./speech-format";
 
 /**
  * Reusable inline notes section that can be embedded in any detail view.
@@ -44,7 +45,12 @@ export function InlineNotesSection({
     setNotes(data);
   }, [apiFetch, entityType, customerId, contactId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   async function saveNote() {
     if (!formContent.trim()) return;
@@ -124,7 +130,7 @@ export function InlineNotesSection({
                   className="rounded border-slate-300 dark:border-slate-600" />
                 {l("notes.phoneNote")}
               </label>
-              <SpeechButton lang={lang} l={l} onAppend={(text) => setFormContent((prev) => prev ? prev + " " + text : text)} />
+              <SpeechButton lang={lang} l={l} onAppend={(text) => setFormContent((prev) => appendSpeechTranscript(prev, text, lang))} />
             </div>
             <SecondaryButton onClick={() => void saveNote()}>{l("notes.save")}</SecondaryButton>
           </div>
