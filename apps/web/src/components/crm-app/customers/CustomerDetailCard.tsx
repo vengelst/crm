@@ -182,6 +182,7 @@ export function CustomerDetailCard({
                 key={`${contact.id ?? `${contact.firstName}-${contact.lastName}`}-${index}`}
                 contact={contact}
                 customerId={customer.id}
+                availableProjects={customerProjects}
                 apiFetch={apiFetch}
               />
             ))}
@@ -302,6 +303,7 @@ export function CustomerDetailCard({
         <InlineNotesSection
           entityType="CUSTOMER"
           customerId={customer.id}
+          availableProjects={customerProjects}
           apiFetch={apiFetch}
         />
       </div>
@@ -331,10 +333,12 @@ export function CustomerDetailCard({
 function ContactCardWithNotes({
   contact,
   customerId,
+  availableProjects,
   apiFetch,
 }: {
   contact: { id?: string; firstName: string; lastName: string; email?: string; phoneMobile?: string; phoneLandline?: string; role?: string };
   customerId: string;
+  availableProjects: Project[];
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
   const { t: l } = useI18n();
@@ -369,6 +373,7 @@ function ContactCardWithNotes({
             entityType="CONTACT"
             customerId={customerId}
             contactId={contact.id}
+            availableProjects={availableProjects}
             apiFetch={apiFetch}
           />
         </div>

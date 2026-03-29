@@ -16,6 +16,13 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
   const [planErr, setPlanErr] = useState<string | null>(null);
 
   function openPlanForm(p: Project) {
+    const focusDate = p.plannedStartDate ?? p.plannedEndDate;
+    if (focusDate) {
+      const date = new Date(focusDate);
+      setViewMonth(
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+      );
+    }
     setPlanForm({
       projectId: p.id,
       startDate: p.plannedStartDate?.slice(0, 10) ?? "",

@@ -30,6 +30,7 @@ export class NotesController {
     @Query('entityType') entityType?: string,
     @Query('customerId') customerId?: string,
     @Query('contactId') contactId?: string,
+    @Query('projectId') projectId?: string,
     @Query('sort') sort?: string,
     @Query('phoneOnly') phoneOnly?: string,
   ) {
@@ -38,6 +39,7 @@ export class NotesController {
       entityType,
       customerId,
       contactId,
+      projectId,
       sort,
       phoneOnly,
     });

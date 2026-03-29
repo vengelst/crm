@@ -14,6 +14,10 @@ export class CreateNoteDto {
 
   @IsOptional()
   @IsString()
+  projectId?: string;
+
+  @IsOptional()
+  @IsString()
   title?: string;
 
   @IsString()
@@ -25,6 +29,10 @@ export class CreateNoteDto {
 }
 
 export class UpdateNoteDto {
+  @IsOptional()
+  @IsString()
+  projectId?: string;
+
   @IsOptional()
   @IsString()
   title?: string;

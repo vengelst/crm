@@ -202,6 +202,11 @@ export function SettingsPanel({
           </SectionCard>
           <SectionCard title={userForm.id ? l("settings.userEdit") : l("settings.userCreate")} subtitle={l("settings.userSub")}>
             <form className="grid gap-4" onSubmit={onUserSubmit}>
+              {userForm.id ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                  {l("settings.userSecretInfo")}
+                </div>
+              ) : null}
               <Field label={l("settings.displayName")} value={userForm.displayName} onChange={(e) => setUserForm((c) => ({ ...c, displayName: e.target.value }))} />
               <Field label={l("common.email")} value={userForm.email} onChange={(e) => setUserForm((c) => ({ ...c, email: e.target.value }))} />
               <FormRow>

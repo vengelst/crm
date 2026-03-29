@@ -21,6 +21,9 @@ export class NotesService {
         },
       },
     },
+    project: {
+      select: { id: true, title: true, projectNumber: true, customerId: true },
+    },
     createdBy: { select: { id: true, displayName: true, email: true } },
   };
 
@@ -29,6 +32,7 @@ export class NotesService {
     entityType?: string;
     customerId?: string;
     contactId?: string;
+    projectId?: string;
     sort?: string;
     phoneOnly?: string;
   }) {
@@ -37,6 +41,7 @@ export class NotesService {
     if (query.entityType) where.entityType = query.entityType;
     if (query.customerId) where.customerId = query.customerId;
     if (query.contactId) where.contactId = query.contactId;
+    if (query.projectId) where.projectId = query.projectId;
     if (query.phoneOnly === 'true') where.isPhoneNote = true;
     if (query.phoneOnly === 'false') where.isPhoneNote = false;
     if (query.search) {
@@ -72,6 +77,7 @@ export class NotesService {
     entityType: string;
     customerId?: string;
     contactId?: string;
+    projectId?: string;
     title?: string;
     content: string;
     isPhoneNote?: boolean;
@@ -99,11 +105,27 @@ export class NotesService {
       data.customerId = contact.customerId;
     }
 
+    if (data.projectId) {
+      const project = await this.prisma.project.findUnique({
+        where: { id: data.projectId },
+        select: { id: true, customerId: true },
+      });
+      if (!project) {
+        throw new BadRequestException('Projekt nicht gefunden.');
+      }
+      if (data.customerId && project.customerId !== data.customerId) {
+        throw new BadRequestException(
+          'Projekt passt nicht zum ausgewaehlten Kunden.',
+        );
+      }
+    }
+
     return this.prisma.note.create({
       data: {
         entityType: data.entityType,
         customerId: data.customerId,
         contactId: data.contactId,
+        projectId: data.projectId,
         title: data.title,
         content: data.content,
         isPhoneNote: data.isPhoneNote ?? false,
@@ -115,14 +137,38 @@ export class NotesService {
 
   async update(
     id: string,
-    data: { title?: string; content?: string; isPhoneNote?: boolean },
+    data: {
+      title?: string;
+      content?: string;
+      isPhoneNote?: boolean;
+      projectId?: string | null;
+    },
   ) {
-    await this.getById(id);
+    const existing = await this.getById(id);
     const updateData: Record<string, unknown> = {};
     if (data.title !== undefined) updateData.title = data.title;
     if (data.content !== undefined) updateData.content = data.content;
     if (data.isPhoneNote !== undefined)
       updateData.isPhoneNote = data.isPhoneNote;
+    if (data.projectId !== undefined) {
+      if (data.projectId) {
+        const project = await this.prisma.project.findUnique({
+          where: { id: data.projectId },
+          select: { id: true, customerId: true },
+        });
+        if (!project) {
+          throw new BadRequestException('Projekt nicht gefunden.');
+        }
+        if (existing.customerId && project.customerId !== existing.customerId) {
+          throw new BadRequestException(
+            'Projekt passt nicht zum ausgewaehlten Kunden.',
+          );
+        }
+        updateData.projectId = data.projectId;
+      } else {
+        updateData.projectId = null;
+      }
+    }
     return this.prisma.note.update({
       where: { id },
       data: updateData,

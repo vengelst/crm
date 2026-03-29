@@ -262,6 +262,7 @@ model Project {
   primaryCustomerContact       CustomerContact?      @relation("ProjectPrimaryContact", fields: [primaryCustomerContactId], references: [id], onDelete: SetNull)
   pauseRule                    BreakRule?            @relation(fields: [pauseRuleId], references: [id], onDelete: SetNull)
   assignments                  ProjectAssignment[]
+  linkedNotes                  Note[]                @relation("NoteProject")
   timeEntries                  TimeEntry[]
   gpsEvents                    GpsEvent[]
   weeklyTimesheets             WeeklyTimesheet[]
@@ -744,6 +745,7 @@ model Note {
   entityType      String           // CUSTOMER | CONTACT
   customerId      String?
   contactId       String?
+  projectId       String?
   title           String?
   content         String
   isPhoneNote     Boolean          @default(false)
@@ -754,10 +756,12 @@ model Note {
   updatedAt       DateTime         @updatedAt
   customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: Cascade)
   contact         CustomerContact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  project         Project?         @relation("NoteProject", fields: [projectId], references: [id], onDelete: SetNull)
   createdBy       User             @relation("NoteCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
 
   @@index([customerId])
   @@index([contactId])
+  @@index([projectId])
   @@index([createdAt])
 }
 

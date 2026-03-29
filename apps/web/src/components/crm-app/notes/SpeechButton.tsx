@@ -27,6 +27,11 @@ export function SpeechButton({
     l("notes.speechHelpBold"),
     l("notes.speechHelpItalic"),
   ];
+  const helpExamples = [
+    l("notes.speechHelpExampleLineBreak"),
+    l("notes.speechHelpExampleHeadingUsage"),
+    l("notes.speechHelpExampleBold"),
+  ];
 
   if (!supported) {
     return (
@@ -81,7 +86,15 @@ export function SpeechButton({
         >
           ?
         </button>
-        <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-72 rounded-xl bg-slate-950 px-3 py-3 text-[11px] leading-5 text-white opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-slate-200 dark:text-slate-950">
+        <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-80 rounded-xl bg-slate-950 px-3 py-3 text-[11px] leading-5 text-white opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-slate-200 dark:text-slate-950">
+          <div className="mb-1 text-xs font-semibold">{l("notes.speechHelpUsageTitle")}</div>
+          <div className="mb-3 text-[11px] leading-5 opacity-90">{l("notes.speechHelpUsageText")}</div>
+          <div className="mb-1 text-xs font-semibold">{l("notes.speechHelpExampleTitle")}</div>
+          <div className="mb-3 grid gap-0.5">
+            {helpExamples.map((line) => (
+              <div key={line}>• {line}</div>
+            ))}
+          </div>
           <div className="mb-1 text-xs font-semibold">{l("notes.speechHelpTitle")}</div>
           <div className="grid gap-0.5">
             {helpLines.map((line) => (

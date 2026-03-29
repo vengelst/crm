@@ -9,13 +9,15 @@ import { appendSpeechTranscript } from "./speech-format";
 
 export function NoteDetailModal({
   note,
+  availableProjects,
   onClose,
   onSave,
   onDelete,
 }: {
   note: NoteItem;
+  availableProjects?: { id: string; projectNumber: string; title: string }[];
   onClose: () => void;
-  onSave: (id: string, data: { title?: string; content: string; isPhoneNote?: boolean }) => Promise<void>;
+  onSave: (id: string, data: { title?: string; content: string; isPhoneNote?: boolean; projectId?: string | null }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
   const { t: l, locale } = useI18n();
@@ -23,6 +25,7 @@ export function NoteDetailModal({
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(note.title ?? "");
   const [editContent, setEditContent] = useState(note.content);
+  const [editProjectId, setEditProjectId] = useState(note.projectId ?? "");
   const [editIsPhone, setEditIsPhone] = useState(note.isPhoneNote ?? false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +39,7 @@ export function NoteDetailModal({
         title: editTitle || undefined,
         content: editContent,
         isPhoneNote: editIsPhone,
+        projectId: editProjectId || null,
       });
       setEditing(false);
     } catch (saveError) {
@@ -87,11 +91,31 @@ export function NoteDetailModal({
               {l("notes.contact")}: {note.contact.firstName} {note.contact.lastName}
             </span>
           ) : null}
+          {note.project ? (
+            <span className="rounded bg-violet-100 px-1.5 py-0.5 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+              {l("notes.project")}: {note.project.projectNumber} {note.project.title}
+            </span>
+          ) : null}
         </div>
 
         {editing ? (
           <div className="grid gap-3">
             <Field label={l("doc.title")} value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">{l("notes.projectOptional")}</label>
+              <select
+                value={editProjectId}
+                onChange={(e) => setEditProjectId(e.target.value)}
+                className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
+              >
+                <option value="">{l("notes.selectProjectOptional")}</option>
+                {(availableProjects ?? []).map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.projectNumber} - {project.title}
+                  </option>
+                ))}
+              </select>
+            </div>
             <TextArea label={l("notes.content")} value={editContent} onChange={(e) => setEditContent(e.target.value)} />
             <div className="flex items-center justify-between gap-2">
               <label className="flex items-center gap-2 text-sm">

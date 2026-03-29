@@ -1075,6 +1075,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     href={(item) => `/customers/${item.id}`}
                     editLabel={l("common.edit")}
                     deleteLabel={l("common.delete")}
+                    onOpen={(item) => router.push(`/customers/${item.id}`)}
                     onEdit={(item) => router.push(`/customers/${item.id}`)}
                     onDelete={(item) => void handleDelete(`/customers/${item.id}`, l("nav.customers"), true)}
                   />
@@ -2095,7 +2096,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         ) : null}
 
         {section === "notes" ? (
-          <NotesSection customers={customers} apiFetch={apiFetch} auth={auth} />
+          <NotesSection customers={customers} projects={projects} apiFetch={apiFetch} auth={auth} />
         ) : null}
 
         {section === "settings" ? (
@@ -2173,8 +2174,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
 // ── Monteur Stundenzettel ────────────────────────────────────
 
-function NotesSection({ customers, apiFetch, auth }: {
+function NotesSection({ customers, projects, apiFetch, auth }: {
   customers: Customer[];
+  projects: Project[];
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   auth: AuthState;
 }) {
@@ -2186,12 +2188,14 @@ function NotesSection({ customers, apiFetch, auth }: {
   const [entityFilter, setEntityFilter] = useState<"" | "CUSTOMER" | "CONTACT">("");
   const [customerFilter, setCustomerFilter] = useState("");
   const [contactFilter, setContactFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
   const [phoneFilter, setPhoneFilter] = useState<"" | "true" | "false">("");
   const [sortMode, setSortMode] = useState<"desc" | "asc" | "customer">("desc");
   const [showForm, setShowForm] = useState(false);
   const [formEntityType, setFormEntityType] = useState<"CUSTOMER" | "CONTACT">("CUSTOMER");
   const [formCustomerId, setFormCustomerId] = useState("");
   const [formContactId, setFormContactId] = useState("");
+  const [formProjectId, setFormProjectId] = useState("");
   const [formContent, setFormContent] = useState("");
   const [formTitle, setFormTitle] = useState("");
   const [formIsPhone, setFormIsPhone] = useState(false);
@@ -2211,6 +2215,13 @@ function NotesSection({ customers, apiFetch, auth }: {
     return (cust?.contacts ?? []).filter((ct) => ct.id).map((ct) => ({ id: ct.id!, firstName: ct.firstName, lastName: ct.lastName, customerId: cust!.id }));
   }, [customers, customerFilter]);
 
+  const filterProjects = useMemo(() => {
+    if (!customerFilter) {
+      return projects;
+    }
+    return projects.filter((project) => project.customerId === customerFilter);
+  }, [customerFilter, projects]);
+
   const formContacts = useMemo(() => {
     if (formEntityType !== "CONTACT" || !formCustomerId) {
       return [];
@@ -2226,12 +2237,20 @@ function NotesSection({ customers, apiFetch, auth }: {
       }));
   }, [customers, formCustomerId, formEntityType]);
 
+  const formProjects = useMemo(() => {
+    if (!formCustomerId) {
+      return projects;
+    }
+    return projects.filter((project) => project.customerId === formCustomerId);
+  }, [formCustomerId, projects]);
+
   const load = useCallback(async () => {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (entityFilter) params.set("entityType", entityFilter);
     if (customerFilter) params.set("customerId", customerFilter);
     if (contactFilter) params.set("contactId", contactFilter);
+    if (projectFilter) params.set("projectId", projectFilter);
     if (phoneFilter) params.set("phoneOnly", phoneFilter);
     if (sortMode === "asc" || sortMode === "desc") params.set("sort", sortMode);
     const data = await apiFetch<NoteItem[]>(`/notes?${params.toString()}`).catch(() => []);
@@ -2245,7 +2264,7 @@ function NotesSection({ customers, apiFetch, auth }: {
     }
     setNotes(data);
     setLoading(false);
-  }, [apiFetch, search, entityFilter, customerFilter, contactFilter, phoneFilter, sortMode]);
+  }, [apiFetch, search, entityFilter, customerFilter, contactFilter, projectFilter, phoneFilter, sortMode]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -2266,6 +2285,7 @@ function NotesSection({ customers, apiFetch, auth }: {
           entityType: formEntityType,
           customerId: formEntityType === "CUSTOMER" ? formCustomerId : undefined,
           contactId: formEntityType === "CONTACT" ? formContactId : undefined,
+          projectId: formProjectId || undefined,
           title: formTitle || undefined,
           content: formContent,
           isPhoneNote: formIsPhone,
@@ -2275,13 +2295,14 @@ function NotesSection({ customers, apiFetch, auth }: {
       setShowForm(false);
       setFormContent("");
       setFormTitle("");
+      setFormProjectId("");
       setFormIsPhone(false);
       await load();
       setTimeout(() => setMsg(null), 3000);
     } catch (e) { setMsg(e instanceof Error ? e.message : l("common.error")); }
   }
 
-  async function updateNote(id: string, data: { title?: string; content: string; isPhoneNote?: boolean }) {
+  async function updateNote(id: string, data: { title?: string; content: string; isPhoneNote?: boolean; projectId?: string | null }) {
     await apiFetch(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(data) });
     await load();
     const refreshed = await apiFetch<NoteItem>(`/notes/${id}`);
@@ -2303,10 +2324,12 @@ function NotesSection({ customers, apiFetch, auth }: {
             className="flex-1 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" />
           <SelectField label={l("notes.entity")} value={entityFilter} onChange={(e) => setEntityFilter(e.target.value as typeof entityFilter)}
             options={[{ value: "", label: l("notes.all") }, { value: "CUSTOMER", label: l("notes.customer") }, { value: "CONTACT", label: l("notes.contact") }]} />
-          <SelectField label={l("notes.customer")} value={customerFilter} onChange={(e) => { setCustomerFilter(e.target.value); setContactFilter(""); }}
+          <SelectField label={l("notes.customer")} value={customerFilter} onChange={(e) => { setCustomerFilter(e.target.value); setContactFilter(""); setProjectFilter(""); }}
             options={[{ value: "", label: l("notes.all") }, ...customers.map((c) => ({ value: c.id, label: c.companyName }))]} />
           <SelectField label={l("notes.filterContact")} value={contactFilter} onChange={(e) => setContactFilter(e.target.value)}
             options={[{ value: "", label: l("notes.allContacts") }, ...filterContacts.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName}` }))]} />
+          <SelectField label={l("notes.project")} value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}
+            options={[{ value: "", label: l("notes.all") }, ...filterProjects.map((project) => ({ value: project.id, label: `${project.projectNumber} - ${project.title}` }))]} />
           <SelectField label={l("notes.phoneNoteFilter")} value={phoneFilter} onChange={(e) => setPhoneFilter(e.target.value as typeof phoneFilter)}
             options={[{ value: "", label: l("notes.all") }, { value: "true", label: l("notes.phoneOnly") }, { value: "false", label: l("notes.normalOnly") }]} />
           <SelectField label={l("notes.sort")} value={sortMode} onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
@@ -2332,13 +2355,28 @@ function NotesSection({ customers, apiFetch, auth }: {
               <FormRow>
                 <SelectField label={l("notes.entity")} value={formEntityType} onChange={(e) => { setFormEntityType(e.target.value as "CUSTOMER" | "CONTACT"); setFormContactId(""); }}
                   options={[{ value: "CUSTOMER", label: l("notes.customer") }, { value: "CONTACT", label: l("notes.contact") }]} />
-                <SelectField label={l("notes.customer")} value={formCustomerId} onChange={(e) => { setFormCustomerId(e.target.value); setFormContactId(""); }}
+                <SelectField label={l("notes.customer")} value={formCustomerId} onChange={(e) => { setFormCustomerId(e.target.value); setFormContactId(""); setFormProjectId(""); }}
                   options={[{ value: "", label: l("notes.selectCustomer") }, ...customers.map((c) => ({ value: c.id, label: c.companyName }))]} />
               </FormRow>
               {formEntityType === "CONTACT" && formCustomerId ? (
                 <SelectField label={l("notes.contact")} value={formContactId} onChange={(e) => setFormContactId(e.target.value)}
                   options={[{ value: "", label: l("notes.selectContact") }, ...formContacts.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName}` }))]} />
               ) : null}
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">{l("notes.projectOptional")}</label>
+                <select
+                  value={formProjectId}
+                  onChange={(e) => setFormProjectId(e.target.value)}
+                  className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
+                >
+                  <option value="">{l("notes.selectProjectOptional")}</option>
+                  {formProjects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.projectNumber} - {project.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <Field label={l("doc.title")} value={formTitle} onChange={(e) => setFormTitle(e.target.value)} />
               <TextArea label={l("notes.content")} value={formContent} onChange={(e) => setFormContent(e.target.value)} />
               <div className="flex items-center justify-between gap-2">
@@ -2374,6 +2412,7 @@ function NotesSection({ customers, apiFetch, auth }: {
                       <span>{new Date(note.createdAt).toLocaleString(notesLocale)}</span>
                       {note.customer ? <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">{l("notes.customer")}: {note.customer.companyName}</span> : null}
                       {note.contact ? <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400">{l("notes.contact")}: {note.contact.firstName} {note.contact.lastName}</span> : null}
+                      {note.project ? <span className="rounded bg-violet-100 px-1.5 py-0.5 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">{l("notes.project")}: {note.project.projectNumber}</span> : null}
                       {note.createdBy ? <span>{l("notes.createdBy")}: {note.createdBy.displayName}</span> : null}
                     </div>
                   </div>
@@ -2392,6 +2431,7 @@ function NotesSection({ customers, apiFetch, auth }: {
       {selectedNote ? (
         <NoteDetailModal
           note={selectedNote}
+          availableProjects={selectedNote.customerId ? projects.filter((project) => project.customerId === selectedNote.customerId) : projects}
           onClose={() => setSelectedNote(null)}
           onSave={updateNote}
           onDelete={deleteNote}

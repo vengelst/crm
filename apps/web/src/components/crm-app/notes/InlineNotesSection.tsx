@@ -16,11 +16,13 @@ export function InlineNotesSection({
   entityType,
   customerId,
   contactId,
+  availableProjects,
   apiFetch,
 }: {
   entityType: "CUSTOMER" | "CONTACT";
   customerId: string;
   contactId?: string;
+  availableProjects?: { id: string; projectNumber: string; title: string }[];
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
   const { t: l, locale } = useI18n();
@@ -29,6 +31,7 @@ export function InlineNotesSection({
   const [showForm, setShowForm] = useState(false);
   const [formTitle, setFormTitle] = useState("");
   const [formContent, setFormContent] = useState("");
+  const [formProjectId, setFormProjectId] = useState("");
   const [formIsPhone, setFormIsPhone] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<NoteItem | null>(null);
@@ -62,6 +65,7 @@ export function InlineNotesSection({
           entityType,
           customerId,
           contactId: entityType === "CONTACT" ? contactId : undefined,
+          projectId: formProjectId || undefined,
           title: formTitle || undefined,
           content: formContent,
           isPhoneNote: formIsPhone,
@@ -71,6 +75,7 @@ export function InlineNotesSection({
       setShowForm(false);
       setFormContent("");
       setFormTitle("");
+      setFormProjectId("");
       setFormIsPhone(false);
       await load();
       setTimeout(() => setMsg(null), 3000);
@@ -82,7 +87,7 @@ export function InlineNotesSection({
     setFormIsPhone(true);
   }
 
-  async function updateNote(id: string, data: { title?: string; content: string; isPhoneNote?: boolean }) {
+  async function updateNote(id: string, data: { title?: string; content: string; isPhoneNote?: boolean; projectId?: string | null }) {
     await apiFetch(`/notes/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -123,6 +128,21 @@ export function InlineNotesSection({
         <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-500/30 dark:bg-blue-500/5">
           <div className="grid gap-2">
             <Field label={l("doc.title")} value={formTitle} onChange={(e) => setFormTitle(e.target.value)} />
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">{l("notes.projectOptional")}</label>
+              <select
+                value={formProjectId}
+                onChange={(e) => setFormProjectId(e.target.value)}
+                className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
+              >
+                <option value="">{l("notes.selectProjectOptional")}</option>
+                {(availableProjects ?? []).map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.projectNumber} - {project.title}
+                  </option>
+                ))}
+              </select>
+            </div>
             <TextArea label={l("notes.content")} value={formContent} onChange={(e) => setFormContent(e.target.value)} />
             <div className="flex items-center justify-between gap-2">
               <label className="flex items-center gap-2 text-sm">
@@ -157,6 +177,7 @@ export function InlineNotesSection({
                   <div className="mt-1 flex gap-3 text-xs text-slate-400">
                     <span>{new Date(note.createdAt).toLocaleDateString(locale)}</span>
                     {note.createdBy ? <span>{note.createdBy.displayName}</span> : null}
+                    {note.project ? <span>{l("notes.project")}: {note.project.projectNumber}</span> : null}
                   </div>
                 </div>
                 {note.isPhoneNote ? (
@@ -173,6 +194,7 @@ export function InlineNotesSection({
       {selectedNote ? (
         <NoteDetailModal
           note={selectedNote}
+          availableProjects={availableProjects}
           onClose={() => setSelectedNote(null)}
           onSave={updateNote}
           onDelete={deleteNote}

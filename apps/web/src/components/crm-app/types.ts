@@ -485,6 +485,7 @@ export type NoteItem = {
   entityType: string;
   customerId?: string | null;
   contactId?: string | null;
+  projectId?: string | null;
   title?: string | null;
   content: string;
   isPhoneNote?: boolean;
@@ -496,6 +497,12 @@ export type NoteItem = {
     firstName: string;
     lastName: string;
     customer?: { id: string; companyName: string; customerNumber: string } | null;
+  } | null;
+  project?: {
+    id: string;
+    title: string;
+    projectNumber: string;
+    customerId: string;
   } | null;
 };
 
