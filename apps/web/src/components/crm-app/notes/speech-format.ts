@@ -9,12 +9,12 @@ const COMMAND_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
   { pattern: /\b(naechster punkt|nächster punkt|next bullet|next point)\b/gi, replacement: "\n- " },
   { pattern: /\b(checkbox|check box|kontrollkaestchen|kontrollkästchen|todo)\b/gi, replacement: "\n- [ ] " },
   { pattern: /\b(gedankenstrich|bindestrich|dash|hyphen)\b/gi, replacement: " - " },
-  { pattern: /\b(doppelpunkt|colon)\b/gi, replacement: ": " },
-  { pattern: /\b(strichpunkt|semicolon)\b/gi, replacement: "; " },
-  { pattern: /\b(komma|comma)\b/gi, replacement: ", " },
-  { pattern: /\b(fragezeichen|question mark)\b/gi, replacement: "? " },
-  { pattern: /\b(ausrufezeichen|exclamation mark)\b/gi, replacement: "! " },
-  { pattern: /\b(punkt|period|full stop)\b/gi, replacement: ". " },
+  { pattern: /\b(doppelpunkt setzen|colon)\b/gi, replacement: ": " },
+  { pattern: /\b(strichpunkt setzen|semicolon)\b/gi, replacement: "; " },
+  { pattern: /\b(komma setzen|comma)\b/gi, replacement: ", " },
+  { pattern: /\b(fragezeichen setzen|question mark)\b/gi, replacement: "? " },
+  { pattern: /\b(ausrufezeichen setzen|exclamation mark)\b/gi, replacement: "! " },
+  { pattern: /\b(punkt setzen|period|full stop)\b/gi, replacement: ". " },
 ];
 
 export function appendSpeechTranscript(
@@ -22,7 +22,7 @@ export function appendSpeechTranscript(
   transcript: string,
   lang: SpeechLang,
 ) {
-  let formatted = transcript.trim();
+  let formatted = normalizeCommandAliases(transcript.trim());
 
   formatted = applyInlineMarkdownCommands(formatted);
   formatted = applyBlockMarkdownCommands(formatted, previous, lang);
@@ -38,14 +38,14 @@ export function appendSpeechTranscript(
     .replace(/([,.;:!?])(?![\s\n]|$)/g, "$1 ")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    .replace(/^[ \t]+|[ \t]+$/g, "");
 
   if (!formatted) {
     return previous;
   }
 
   if (!previous.trim()) {
-    return formatted;
+    return formatted.replace(/^\n+/, "");
   }
 
   const joinWithoutSpace =
@@ -65,6 +65,14 @@ function applyInlineMarkdownCommands(text: string) {
   return text
     .replace(/\b(fett|bold)\s+(.+?)\s+(fett|bold)\b/gi, (_, _start, content: string) => `**${content.trim()}**`)
     .replace(/\b(kursiv|italic)\s+(.+?)\s+(kursiv|italic)\b/gi, (_, _start, content: string) => `*${content.trim()}*`);
+}
+
+function normalizeCommandAliases(text: string) {
+  return text
+    .replace(/überschrift/gi, "ueberschrift")
+    .replace(/aufzählung/gi, "aufzaehlung")
+    .replace(/nächster/gi, "naechster")
+    .replace(/kontrollkästchen/gi, "kontrollkaestchen");
 }
 
 function applyBlockMarkdownCommands(

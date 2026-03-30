@@ -26,11 +26,13 @@ export function SpeechButton({
     l("notes.speechHelpCheckbox"),
     l("notes.speechHelpBold"),
     l("notes.speechHelpItalic"),
+    l("notes.speechHelpPeriod"),
   ];
   const helpExamples = [
     l("notes.speechHelpExampleLineBreak"),
     l("notes.speechHelpExampleHeadingUsage"),
     l("notes.speechHelpExampleBold"),
+    l("notes.speechHelpExamplePeriod"),
   ];
 
   if (!supported) {
