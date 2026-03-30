@@ -3,8 +3,8 @@
 type SpeechLang = "de" | "en";
 
 const COMMAND_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
-  { pattern: /\b(neuer absatz|neue absatz|new paragraph)\b/gi, replacement: "\n\n" },
-  { pattern: /\b(neue zeile|new line)\b/gi, replacement: "\n" },
+  { pattern: /\b(absatzumbruch|neuer absatz|neue absatz|new paragraph)\b/gi, replacement: "\n\n" },
+  { pattern: /\b(zeilenumbruch|neue zeile|new line)\b/gi, replacement: "\n" },
   { pattern: /\b(aufzaehlung|aufzählung|stichpunkt|bullet point|bullet list|bullet)\b/gi, replacement: "\n- " },
   { pattern: /\b(naechster punkt|nächster punkt|next bullet|next point)\b/gi, replacement: "\n- " },
   { pattern: /\b(checkbox|check box|kontrollkaestchen|kontrollkästchen|todo)\b/gi, replacement: "\n- [ ] " },

@@ -3,12 +3,12 @@ import { appendSpeechTranscript } from "./speech-format";
 
 function run() {
   assert.equal(
-    appendSpeechTranscript("Erste Zeile", "neue Zeile Zweite Zeile", "de"),
+    appendSpeechTranscript("Erste Zeile", "Zeilenumbruch Zweite Zeile", "de"),
     "Erste Zeile\nZweite Zeile",
   );
 
   assert.equal(
-    appendSpeechTranscript("Einleitung", "neuer Absatz Zusammenfassung", "de"),
+    appendSpeechTranscript("Einleitung", "Absatzumbruch Zusammenfassung", "de"),
     "Einleitung\n\nZusammenfassung",
   );
 
