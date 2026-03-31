@@ -3,8 +3,9 @@
 import { type ChangeEvent, type Dispatch, type SetStateAction, useState } from "react";
 import { useI18n } from "../../../i18n-context";
 import type { DocumentFormState, DocumentItem, TimesheetItem } from "../types";
-import { SecondaryButton, Field, TextArea } from "../shared";
+import { SecondaryButton, Field, SelectField, TextArea } from "../shared";
 import { DocumentPanel } from "../documents";
+import { getDocumentTypeOptions } from "../documents/document-types";
 import { TimesheetList } from "./TimesheetList";
 
 export function ProjectWorkRecordsModal({
@@ -41,6 +42,7 @@ export function ProjectWorkRecordsModal({
   onRejectDocument: (docId: string) => void;
 }) {
   const { t: l } = useI18n();
+  const documentTypeOptions = getDocumentTypeOptions(l);
   const [newDocOpen, setNewDocOpen] = useState(false);
 
   return (
@@ -119,9 +121,10 @@ export function ProjectWorkRecordsModal({
                     }))
                   }
                 />
-                <Field
+                <SelectField
                   label={l("doc.type")}
                   value={documentForm.documentType}
+                  options={documentTypeOptions}
                   onChange={(event) =>
                     setDocumentForm((current) => ({
                       ...current,

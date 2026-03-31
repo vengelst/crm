@@ -8,7 +8,7 @@ import { DocumentPanel, DocumentPreviewModal } from "../documents";
 import { ProjectChecklistSection } from "./ProjectChecklistSection";
 import { ProjectNoticesSection } from "./ProjectNoticesSection";
 
-const emptyDocumentForm = (): DocumentFormState => ({ title: "", description: "", documentType: "", file: null });
+const emptyDocumentForm = (): DocumentFormState => ({ title: "", description: "", documentType: "ALLGEMEIN", file: null });
 
 export function KioskProjectView({ project, timesheets, apiFetch, workerId, authToken, lang = "de" as SupportedLang }: {
   project: Project;
@@ -43,7 +43,7 @@ export function KioskProjectView({ project, timesheets, apiFetch, workerId, auth
     try {
       const fd = new FormData();
       fd.append("file", documentForm.file);
-      fd.append("documentType", documentForm.documentType || "PROJEKTDOKUMENT");
+      fd.append("documentType", documentForm.documentType || "ALLGEMEIN");
       fd.append("title", documentForm.title);
       fd.append("description", documentForm.description);
       fd.append("entityType", "PROJECT");

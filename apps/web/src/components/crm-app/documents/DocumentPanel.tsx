@@ -4,9 +4,10 @@ import { useI18n } from "../../../i18n-context";
 import { type ChangeEvent, type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import type { DocumentItem, DocumentFormState } from "../types";
 import { API_ROOT } from "../types";
-import { cx, SecondaryButton, Field, TextArea } from "../shared";
+import { cx, SecondaryButton, Field, SelectField, TextArea } from "../shared";
 import { DocumentThumbnail } from "./DocumentThumbnail";
 import { DrawingEditorModal } from "./DrawingEditorModal";
+import { getDocumentTypeLabel, getDocumentTypeOptions } from "./document-types";
 
 export function DocumentPanel({
   documents,
@@ -43,14 +44,23 @@ export function DocumentPanel({
   hideInlineUpload?: boolean;
 }) {
   const { t: l } = useI18n();
+  const documentTypeOptions = getDocumentTypeOptions(l);
+  const documentTypeFilterOptions = [
+    { value: "", label: l("common.all") },
+    ...documentTypeOptions,
+  ];
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
   const [thumbnailErrors, setThumbnailErrors] = useState<Record<string, string>>({});
+  const [documentTypeFilter, setDocumentTypeFilter] = useState("");
   const [drawingDraft, setDrawingDraft] = useState<{
     title: string;
     sourceUrl?: string;
     sourceDocumentId?: string;
     description?: string;
   } | null>(null);
+  const filteredDocuments = documentTypeFilter
+    ? documents.filter((document) => document.documentType === documentTypeFilter)
+    : documents;
 
   useEffect(() => {
     let cancelled = false;
@@ -134,11 +144,19 @@ export function DocumentPanel({
   return (
     <div className="grid gap-4">
       <h4 className="text-base font-semibold">{l("doc.docsTitle")}</h4>
+      {documents.length > 0 ? (
+        <SelectField
+          label={l("doc.filterType")}
+          value={documentTypeFilter}
+          onChange={(event) => setDocumentTypeFilter(event.target.value)}
+          options={documentTypeFilterOptions}
+        />
+      ) : null}
       <div className="grid gap-2">
-        {documents.length === 0 ? (
+        {filteredDocuments.length === 0 ? (
           <p className="text-sm text-slate-500">{l("doc.none")}</p>
         ) : (
-          documents.map((document) => {
+          filteredDocuments.map((document) => {
             const fileError = thumbnailErrors[document.id];
             const uploaderLabel = document.uploadedByWorker
               ? `${document.uploadedByWorker.firstName} ${document.uploadedByWorker.lastName} (${document.uploadedByWorker.workerNumber})`
@@ -168,7 +186,7 @@ export function DocumentPanel({
                       {document.title || document.originalFilename}
                     </button>
                     <div className="text-sm text-slate-500">
-                      {document.documentType} · {document.mimeType}
+                      {getDocumentTypeLabel(document.documentType, l)} · {document.mimeType}
                     </div>
                     {uploaderLabel ? (
                       <div className="text-xs text-slate-500">
@@ -266,9 +284,10 @@ export function DocumentPanel({
               }))
             }
           />
-          <Field
+          <SelectField
             label={l("doc.type")}
             value={documentForm.documentType}
+            options={documentTypeOptions}
             onChange={(event) =>
               setDocumentForm((current) => ({
                 ...current,
