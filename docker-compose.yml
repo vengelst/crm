@@ -51,6 +51,8 @@ services:
       MINIO_ROOT_USER: minioad
       MINIO_ROOT_PASSWORD: Vivahome%2026
       MINIO_BUCKET: crm-documents
+      MINIO_USE_SSL: "false"
+      STORAGE_LOCAL_FALLBACK: "true"
       SMTP_HOST: localhost
       SMTP_PORT: 1025
       SMTP_FROM: crm@example.local

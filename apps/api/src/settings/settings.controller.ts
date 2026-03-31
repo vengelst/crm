@@ -12,11 +12,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { RoleCode } from '@prisma/client';
-import { diskStorage } from 'multer';
-import { existsSync, mkdirSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import { extname, resolve } from 'node:path';
 import type { Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
@@ -121,20 +118,7 @@ export class SettingsController {
 
   // ── Logo ──────────────────────────────────────────
   @Post('logo')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          const dir = resolve(process.cwd(), 'storage', 'logo');
-          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (_req, file, cb) => {
-          cb(null, `logo-${randomUUID()}${extname(file.originalname)}`);
-        },
-      }),
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   async uploadLogo(@UploadedFile() file: Express.Multer.File | undefined) {
     return this.settingsService.setLogo(file);
   }
@@ -151,17 +135,14 @@ export class SettingsController {
 
   @Get('logo/file')
   async serveLogoFile(@Res() res: Response) {
-    const logo = await this.settingsService.getLogo();
-    if (!logo.path) {
+    const { stream, contentType } =
+      await this.settingsService.getLogoStream();
+    if (!stream) {
       res.status(404).json({ message: 'Kein Logo vorhanden.' });
       return;
     }
-    const abs = resolve(process.cwd(), 'storage', logo.path);
-    if (!existsSync(abs)) {
-      res.status(404).json({ message: 'Logo-Datei nicht gefunden.' });
-      return;
-    }
-    res.sendFile(abs);
+    if (contentType) res.setHeader('Content-Type', contentType);
+    stream.pipe(res);
   }
 
   // ── Backup ────────────────────────────────────────

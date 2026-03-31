@@ -14,12 +14,9 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
-import { diskStorage } from 'multer';
-import { existsSync, mkdirSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import { extname, resolve } from 'node:path';
 import type { Request, Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { RoleCode } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { KioskAllowed } from '../common/decorators/kiosk-allowed.decorator';
@@ -67,27 +64,7 @@ export class DocumentsController {
 
   @Post('upload')
   @KioskAllowed()
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_request, _file, callback) => {
-          const uploadDir = resolve(process.cwd(), 'storage', 'uploads');
-
-          if (!existsSync(uploadDir)) {
-            mkdirSync(uploadDir, { recursive: true });
-          }
-
-          callback(null, uploadDir);
-        },
-        filename: (_request, file, callback) => {
-          callback(
-            null,
-            `${Date.now()}-${randomUUID()}${extname(file.originalname)}`,
-          );
-        },
-      }),
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   async upload(
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body() dto: UploadDocumentDto,
@@ -146,8 +123,8 @@ export class DocumentsController {
       );
     }
 
-    const { absolutePath, document } =
-      await this.documentsService.getFilePath(id);
+    const { stream, document } =
+      await this.documentsService.getFileStream(id);
 
     response.setHeader('Content-Type', document.mimeType);
     response.setHeader(
@@ -155,30 +132,12 @@ export class DocumentsController {
       `attachment; filename="${encodeURIComponent(document.originalFilename)}"`,
     );
 
-    return response.sendFile(absolutePath);
+    stream.pipe(response);
   }
 
   @Put(':id/replace')
   @KioskAllowed()
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: (_request, _file, callback) => {
-          const uploadDir = resolve(process.cwd(), 'storage', 'uploads');
-          if (!existsSync(uploadDir)) {
-            mkdirSync(uploadDir, { recursive: true });
-          }
-          callback(null, uploadDir);
-        },
-        filename: (_request, file, callback) => {
-          callback(
-            null,
-            `${Date.now()}-${randomUUID()}${extname(file.originalname)}`,
-          );
-        },
-      }),
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   async replaceFile(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File | undefined,

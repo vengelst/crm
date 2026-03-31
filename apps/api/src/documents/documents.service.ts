@@ -6,15 +6,18 @@ import {
 import { DocumentApprovalStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { StorageService } from '../storage';
 import { UploadDocumentDto } from './dto/upload-document.dto';
-import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { extname } from 'node:path';
+import { Readable } from 'node:stream';
 
 @Injectable()
 export class DocumentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly storage: StorageService,
   ) {}
 
   private readonly documentInclude = {
@@ -120,6 +123,10 @@ export class DocumentsService {
     return documents;
   }
 
+  /**
+   * Create a new document.
+   * File arrives as in-memory buffer (memoryStorage) and is uploaded to MinIO.
+   */
   async create(
     file: Express.Multer.File | undefined,
     dto: UploadDocumentDto,
@@ -130,7 +137,14 @@ export class DocumentsService {
       throw new BadRequestException('Datei fehlt.');
     }
 
-    const storageKey = join('uploads', file.filename).replaceAll('\\', '/');
+    const storageKey = this.buildStorageKey(file.originalname);
+
+    await this.storage.uploadObject(
+      storageKey,
+      file.buffer,
+      file.size,
+      file.mimetype,
+    );
 
     return this.prisma.document.create({
       data: {
@@ -222,6 +236,11 @@ export class DocumentsService {
     }
   }
 
+  /**
+   * Replace the file for an existing document.
+   * File arrives as in-memory buffer. Old MinIO object is deleted,
+   * with a silent fallback that also cleans up any local legacy file.
+   */
   async replaceFile(id: string, file: Express.Multer.File) {
     const document = await this.getById(id);
 
@@ -233,17 +252,17 @@ export class DocumentsService {
       );
     }
 
-    // Alte Datei loeschen
-    const oldAbsolutePath = resolve(
-      process.cwd(),
-      'storage',
-      document.storageKey,
-    );
-    if (existsSync(oldAbsolutePath)) {
-      unlinkSync(oldAbsolutePath);
-    }
+    // Altes Objekt loeschen (MinIO + lokaler Fallback)
+    await this.deleteStorageObject(document.storageKey);
 
-    const newStorageKey = join('uploads', file.filename).replaceAll('\\', '/');
+    const newStorageKey = this.buildStorageKey(file.originalname);
+
+    await this.storage.uploadObject(
+      newStorageKey,
+      file.buffer,
+      file.size,
+      file.mimetype,
+    );
 
     return this.prisma.document.update({
       where: { id },
@@ -337,49 +356,61 @@ export class DocumentsService {
     });
   }
 
-  async getFilePath(id: string) {
+  /**
+   * Get a readable stream for a document file.
+   * Uses StorageService with centralized local fallback (controlled by
+   * STORAGE_LOCAL_FALLBACK env var).
+   */
+  async getFileStream(
+    id: string,
+  ): Promise<{
+    stream: Readable;
+    document: Awaited<ReturnType<DocumentsService['getById']>>;
+  }> {
     const document = await this.getById(id);
-    const absolutePath = resolve(process.cwd(), 'storage', document.storageKey);
 
-    if (!existsSync(absolutePath)) {
-      throw new NotFoundException(
-        'Datei im Storage nicht vorhanden. In der lokalen Dev-Umgebung muss die Datei erst hochgeladen werden.',
-      );
+    const stream = await this.storage.getObjectStreamWithFallback(
+      document.storageKey,
+    );
+    if (stream) {
+      return { stream, document };
     }
 
-    return {
-      document,
-      absolutePath,
-    };
+    throw new NotFoundException(
+      'Datei weder in MinIO noch im lokalen Storage vorhanden.',
+    );
   }
 
-  ensureUploadDirectory() {
-    const uploadDir = resolve(process.cwd(), 'storage', 'uploads');
-
-    if (!existsSync(uploadDir)) {
-      mkdirSync(uploadDir, { recursive: true });
-    }
-
-    return uploadDir;
-  }
-
+  /**
+   * Delete a document and its stored file (MinIO + local legacy fallback).
+   */
   async remove(id: string) {
-    const { document, absolutePath } = await this.getFilePath(id);
+    const document = await this.getById(id);
 
-    if (existsSync(absolutePath)) {
-      unlinkSync(absolutePath);
-    }
+    await this.deleteStorageObject(document.storageKey);
 
     await this.prisma.documentLink.deleteMany({
-      where: {
-        documentId: id,
-      },
+      where: { documentId: id },
     });
 
     return this.prisma.document.delete({
-      where: {
-        id: document.id,
-      },
+      where: { id: document.id },
     });
+  }
+
+  // ── Private helpers ───────────────────────────────────
+
+  /** Generate a unique storage key for a new upload. */
+  private buildStorageKey(originalFilename: string): string {
+    const ext = extname(originalFilename);
+    return `uploads/${Date.now()}-${randomUUID()}${ext}`;
+  }
+
+  /**
+   * Delete a file from MinIO (+ local legacy if STORAGE_LOCAL_FALLBACK is on).
+   * Delegates to the centralized StorageService.deleteObjectWithFallback().
+   */
+  private async deleteStorageObject(storageKey: string): Promise<void> {
+    await this.storage.deleteObjectWithFallback(storageKey);
   }
 }

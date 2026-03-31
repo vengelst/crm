@@ -12,12 +12,14 @@ import { SignTimesheetDto } from './dto/sign-timesheet.dto';
 import { SignerType, WeeklyTimesheetStatus } from '@prisma/client';
 import { createTransport } from 'nodemailer';
 import { t, type SupportedLang } from '../i18n';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class TimesheetsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async list(
@@ -433,62 +435,38 @@ export class TimesheetsService {
     };
 
     // ── Logo + Kopfzeile als H1 ─────────────────────
-    const logoRow = await this.prisma.setting.findUnique({
-      where: { key: 'company.logoPath' },
-    });
-    const logoPath =
-      typeof logoRow?.valueJson === 'string' ? logoRow.valueJson : null;
+    const { buffer: logoBytes, logoPath } =
+      await this.settingsService.getLogoBuffer();
 
-    if (pdfCfg.useLogo && logoPath) {
-      const fs = await import('node:fs');
-      const path = await import('node:path');
-      const absLogoPath = path.resolve(process.cwd(), 'storage', logoPath);
-      if (fs.existsSync(absLogoPath)) {
-        try {
-          const logoBytes = fs.readFileSync(absLogoPath);
-          const isPng = logoPath.toLowerCase().endsWith('.png');
-          const logoImage = isPng
-            ? await pdf.embedPng(logoBytes)
-            : await pdf.embedJpg(logoBytes);
-          const logoDims = logoImage.scale(
-            Math.min(60 / logoImage.height, 150 / logoImage.width),
-          );
-          page.drawImage(logoImage, {
-            x: margin,
-            y: y - logoDims.height + 10,
-            width: logoDims.width,
-            height: logoDims.height,
-          });
-          // Header text next to logo
-          if (pdfCfg.header) {
-            page.drawText(pdfCfg.header, {
-              x: margin + logoDims.width + 15,
-              y: y - 5,
-              size: 22,
-              font: boldFont,
-            });
-          }
-          y -= logoDims.height + 10;
-        } catch {
-          // Logo embed failed — render header only
-          if (pdfCfg.header) {
-            page.drawText(pdfCfg.header, {
-              x: margin,
-              y,
-              size: 22,
-              font: boldFont,
-            });
-            y -= 30;
-          }
-        }
-      } else if (pdfCfg.header) {
-        page.drawText(pdfCfg.header, {
+    if (pdfCfg.useLogo && logoBytes && logoPath) {
+      try {
+        const isPng = logoPath.toLowerCase().endsWith('.png');
+        const logoImage = isPng
+          ? await pdf.embedPng(logoBytes)
+          : await pdf.embedJpg(logoBytes);
+        const logoDims = logoImage.scale(
+          Math.min(60 / logoImage.height, 150 / logoImage.width),
+        );
+        page.drawImage(logoImage, {
           x: margin,
-          y,
-          size: 22,
-          font: boldFont,
+          y: y - logoDims.height + 10,
+          width: logoDims.width,
+          height: logoDims.height,
         });
-        y -= 30;
+        if (pdfCfg.header) {
+          page.drawText(pdfCfg.header, {
+            x: margin + logoDims.width + 15,
+            y: y - 5,
+            size: 22,
+            font: boldFont,
+          });
+        }
+        y -= logoDims.height + 10;
+      } catch {
+        if (pdfCfg.header) {
+          page.drawText(pdfCfg.header, { x: margin, y, size: 22, font: boldFont });
+          y -= 30;
+        }
       }
     } else if (pdfCfg.header) {
       page.drawText(pdfCfg.header, { x: margin, y, size: 22, font: boldFont });

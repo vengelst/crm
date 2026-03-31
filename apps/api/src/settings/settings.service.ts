@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { createTransport } from 'nodemailer';
 import {
-  copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -10,9 +9,12 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, extname } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
+import { Readable } from 'node:stream';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 
 export type AppSettings = {
@@ -38,7 +40,10 @@ const SETTING_KEYS = {
 
 @Injectable()
 export class SettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   async getSettings(): Promise<AppSettings> {
     const rows = await this.prisma.setting.findMany({
@@ -365,17 +370,36 @@ export class SettingsService {
   }
 
   // ── Logo ────────────────────────────────────────────
+
+  /** Upload logo to MinIO (file arrives as in-memory buffer via memoryStorage). */
   async setLogo(file?: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('Datei fehlt.');
     }
-    const logoPath = join('logo', file.filename);
+
+    // Delete previous logo from MinIO + local legacy
+    const prev = await this.getLogo();
+    if (prev.path) {
+      await this.deleteLogoObject(prev.path);
+    }
+
+    const ext = extname(file.originalname);
+    const logoKey = `logo/logo-${randomUUID()}${ext}`;
+
+    await this.storage.uploadObject(
+      logoKey,
+      file.buffer,
+      file.size,
+      file.mimetype,
+    );
+
     await this.prisma.setting.upsert({
       where: { key: 'company.logoPath' },
-      update: { valueJson: logoPath },
-      create: { key: 'company.logoPath', valueJson: logoPath },
+      update: { valueJson: logoKey },
+      create: { key: 'company.logoPath', valueJson: logoKey },
     });
-    return { path: logoPath, filename: file.originalname };
+
+    return { path: logoKey, filename: file.originalname };
   }
 
   async getLogo() {
@@ -386,16 +410,55 @@ export class SettingsService {
     return { path };
   }
 
+  /**
+   * Get a readable stream for the logo.
+   * Uses StorageService with centralized local fallback.
+   */
+  async getLogoStream(): Promise<{
+    stream: Readable | null;
+    contentType: string | null;
+  }> {
+    const logo = await this.getLogo();
+    if (!logo.path) return { stream: null, contentType: null };
+
+    const ext = extname(logo.path).toLowerCase();
+    const contentType =
+      ext === '.png'
+        ? 'image/png'
+        : ext === '.jpg' || ext === '.jpeg'
+          ? 'image/jpeg'
+          : 'application/octet-stream';
+
+    const stream = await this.storage.getObjectStreamWithFallback(logo.path);
+    return { stream, contentType };
+  }
+
+  /** Get logo as Buffer — used by PDF generation in timesheets. */
+  async getLogoBuffer(): Promise<{
+    buffer: Buffer | null;
+    logoPath: string | null;
+  }> {
+    const logo = await this.getLogo();
+    if (!logo.path) return { buffer: null, logoPath: null };
+
+    const buffer = await this.storage.getObjectBufferWithFallback(logo.path);
+    return { buffer, logoPath: logo.path };
+  }
+
   async deleteLogo() {
     const logo = await this.getLogo();
     if (logo.path) {
-      const abs = resolve(process.cwd(), 'storage', logo.path);
-      if (existsSync(abs)) rmSync(abs);
+      await this.deleteLogoObject(logo.path);
     }
     await this.prisma.setting.deleteMany({
       where: { key: 'company.logoPath' },
     });
     return { deleted: true };
+  }
+
+  /** Delete logo from MinIO (+ local legacy if fallback is on). */
+  private async deleteLogoObject(logoKey: string): Promise<void> {
+    await this.storage.deleteObjectWithFallback(logoKey);
   }
 
   // ── Backup ──────────────────────────────────────────
@@ -447,23 +510,33 @@ export class SettingsService {
       settingsStatus = `failed: ${e instanceof Error ? e.message : 'Unbekannter Fehler'}`;
     }
 
-    // 3. Documents (copy uploads)
-    const uploadsDir = resolve(process.cwd(), 'storage', 'uploads');
+    // 3. Documents — download from MinIO (with centralized local fallback)
     const docsBackupDir = join(backupPath, 'uploads');
     try {
-      if (existsSync(uploadsDir)) {
-        const files = readdirSync(uploadsDir);
-        if (files.length > 0) {
-          mkdirSync(docsBackupDir, { recursive: true });
-          for (const file of files) {
-            copyFileSync(join(uploadsDir, file), join(docsBackupDir, file));
+      const documents = await this.prisma.document.findMany({
+        select: { storageKey: true },
+      });
+      if (documents.length > 0) {
+        mkdirSync(docsBackupDir, { recursive: true });
+        let count = 0;
+        for (const doc of documents) {
+          const filename = doc.storageKey.replace(/^uploads\//, '');
+          const destPath = join(docsBackupDir, filename);
+          try {
+            const buf = await this.storage.getObjectBufferWithFallback(
+              doc.storageKey,
+            );
+            if (buf) {
+              writeFileSync(destPath, buf);
+              count++;
+            }
+          } catch {
+            // Skip individual file errors
           }
-          documentsStatus = `success: ${files.length} Dateien`;
-        } else {
-          documentsStatus = 'success: keine Dateien vorhanden';
         }
+        documentsStatus = `success: ${count} Dateien`;
       } else {
-        documentsStatus = 'success: Upload-Verzeichnis nicht vorhanden';
+        documentsStatus = 'success: keine Dokumente vorhanden';
       }
     } catch (e) {
       documentsStatus = `failed: ${e instanceof Error ? e.message : 'Kopierfehler'}`;
@@ -626,25 +699,24 @@ export class SettingsService {
       }
     }
 
-    // 2. Documents — echter Restore: bestehende Uploads loeschen, dann aus Backup kopieren
+    // 2. Documents — restore: upload backup files into MinIO
     if (options.documents) {
       const docsBackup = join(backupPath, 'uploads');
       if (existsSync(docsBackup)) {
         try {
-          const uploadsDir = resolve(process.cwd(), 'storage', 'uploads');
-          // Bestehende Uploads loeschen
-          if (existsSync(uploadsDir)) {
-            for (const f of readdirSync(uploadsDir)) {
-              rmSync(join(uploadsDir, f));
-            }
-          }
-          mkdirSync(uploadsDir, { recursive: true });
           const files = readdirSync(docsBackup);
+          let count = 0;
           for (const file of files) {
-            copyFileSync(join(docsBackup, file), join(uploadsDir, file));
+            const filePath = join(docsBackup, file);
+            const stat = statSync(filePath);
+            if (!stat.isFile()) continue;
+            const storageKey = `uploads/${file}`;
+            const buf = readFileSync(filePath);
+            await this.storage.uploadObject(storageKey, buf, buf.length);
+            count++;
           }
           results.push(
-            `Dokumente wiederhergestellt (${files.length} Dateien).`,
+            `Dokumente wiederhergestellt (${count} Dateien nach MinIO).`,
           );
         } catch (e) {
           results.push(
