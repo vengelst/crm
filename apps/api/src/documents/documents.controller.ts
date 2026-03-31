@@ -123,8 +123,7 @@ export class DocumentsController {
       );
     }
 
-    const { stream, document } =
-      await this.documentsService.getFileStream(id);
+    const { stream, document } = await this.documentsService.getFileStream(id);
 
     response.setHeader('Content-Type', document.mimeType);
     response.setHeader(

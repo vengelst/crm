@@ -135,8 +135,7 @@ export class SettingsController {
 
   @Get('logo/file')
   async serveLogoFile(@Res() res: Response) {
-    const { stream, contentType } =
-      await this.settingsService.getLogoStream();
+    const { stream, contentType } = await this.settingsService.getLogoStream();
     if (!stream) {
       res.status(404).json({ message: 'Kein Logo vorhanden.' });
       return;

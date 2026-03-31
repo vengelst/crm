@@ -6,7 +6,7 @@ import {
 import { DocumentApprovalStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { StorageService } from '../storage';
+import { StorageService } from '../storage/storage.service';
 import { UploadDocumentDto } from './dto/upload-document.dto';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
@@ -361,9 +361,7 @@ export class DocumentsService {
    * Uses StorageService with centralized local fallback (controlled by
    * STORAGE_LOCAL_FALLBACK env var).
    */
-  async getFileStream(
-    id: string,
-  ): Promise<{
+  async getFileStream(id: string): Promise<{
     stream: Readable;
     document: Awaited<ReturnType<DocumentsService['getById']>>;
   }> {

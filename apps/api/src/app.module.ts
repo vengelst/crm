@@ -20,7 +20,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { NotesModule } from './notes/notes.module';
-import { StorageModule } from './storage';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [

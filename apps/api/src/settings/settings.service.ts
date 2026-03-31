@@ -14,7 +14,7 @@ import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { PrismaService } from '../prisma/prisma.service';
-import { StorageService } from '../storage';
+import { StorageService } from '../storage/storage.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 
 export type AppSettings = {

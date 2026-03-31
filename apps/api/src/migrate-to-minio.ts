@@ -92,8 +92,20 @@ function mimeFromExt(filename: string): string {
 // ── Stats ───────────────────────────────────────────
 
 const stats = {
-  documents: { total: 0, migrated: 0, alreadyInMinio: 0, localMissing: 0, errors: 0 },
-  logo: { total: 0, migrated: 0, alreadyInMinio: 0, localMissing: 0, errors: 0 },
+  documents: {
+    total: 0,
+    migrated: 0,
+    alreadyInMinio: 0,
+    localMissing: 0,
+    errors: 0,
+  },
+  logo: {
+    total: 0,
+    migrated: 0,
+    alreadyInMinio: 0,
+    localMissing: 0,
+    errors: 0,
+  },
   orphanFiles: { found: 0, uploaded: 0, errors: 0 },
 };
 
@@ -138,7 +150,12 @@ async function migrateDocuments() {
   console.log('── Documents ──────────────────────────────────────');
 
   const documents = await prisma.document.findMany({
-    select: { id: true, storageKey: true, mimeType: true, originalFilename: true },
+    select: {
+      id: true,
+      storageKey: true,
+      mimeType: true,
+      originalFilename: true,
+    },
   });
   stats.documents.total = documents.length;
   console.log(`  Found ${documents.length} documents in database.`);
@@ -254,9 +271,9 @@ async function migrateOrphanFiles() {
 
   // Build set of known storage keys from DB
   const knownKeys = new Set(
-    (
-      await prisma.document.findMany({ select: { storageKey: true } })
-    ).map((d) => d.storageKey),
+    (await prisma.document.findMany({ select: { storageKey: true } })).map(
+      (d) => d.storageKey,
+    ),
   );
 
   const files = readdirSync(uploadsDir);
@@ -343,7 +360,9 @@ function printSummary() {
   } else {
     console.log('  ✓  Migration complete. No errors.');
     console.log('');
-    console.log('  Next step: verify that all files are accessible via the API,');
+    console.log(
+      '  Next step: verify that all files are accessible via the API,',
+    );
     console.log('  then the local fallback can be removed in a future update.');
   }
   console.log('═══════════════════════════════════════════════════════');

@@ -464,7 +464,12 @@ export class TimesheetsService {
         y -= logoDims.height + 10;
       } catch {
         if (pdfCfg.header) {
-          page.drawText(pdfCfg.header, { x: margin, y, size: 22, font: boldFont });
+          page.drawText(pdfCfg.header, {
+            x: margin,
+            y,
+            size: 22,
+            font: boldFont,
+          });
           y -= 30;
         }
       }
