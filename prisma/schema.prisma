@@ -93,6 +93,7 @@ model User {
   passwordHash String
   kioskCodeHash String?
   displayName String
+  notes       String?
   isActive    Boolean     @default(true)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt

@@ -27,6 +27,10 @@ export class SaveUserDto {
   @IsString()
   kioskCode?: string;
 
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @IsEnum(RoleCode, { each: true })

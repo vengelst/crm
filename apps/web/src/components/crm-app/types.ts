@@ -237,6 +237,7 @@ export type UserItem = {
   id: string;
   email: string;
   displayName: string;
+  notes?: string | null;
   isActive: boolean;
   roles: { role: RoleItem }[];
 };
@@ -344,6 +345,7 @@ export type UserFormState = {
   id?: string;
   email: string;
   displayName: string;
+  notes: string;
   password: string;
   kioskCode: string;
   roleCodes: string[];

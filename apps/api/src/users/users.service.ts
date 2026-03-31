@@ -56,6 +56,7 @@ export class UsersService {
       data: {
         email: dto.email.toLowerCase(),
         displayName: dto.displayName,
+        notes: dto.notes,
         passwordHash,
         kioskCodeHash,
         isActive: dto.isActive ?? true,
@@ -96,6 +97,7 @@ export class UsersService {
         data: {
           email: dto.email.toLowerCase(),
           displayName: dto.displayName,
+          notes: dto.notes,
           isActive: dto.isActive ?? true,
           passwordHash: dto.password ? await hash(dto.password, 10) : undefined,
           kioskCodeHash: dto.kioskCode

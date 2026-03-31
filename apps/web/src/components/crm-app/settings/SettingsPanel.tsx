@@ -218,7 +218,7 @@ export function SettingsPanel({
             <EntityList items={users} title={(i) => i.displayName}
               subtitle={(i) => `${i.email} · ${i.roles.map((r) => r.role.name).join(", ")}${i.isActive ? "" : " (inaktiv)"}`}
               editLabel={l("common.edit")} deleteLabel={l("common.delete")}
-              onEdit={(i) => setUserForm({ id: i.id, email: i.email, displayName: i.displayName, password: "", kioskCode: "", roleCodes: i.roles.map((r) => r.role.code), isActive: i.isActive })}
+              onEdit={(i) => setUserForm({ id: i.id, email: i.email, displayName: i.displayName, notes: i.notes ?? "", password: "", kioskCode: "", roleCodes: i.roles.map((r) => r.role.code), isActive: i.isActive })}
               onDelete={(i) => onDeleteUser(i.id)} />
           </SectionCard>
           <SectionCard title={userForm.id ? l("settings.userEdit") : l("settings.userCreate")} subtitle={l("settings.userSub")}>
@@ -230,6 +230,7 @@ export function SettingsPanel({
               ) : null}
               <Field label={l("settings.displayName")} value={userForm.displayName} onChange={(e) => setUserForm((c) => ({ ...c, displayName: e.target.value }))} />
               <Field label={l("common.email")} value={userForm.email} onChange={(e) => setUserForm((c) => ({ ...c, email: e.target.value }))} />
+              <TextArea label={l("settings.userNotes")} value={userForm.notes} onChange={(e) => setUserForm((c) => ({ ...c, notes: e.target.value }))} />
               <FormRow>
                 <Field label={l("common.password")} type="password" autoComplete="new-password" value={userForm.password} onChange={(e) => setUserForm((c) => ({ ...c, password: e.target.value }))} />
                 <Field label={l("settings.kioskPin")} type="password" autoComplete="new-password" value={userForm.kioskCode} onChange={(e) => setUserForm((c) => ({ ...c, kioskCode: e.target.value }))} />
@@ -248,7 +249,7 @@ export function SettingsPanel({
               </div>
               <div className="flex gap-3">
                 <PrimaryButton disabled={submitting}>{submitting ? l("common.saving") : l("settings.userSave")}</PrimaryButton>
-                <SecondaryButton onClick={() => setUserForm({ id: undefined, email: "", displayName: "", password: "", kioskCode: "", roleCodes: [], isActive: true })}>{l("common.reset")}</SecondaryButton>
+                <SecondaryButton onClick={() => setUserForm({ id: undefined, email: "", displayName: "", notes: "", password: "", kioskCode: "", roleCodes: [], isActive: true })}>{l("common.reset")}</SecondaryButton>
               </div>
             </form>
           </SectionCard>

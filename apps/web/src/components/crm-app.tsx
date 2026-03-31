@@ -128,6 +128,7 @@ const emptyWorkerForm = (): WorkerFormState => ({
 const emptyUserForm = (): UserFormState => ({
   email: "",
   displayName: "",
+  notes: "",
   password: "",
   kioskCode: "",
   roleCodes: [],
@@ -726,6 +727,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       const payload = sanitizeForApi({
         email: userForm.email,
         displayName: userForm.displayName,
+        notes: userForm.notes,
         password: userForm.password || undefined,
         kioskCode: userForm.kioskCode || undefined,
         roleCodes: userForm.roleCodes,
