@@ -11,5 +11,5 @@ apps/api/node_modules
 apps/web/.next
 apps/api/dist
 prisma/dev.db
-storage/
+/storage/
 *.log
