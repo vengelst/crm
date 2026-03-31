@@ -1,15 +1,12 @@
 import { INestApplication, Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
-import { Pool } from 'pg';
 
 const connectionString =
   process.env.DATABASE_URL ??
   'postgresql://postgres:postgres@127.0.0.1:55432/crm_monteur';
 
-const pool = new Pool({ connectionString });
-
-const adapter = new PrismaPg(pool);
+const adapter = new PrismaPg({ connectionString });
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {

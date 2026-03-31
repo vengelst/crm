@@ -6,15 +6,12 @@ import {
 } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { hash } from 'bcryptjs';
-import { Pool } from 'pg';
 
-const pool = new Pool({
+const adapter = new PrismaPg({
   connectionString:
     process.env.DATABASE_URL ??
     'postgresql://postgres:postgres@127.0.0.1:55432/crm_monteur',
 });
-
-const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
