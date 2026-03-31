@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../../i18n-context";
-import type { Worker, DocumentItem, DocumentFormState, WorkerTimeStatus } from "../types";
-import { cx, formatAddress, mapsUrlFromParts, SectionCard, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow } from "../shared";
+import type { Worker, Project, DocumentItem, DocumentFormState, WorkerTimeStatus } from "../types";
+import { cx, formatAddress, mapsUrlFromParts, SectionCard, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow, MessageBar } from "../shared";
 import { DocumentPanel } from "../documents";
 import { WorkerElapsedTime } from "./WorkerElapsedTime";
 import { formatMinutes } from "./format-minutes";
@@ -12,6 +12,7 @@ import { WorkerTimeLog } from "./WorkerTimeLog";
 
 export function WorkerDetailCard({
   worker,
+  projects,
   documents,
   onOpenDocument,
   onPrintDocument,
@@ -21,9 +22,11 @@ export function WorkerDetailCard({
   setDocumentForm,
   authToken,
   onUpload,
+  onDataChanged,
   apiFetch,
 }: {
   worker: Worker;
+  projects: Project[];
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
   onPrintDocument: (document: DocumentItem) => void;
@@ -33,10 +36,15 @@ export function WorkerDetailCard({
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
   authToken: string;
   onUpload: () => void;
+  onDataChanged: () => Promise<void> | void;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
   const { t: l, locale } = useI18n();
   const [timeStatus, setTimeStatus] = useState<WorkerTimeStatus | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [assignmentMsg, setAssignmentMsg] = useState<string | null>(null);
+  const [assignmentErr, setAssignmentErr] = useState<string | null>(null);
 
   useEffect(() => {
     void apiFetch<WorkerTimeStatus>(`/time/status?workerId=${worker.id}`)
@@ -73,6 +81,14 @@ export function WorkerDetailCard({
   });
 
   const hasOnlyFuture = currentAssignments.length === 0 && futureAssignments.length > 0;
+  const assignedProjectIds = useMemo(
+    () => new Set((worker.assignments ?? []).map((assignment) => assignment.project.id)),
+    [worker.assignments],
+  );
+  const assignableProjects = useMemo(
+    () => projects.filter((project) => !assignedProjectIds.has(project.id)),
+    [assignedProjectIds, projects],
+  );
 
   const formatDateRange = (a: { startDate: string; endDate?: string | null }) => {
     const s = a.startDate.slice(0, 10);
@@ -96,6 +112,64 @@ export function WorkerDetailCard({
       </div>
       ${projs ? `<h2>${l("proj.title")}</h2><table><thead><tr><th>Nr.</th><th>Titel</th><th>Zeitraum</th></tr></thead><tbody>${projs}</tbody></table>` : ""}
     `);
+  }
+
+  async function addProjectAssignment() {
+    if (!selectedProjectId) {
+      return;
+    }
+    const project = projects.find((item) => item.id === selectedProjectId);
+    if (!project) {
+      return;
+    }
+    setAssignmentSaving(true);
+    setAssignmentErr(null);
+    setAssignmentMsg(null);
+    try {
+      await apiFetch(`/projects/${project.id}/assignments`, {
+        method: "PUT",
+        body: JSON.stringify({
+          workerIds: [...(project.assignments ?? []).map((assignment) => assignment.worker.id), worker.id],
+          startDate: project.plannedStartDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+          endDate: project.plannedEndDate?.slice(0, 10) ?? undefined,
+        }),
+      });
+      setSelectedProjectId("");
+      setAssignmentMsg(l("work.projectAdded"));
+      await onDataChanged();
+    } catch (error) {
+      setAssignmentErr(error instanceof Error ? error.message : l("common.error"));
+    } finally {
+      setAssignmentSaving(false);
+    }
+  }
+
+  async function removeProjectAssignment(projectId: string) {
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) {
+      return;
+    }
+    setAssignmentSaving(true);
+    setAssignmentErr(null);
+    setAssignmentMsg(null);
+    try {
+      await apiFetch(`/projects/${project.id}/assignments`, {
+        method: "PUT",
+        body: JSON.stringify({
+          workerIds: (project.assignments ?? [])
+            .map((assignment) => assignment.worker.id)
+            .filter((id) => id !== worker.id),
+          startDate: project.plannedStartDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+          endDate: project.plannedEndDate?.slice(0, 10) ?? undefined,
+        }),
+      });
+      setAssignmentMsg(l("work.projectRemoved"));
+      await onDataChanged();
+    } catch (error) {
+      setAssignmentErr(error instanceof Error ? error.message : l("common.error"));
+    } finally {
+      setAssignmentSaving(false);
+    }
   }
 
   return (
@@ -150,20 +224,46 @@ export function WorkerDetailCard({
 
       {/* ── Aktuelle Projekte ───────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h4 className="mb-1 text-base font-semibold">{l("work.manageProjects")}</h4>
+        <p className="mb-3 text-sm text-slate-500">{l("work.projectAssignmentHint")}</p>
+        <MessageBar error={assignmentErr} success={assignmentMsg} />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <select
+            value={selectedProjectId}
+            onChange={(event) => setSelectedProjectId(event.target.value)}
+            className="min-w-[260px] rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
+          >
+            <option value="">{l("work.selectProjectAssign")}</option>
+            {assignableProjects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.projectNumber} - {project.title}
+              </option>
+            ))}
+          </select>
+          <SecondaryButton onClick={() => void addProjectAssignment()}>
+            {assignmentSaving ? "..." : l("common.add")}
+          </SecondaryButton>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <h4 className="mb-3 text-base font-semibold">{l("work.currentProjects")}</h4>
         {currentAssignments.length === 0 ? (
           <p className="text-sm text-slate-500">{l("work.noProjects")}</p>
         ) : (
           <div className="grid gap-2">
             {currentAssignments.map((a) => (
-              <Link
-                key={a.id}
-                href={`/projects/${a.project.id}`}
-                className="rounded-xl border border-black/10 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
-              >
-                <div className="font-medium">{a.project.title}</div>
-                <div className="text-slate-500">{a.project.projectNumber} · {formatDateRange(a)}</div>
-              </Link>
+              <div key={a.id} className="rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
+                <Link href={`/projects/${a.project.id}`} className="block transition hover:text-sky-600 dark:hover:text-sky-400">
+                  <div className="font-medium">{a.project.title}</div>
+                  <div className="text-slate-500">{a.project.projectNumber} · {formatDateRange(a)}</div>
+                </Link>
+                <div className="mt-2">
+                  <SecondaryButton onClick={() => void removeProjectAssignment(a.project.id)}>
+                    {l("common.remove")}
+                  </SecondaryButton>
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -175,14 +275,17 @@ export function WorkerDetailCard({
           <h4 className="mb-3 text-base font-semibold">{l("work.futureProjects")}</h4>
           <div className="grid gap-2">
             {futureAssignments.map((a) => (
-              <Link
-                key={a.id}
-                href={`/projects/${a.project.id}`}
-                className="rounded-xl border border-black/10 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
-              >
-                <div className="font-medium">{a.project.title}</div>
-                <div className="text-slate-500">{a.project.projectNumber} · ab {a.startDate.slice(0, 10)}</div>
-              </Link>
+              <div key={a.id} className="rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
+                <Link href={`/projects/${a.project.id}`} className="block transition hover:text-sky-600 dark:hover:text-sky-400">
+                  <div className="font-medium">{a.project.title}</div>
+                  <div className="text-slate-500">{a.project.projectNumber} · ab {a.startDate.slice(0, 10)}</div>
+                </Link>
+                <div className="mt-2">
+                  <SecondaryButton onClick={() => void removeProjectAssignment(a.project.id)}>
+                    {l("common.remove")}
+                  </SecondaryButton>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -194,14 +297,17 @@ export function WorkerDetailCard({
           <h4 className="mb-3 text-base font-semibold text-slate-400">{l("work.pastProjects")}</h4>
           <div className="grid gap-2">
             {pastAssignments.map((a) => (
-              <Link
-                key={a.id}
-                href={`/projects/${a.project.id}`}
-                className="rounded-xl border border-black/5 px-3 py-2 text-sm text-slate-400 transition hover:bg-slate-50 dark:border-white/5 dark:hover:bg-slate-800"
-              >
-                <div className="font-medium">{a.project.title}</div>
-                <div>{a.project.projectNumber} · {formatDateRange(a)}</div>
-              </Link>
+              <div key={a.id} className="rounded-xl border border-black/5 px-3 py-2 text-sm text-slate-400 dark:border-white/5">
+                <Link href={`/projects/${a.project.id}`} className="block transition hover:text-sky-600 dark:hover:text-sky-400">
+                  <div className="font-medium">{a.project.title}</div>
+                  <div>{a.project.projectNumber} · {formatDateRange(a)}</div>
+                </Link>
+                <div className="mt-2">
+                  <SecondaryButton onClick={() => void removeProjectAssignment(a.project.id)}>
+                    {l("common.remove")}
+                  </SecondaryButton>
+                </div>
+              </div>
             ))}
           </div>
         </div>

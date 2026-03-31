@@ -17,6 +17,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type Dispatch,
+  type ReactNode,
   type SetStateAction,
   useCallback,
   useEffect,
@@ -198,6 +199,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [projectTimesheets, setProjectTimesheets] = useState<TimesheetItem[]>([]);
   const [customerFinancials, setCustomerFinancials] = useState<CustomerFinancials | null>(null);
   const [showCreateCustomer, setShowCreateCustomer] = useState(false);
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [showCreateWorker, setShowCreateWorker] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
 
   const canManageSettings = hasRole(auth, ["SUPERADMIN", "OFFICE"]);
   const canManageUsers = hasRole(auth, ["SUPERADMIN"]);
@@ -620,6 +624,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       }
 
       setProjectForm(emptyProjectForm());
+      setShowCreateProject(false);
       await loadData();
       setSuccess(l("common.success"));
     });
@@ -661,6 +666,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       }
 
       setWorkerForm(emptyWorkerForm());
+      setShowCreateWorker(false);
       await loadData();
       setSuccess(l("common.success"));
     });
@@ -689,6 +695,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       }
 
       setTeamForm({ name: "", notes: "", active: true, memberWorkerIds: [] });
+      setShowTeamModal(false);
       await loadData();
       setSuccess(l("common.success"));
     });
@@ -1060,7 +1067,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         ) : null}
 
         {section === "customers" ? (
-          <div className={cx("grid gap-6", !selectedWorker && "xl:grid-cols-[1.1fr_0.9fr]")}>
+          <div className="grid gap-6">
             <div className="grid gap-6">
               {selectedCustomer ? (
                 <>
@@ -1126,385 +1133,11 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </>
               )}
             </div>
-            <form className="grid gap-5" onSubmit={handleCustomerSubmit}>
-              {/* ── Stammdaten-Karte ─────────────────────────── */}
-              <section className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
-                <div className="mb-4">
-                  <h2 className="text-xl font-semibold">
-                    {l(customerForm.id ? "cust.edit" : "cust.create")}
-                  </h2>
-                  <p className="text-sm text-slate-500">{l("cust.masterData")}</p>
-                </div>
-                <div className="grid gap-4">
-                  <FormRow>
-                    <Field
-                      label={l("cust.number")}
-                      value={customerForm.customerNumber}
-                      onChange={(event) =>
-                        setCustomerForm((current) => ({
-                          ...current,
-                          customerNumber: event.target.value,
-                        }))
-                      }
-                    />
-                    <Field
-                      label={l("cust.name")}
-                      value={customerForm.companyName}
-                      onChange={(event) =>
-                        setCustomerForm((current) => ({
-                          ...current,
-                          companyName: event.target.value,
-                        }))
-                      }
-                    />
-                  </FormRow>
-                  <FormRow>
-                    <Field
-                      label={l("work.email")}
-                      value={customerForm.email}
-                      onChange={(event) =>
-                        setCustomerForm((current) => ({
-                          ...current,
-                          email: event.target.value,
-                        }))
-                      }
-                    />
-                    <Field
-                      label={l("cust.phone")}
-                      value={customerForm.phone}
-                      onChange={(event) =>
-                        setCustomerForm((current) => ({
-                          ...current,
-                          phone: event.target.value,
-                        }))
-                      }
-                    />
-                  </FormRow>
-                  <FormRow>
-                    <Field
-                      label={l("work.address")}
-                      value={customerForm.addressLine1}
-                      onChange={(event) =>
-                        setCustomerForm((current) => ({
-                          ...current,
-                          addressLine1: event.target.value,
-                        }))
-                      }
-                    />
-                    <Field
-                      label={l("work.address2")}
-                      value={customerForm.addressLine2}
-                      onChange={(event) =>
-                        setCustomerForm((current) => ({
-                          ...current,
-                          addressLine2: event.target.value,
-                        }))
-                      }
-                    />
-                  </FormRow>
-                  <FormRow>
-                    <Field
-                      label={l("work.postalCode")}
-                      value={customerForm.postalCode}
-                      onChange={(event) =>
-                        setCustomerForm((current) => ({
-                          ...current,
-                          postalCode: event.target.value,
-                        }))
-                      }
-                    />
-                    <Field
-                      label={l("work.city")}
-                      value={customerForm.city}
-                      onChange={(event) =>
-                        setCustomerForm((current) => ({
-                          ...current,
-                          city: event.target.value,
-                        }))
-                      }
-                    />
-                  </FormRow>
-                  <FormRow>
-                    <Field
-                      label={l("work.country")}
-                      value={customerForm.country}
-                      onChange={(event) =>
-                        setCustomerForm((current) => ({
-                          ...current,
-                          country: event.target.value,
-                        }))
-                      }
-                    />
-                    <SelectField
-                      label={l("proj.status")}
-                      value={customerForm.status}
-                      onChange={(event) =>
-                        setCustomerForm((current) => ({
-                          ...current,
-                          status: event.target.value,
-                        }))
-                      }
-                      options={[
-                        { value: "ACTIVE", label: l("common.active") },
-                        { value: "INACTIVE", label: l("common.inactive") },
-                      ]}
-                    />
-                  </FormRow>
-                  <TextArea
-                    label={l("work.notes")}
-                    value={customerForm.notes}
-                    onChange={(event) =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        notes: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              </section>
-
-              {/* ── Niederlassungen-Karte ────────────────────── */}
-              <section className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold">{l("cust.branches")}</h2>
-                    <p className="text-sm text-slate-500">{l("cust.branches")}</p>
-                  </div>
-                  <SecondaryButton
-                    onClick={() =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        branches: [
-                          ...current.branches,
-                          { name: "", city: "", country: "DE", active: true },
-                        ],
-                      }))
-                    }
-                  >
-                    {l("common.add")}
-                  </SecondaryButton>
-                </div>
-                <div className="grid gap-3">
-                  {customerForm.branches.length === 0 ? (
-                    <p className="text-sm text-slate-500">{l("cust.noBranchesYet")}</p>
-                  ) : (
-                    customerForm.branches.map((branch, index) => (
-                      <div
-                        key={`${branch.id ?? "new"}-${index}`}
-                        className="grid gap-3 rounded-2xl bg-slate-50/70 p-4 dark:bg-slate-950/40"
-                      >
-                        <FormRow>
-                          <Field
-                            label={l("cust.branchName")}
-                            value={branch.name}
-                            onChange={(event) =>
-                              updateBranch(index, { name: event.target.value })
-                            }
-                          />
-                          <Field
-                            label={l("work.city")}
-                            value={branch.city ?? ""}
-                            onChange={(event) =>
-                              updateBranch(index, { city: event.target.value })
-                            }
-                          />
-                        </FormRow>
-                        <FormRow>
-                          <Field
-                            label={l("work.address")}
-                            value={branch.addressLine1 ?? ""}
-                            onChange={(event) =>
-                              updateBranch(index, { addressLine1: event.target.value })
-                            }
-                          />
-                          <Field
-                            label={l("work.address2")}
-                            value={branch.addressLine2 ?? ""}
-                            onChange={(event) =>
-                              updateBranch(index, { addressLine2: event.target.value })
-                            }
-                          />
-                        </FormRow>
-                        <FormRow>
-                          <Field
-                            label={l("work.postalCode")}
-                            value={branch.postalCode ?? ""}
-                            onChange={(event) =>
-                              updateBranch(index, { postalCode: event.target.value })
-                            }
-                          />
-                          <Field
-                            label={l("work.country")}
-                            value={branch.country ?? ""}
-                            onChange={(event) =>
-                              updateBranch(index, { country: event.target.value })
-                            }
-                          />
-                        </FormRow>
-                        <FormRow>
-                          <Field
-                            label={l("cust.phone")}
-                            value={branch.phone ?? ""}
-                            onChange={(event) =>
-                              updateBranch(index, { phone: event.target.value })
-                            }
-                          />
-                          <Field
-                            label={l("work.email")}
-                            value={branch.email ?? ""}
-                            onChange={(event) =>
-                              updateBranch(index, { email: event.target.value })
-                            }
-                          />
-                        </FormRow>
-                        <div className="flex justify-end">
-                          <SecondaryButton onClick={() => removeBranch(index)}>
-                            {l("common.remove")}
-                          </SecondaryButton>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-
-              {/* ── Ansprechpartner-Karte ────────────────────── */}
-              <section className="rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80">
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-semibold">{l("cust.contacts")}</h2>
-                    <p className="text-sm text-slate-500">{l("cust.contactsSub")}</p>
-                  </div>
-                  <SecondaryButton
-                    onClick={() =>
-                      setCustomerForm((current) => ({
-                        ...current,
-                        contacts: [
-                          ...current.contacts,
-                          { firstName: "", lastName: "", branchId: "", branchName: "" },
-                        ],
-                      }))
-                    }
-                  >
-                    {l("common.add")}
-                  </SecondaryButton>
-                </div>
-                <div className="grid gap-3">
-                  {customerForm.contacts.length === 0 ? (
-                    <p className="text-sm text-slate-500">{l("cust.noContactsYet")}</p>
-                  ) : (
-                    customerForm.contacts.map((contact, index) => (
-                      <div
-                        key={`${contact.id ?? "new"}-${index}`}
-                        className="grid gap-3 rounded-2xl bg-slate-50/70 p-4 dark:bg-slate-950/40"
-                      >
-                        <FormRow>
-                          <Field
-                            label={l("work.firstName")}
-                            value={contact.firstName}
-                            onChange={(event) =>
-                              updateContact(index, { firstName: event.target.value })
-                            }
-                          />
-                          <Field
-                            label={l("work.lastName")}
-                            value={contact.lastName}
-                            onChange={(event) =>
-                              updateContact(index, { lastName: event.target.value })
-                            }
-                          />
-                        </FormRow>
-                        <FormRow>
-                          <Field
-                            label={l("work.email")}
-                            value={contact.email ?? ""}
-                            onChange={(event) =>
-                              updateContact(index, { email: event.target.value })
-                            }
-                          />
-                          <SelectField
-                            label={l("cust.branches")}
-                            value={
-                              contact.branchId
-                                ? `id:${contact.branchId}`
-                                : contact.branchName
-                                  ? `name:${contact.branchName}`
-                                  : ""
-                            }
-                            onChange={(event) => {
-                              const value = event.target.value;
-
-                              if (!value) {
-                                updateContact(index, {
-                                  branchId: undefined,
-                                  branchName: undefined,
-                                });
-                                return;
-                              }
-
-                              if (value.startsWith("id:")) {
-                                updateContact(index, {
-                                  branchId: value.slice(3),
-                                  branchName: undefined,
-                                });
-                                return;
-                              }
-
-                              updateContact(index, {
-                                branchId: undefined,
-                                branchName: value.slice(5),
-                              });
-                            }}
-                            options={[
-                              { value: "", label: l("cust.name") },
-                              ...customerForm.branches.map((branch) => ({
-                                value: branch.id ? `id:${branch.id}` : `name:${branch.name}`,
-                                label: branch.name,
-                              })),
-                            ]}
-                          />
-                        </FormRow>
-                        <FormRow>
-                          <Field
-                            label={l("work.mobile")}
-                            value={contact.phoneMobile ?? ""}
-                            onChange={(event) =>
-                              updateContact(index, { phoneMobile: event.target.value })
-                            }
-                          />
-                          <Field
-                            label={l("work.office")}
-                            value={contact.phoneLandline ?? ""}
-                            onChange={(event) =>
-                              updateContact(index, { phoneLandline: event.target.value })
-                            }
-                          />
-                        </FormRow>
-                        <div className="flex justify-end">
-                          <SecondaryButton onClick={() => removeContact(index)}>
-                            {l("common.remove")}
-                          </SecondaryButton>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-
-              <div className="flex gap-3">
-                <PrimaryButton disabled={submitting}>
-                  {submitting ? l("common.saving") : l("cust.save")}
-                </PrimaryButton>
-                <SecondaryButton onClick={() => setCustomerForm(emptyCustomerForm())}>
-                  {l("common.reset")}
-                </SecondaryButton>
-              </div>
-            </form>
           </div>
         ) : null}
 
         {section === "projects" ? (
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-6">
             <div className="grid gap-6">
               {selectedProject ? (
                 <>
@@ -1516,6 +1149,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   </div>
                   <ProjectDetailCard
                     project={selectedProject}
+                    workers={workers}
                     financials={projectFinancials}
                     timesheets={projectTimesheets}
                     documents={filterDocuments(documents, "PROJECT", selectedProject.id)}
@@ -1527,12 +1161,26 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     setDocumentForm={setDocumentForm}
                     authToken={auth.accessToken}
                     onUpload={() => void handleDocumentUpload("PROJECT", selectedProject.id)}
+                    onDataChanged={loadData}
                     apiFetch={apiFetch}
                   />
                 </>
               ) : (
                 <SectionCard title={l("proj.list")} subtitle={l("proj.listSub")}>
-                  <div className="mb-3 flex justify-end">
+                  <div className="mb-3 flex flex-wrap justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProjectForm(emptyProjectForm());
+                        setShowCreateProject(true);
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                        <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                      </svg>
+                      {l("proj.create")}
+                    </button>
                     <PrintButton onClick={() => {
                       const rows = projects.map((p) => `<tr><td>${p.projectNumber}</td><td>${p.title}</td><td>${p.customer?.companyName ?? "-"}</td><td>${p.status ?? "-"}</td><td>${p.plannedStartDate?.slice(0, 10) ?? "-"} - ${p.plannedEndDate?.slice(0, 10) ?? l("worker.open")}</td></tr>`).join("");
                       openPrintWindow(l("proj.list"), `<h1>${l("proj.list")}</h1><p class="meta">${projects.length} ${l("proj.title")}</p><table><thead><tr><th>${l("table.nr")}</th><th>${l("table.title")}</th><th>${l("table.customer")}</th><th>${l("table.status")}</th><th>${l("table.period")}</th></tr></thead><tbody>${rows}</tbody></table>`);
@@ -1549,12 +1197,16 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </SectionCard>
               )}
             </div>
-
-            <SectionCard
-              title={l(projectForm.id ? "proj.edit" : "proj.create")}
-              subtitle={l("proj.createSub")}
-            >
-              <form className="grid gap-4" onSubmit={handleProjectSubmit}>
+            {showCreateProject ? (
+              <PopupFrame onClose={() => {
+                setProjectForm(emptyProjectForm());
+                setShowCreateProject(false);
+              }}>
+                <SectionCard
+                  title={l(projectForm.id ? "proj.edit" : "proj.create")}
+                  subtitle={l("proj.createSub")}
+                >
+                  <form className="grid gap-4" onSubmit={handleProjectSubmit}>
                 <FormRow>
                   <Field
                     label={l("proj.number")}
@@ -1772,22 +1424,30 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     }))
                   }
                 />
-                <div className="flex gap-3">
-                  <PrimaryButton disabled={submitting}>
-                    {submitting ? l("common.saving") : l("proj.save")}
-                  </PrimaryButton>
-                  <SecondaryButton onClick={() => setProjectForm(emptyProjectForm())}>
-                    Zuruecksetzen
-                  </SecondaryButton>
-                </div>
-              </form>
-            </SectionCard>
+                    <div className="flex gap-3">
+                      <PrimaryButton disabled={submitting}>
+                        {submitting ? l("common.saving") : l("proj.save")}
+                      </PrimaryButton>
+                      <SecondaryButton onClick={() => setProjectForm(emptyProjectForm())}>
+                        {l("common.reset")}
+                      </SecondaryButton>
+                      <SecondaryButton onClick={() => {
+                        setProjectForm(emptyProjectForm());
+                        setShowCreateProject(false);
+                      }}>
+                        {l("common.close")}
+                      </SecondaryButton>
+                    </div>
+                  </form>
+                </SectionCard>
+              </PopupFrame>
+            ) : null}
           </div>
         ) : null}
 
         {section === "workers" ? (
           <>
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-6">
             <div className="grid gap-6">
               {selectedWorker ? (
                 <>
@@ -1799,6 +1459,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   </div>
                   <WorkerDetailCard
                     worker={selectedWorker}
+                    projects={projects}
                     documents={filterDocuments(documents, "WORKER", selectedWorker.id)}
                     onOpenDocument={handleOpenDocument}
                     onPrintDocument={handlePrintDocument}
@@ -1808,11 +1469,27 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     setDocumentForm={setDocumentForm}
                     authToken={auth.accessToken}
                     onUpload={() => void handleDocumentUpload("WORKER", selectedWorker.id)}
+                    onDataChanged={loadData}
                     apiFetch={apiFetch}
                   />
                 </>
               ) : (
                 <SectionCard title={l("work.list")} subtitle={l("work.listSub")}>
+                  <div className="mb-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWorkerForm(emptyWorkerForm());
+                        setShowCreateWorker(true);
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                        <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                      </svg>
+                      {l("work.create")}
+                    </button>
+                  </div>
                   <EntityList
                     items={workers}
                     title={(item) => `${item.firstName} ${item.lastName}${item.active === false ? " (deaktiviert)" : ""}`}
@@ -1824,12 +1501,16 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </SectionCard>
               )}
             </div>
-
-            <SectionCard
-              title={l(workerForm.id ? "work.edit" : "work.create")}
-              subtitle={l("work.editSub")}
-            >
-              <form className="grid gap-4" onSubmit={handleWorkerSubmit}>
+            {showCreateWorker ? (
+              <PopupFrame onClose={() => {
+                setWorkerForm(emptyWorkerForm());
+                setShowCreateWorker(false);
+              }}>
+                <SectionCard
+                  title={l(workerForm.id ? "work.edit" : "work.create")}
+                  subtitle={l("work.editSub")}
+                >
+                  <form className="grid gap-4" onSubmit={handleWorkerSubmit}>
                 <FormRow>
                   {workerForm.id ? (
                     <Field
@@ -2020,21 +1701,44 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     }))
                   }
                 />
-                <div className="flex gap-3">
-                  <PrimaryButton disabled={submitting}>
-                    {submitting ? l("common.saving") : l("work.save")}
-                  </PrimaryButton>
-                  <SecondaryButton onClick={() => setWorkerForm(emptyWorkerForm())}>
-                    Zuruecksetzen
-                  </SecondaryButton>
-                </div>
-              </form>
-            </SectionCard>
+                    <div className="flex gap-3">
+                      <PrimaryButton disabled={submitting}>
+                        {submitting ? l("common.saving") : l("work.save")}
+                      </PrimaryButton>
+                      <SecondaryButton onClick={() => setWorkerForm(emptyWorkerForm())}>
+                        {l("common.reset")}
+                      </SecondaryButton>
+                      <SecondaryButton onClick={() => {
+                        setWorkerForm(emptyWorkerForm());
+                        setShowCreateWorker(false);
+                      }}>
+                        {l("common.close")}
+                      </SecondaryButton>
+                    </div>
+                  </form>
+                </SectionCard>
+              </PopupFrame>
+            ) : null}
           </div>
 
           {/* ── Teams ────────────────────────────────────── */}
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-6">
             <SectionCard title={l("work.teams")} subtitle={l("work.teamsSub")}>
+              <div className="mb-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTeamForm({ name: "", notes: "", active: true, memberWorkerIds: [] });
+                    setShowTeamModal(true);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                    <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                  </svg>
+                  {l("work.teamCreate")}
+                </button>
+              </div>
               {teams.length === 0 ? (
                 <p className="text-sm text-slate-500">{l("work.noTeams")}</p>
               ) : (
@@ -2055,13 +1759,16 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                       <div className="flex gap-2">
                         <SecondaryButton
                           onClick={() =>
-                            setTeamForm({
-                              id: team.id,
-                              name: team.name,
-                              notes: team.notes ?? "",
-                              active: team.active,
-                              memberWorkerIds: team.members.map((m) => m.worker.id),
-                            })
+                            {
+                              setTeamForm({
+                                id: team.id,
+                                name: team.name,
+                                notes: team.notes ?? "",
+                                active: team.active,
+                                memberWorkerIds: team.members.map((m) => m.worker.id),
+                              });
+                              setShowTeamModal(true);
+                            }
                           }
                         >
                           {l("common.edit")}
@@ -2075,12 +1782,16 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </div>
               )}
             </SectionCard>
-
-            <SectionCard
-              title={l(teamForm.id ? "work.teamEdit" : "work.teamCreate")}
-              subtitle={l("work.teamsSub")}
-            >
-              <form className="grid gap-4" onSubmit={handleTeamSubmit}>
+            {showTeamModal ? (
+              <PopupFrame onClose={() => {
+                setTeamForm({ name: "", notes: "", active: true, memberWorkerIds: [] });
+                setShowTeamModal(false);
+              }}>
+                <SectionCard
+                  title={l(teamForm.id ? "work.teamEdit" : "work.teamCreate")}
+                  subtitle={l("work.teamsSub")}
+                >
+                  <form className="grid gap-4" onSubmit={handleTeamSubmit}>
                 <Field
                   label={l("work.teamName")}
                   value={teamForm.name}
@@ -2123,18 +1834,28 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     })}
                   </div>
                 </div>
-                <div className="flex gap-3">
-                  <PrimaryButton disabled={submitting}>
-                    {submitting ? l("common.saving") : l("work.teamSave")}
-                  </PrimaryButton>
-                  <SecondaryButton
-                    onClick={() => setTeamForm({ name: "", notes: "", active: true, memberWorkerIds: [] })}
-                  >
-                    Zuruecksetzen
-                  </SecondaryButton>
-                </div>
-              </form>
-            </SectionCard>
+                    <div className="flex gap-3">
+                      <PrimaryButton disabled={submitting}>
+                        {submitting ? l("common.saving") : l("work.teamSave")}
+                      </PrimaryButton>
+                      <SecondaryButton
+                        onClick={() => setTeamForm({ name: "", notes: "", active: true, memberWorkerIds: [] })}
+                      >
+                        {l("common.reset")}
+                      </SecondaryButton>
+                      <SecondaryButton
+                        onClick={() => {
+                          setTeamForm({ name: "", notes: "", active: true, memberWorkerIds: [] });
+                          setShowTeamModal(false);
+                        }}
+                      >
+                        {l("common.close")}
+                      </SecondaryButton>
+                    </div>
+                  </form>
+                </SectionCard>
+              </PopupFrame>
+            ) : null}
           </div>
           </>
         ) : null}
@@ -2500,6 +2221,28 @@ function NotesSection({ customers, projects, apiFetch, auth }: {
 }
 
 // ── Hilfsfunktionen ──────────────────────────────────
+
+function PopupFrame({
+  children,
+  onClose,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pb-12 pt-12"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-4xl rounded-3xl border-2 border-red-300 bg-white p-4 shadow-xl dark:border-red-500/40 dark:bg-slate-900"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 
 

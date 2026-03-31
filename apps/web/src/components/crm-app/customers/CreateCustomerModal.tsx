@@ -125,7 +125,7 @@ export function CreateCustomerModal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-12 pb-12" onClick={onClose}>
       <div
-        className="w-full max-w-3xl rounded-2xl border border-black/10 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-slate-900"
+        className="w-full max-w-3xl rounded-2xl border-2 border-red-300 bg-white p-6 shadow-xl dark:border-red-500/40 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

@@ -148,8 +148,6 @@ export function WorkerTimeView({
   }
 
   const openWork = status?.openEntry;
-  const allProjects = [...currentProjects, ...futureProjects];
-  const viewingProject = viewingProjectId ? allProjects.find((p) => p.id === viewingProjectId) ?? null : null;
   const [kioskProjectDetail, setKioskProjectDetail] = useState<Project | null>(null);
   const [kioskTimesheets, setKioskTimesheets] = useState<TimesheetItem[]>([]);
 
@@ -159,7 +157,7 @@ export function WorkerTimeView({
     void apiFetch<TimesheetItem[]>(`/timesheets/weekly?projectId=${viewingProjectId}`).then(setKioskTimesheets).catch(() => {});
   }, [apiFetch, viewingProjectId]);
 
-  if (viewingProject && kioskProjectDetail) {
+  if (viewingProjectId && kioskProjectDetail) {
     return (
       <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
         <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
@@ -167,7 +165,7 @@ export function WorkerTimeView({
             <SecondaryButton onClick={() => setViewingProjectId(null)}>{l("worker.back")}</SecondaryButton>
             <h2 className="text-xl font-semibold">{l("worker.projectDetail")}</h2>
           </div>
-          {openWork && openWork.projectId === viewingProject.id ? (
+          {openWork && openWork.projectId === viewingProjectId ? (
             <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50/60 p-4 dark:border-emerald-500/40 dark:bg-emerald-500/5">
               <div className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">{l("worker.currentWorkOnProject")}</div>
               <div className="mt-1 text-sm">{l("worker.startedAt")} <span className="font-mono">{new Date(openWork.startedAt).toLocaleString(lang === "en" ? "en-GB" : "de-DE")}</span></div>
@@ -190,7 +188,7 @@ export function WorkerTimeView({
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <SecondaryButton onClick={onLogout}>{l("worker.logout")}</SecondaryButton>
+            <SecondaryButton onClick={() => onLogout()}>{l("worker.logout")}</SecondaryButton>
           </div>
         </div>
 

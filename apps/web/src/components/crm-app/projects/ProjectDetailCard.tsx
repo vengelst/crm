@@ -2,12 +2,12 @@
 import { useI18n } from "../../../i18n-context";
 
 import Link from "next/link";
-import { type ChangeEvent, type Dispatch, type FormEvent, type SetStateAction, Fragment, useMemo, useState } from "react";
+import { type ChangeEvent, type Dispatch, type FormEvent, type SetStateAction, Fragment, useEffect, useState } from "react";
 import type {
-  Project, ProjectFinancials, TimesheetItem, DocumentItem,
+  Project, ProjectFinancials, TimesheetItem, DocumentItem, Worker,
   DocumentFormState, DocumentPreviewState,
 } from "../types";
-import { cx, formatAddress, mapsUrlFromParts, SectionCard, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow } from "../shared";
+import { cx, formatAddress, mapsUrlFromParts, SectionCard, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow, MessageBar } from "../shared";
 import { DocumentPanel } from "../documents";
 import { TimesheetList } from "./TimesheetList";
 import { ProjectChecklistSection } from "./ProjectChecklistSection";
@@ -16,6 +16,7 @@ import { FinancialKpi } from "./FinancialKpi";
 
 export function ProjectDetailCard({
   project,
+  workers,
   financials,
   timesheets,
   documents,
@@ -27,9 +28,11 @@ export function ProjectDetailCard({
   setDocumentForm,
   authToken,
   onUpload,
+  onDataChanged,
   apiFetch,
 }: {
   project: Project;
+  workers: Worker[];
   financials: ProjectFinancials | null;
   timesheets: TimesheetItem[];
   documents: DocumentItem[];
@@ -41,9 +44,14 @@ export function ProjectDetailCard({
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
   authToken: string;
   onUpload: () => void;
+  onDataChanged: () => Promise<void> | void;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
   const { t: l, locale } = useI18n();
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [assignmentMsg, setAssignmentMsg] = useState<string | null>(null);
+  const [assignmentErr, setAssignmentErr] = useState<string | null>(null);
   const projectMapsUrl = mapsUrlFromParts([
     project.title,
     project.siteAddressLine1,
@@ -55,6 +63,33 @@ export function ProjectDetailCard({
   const hasPricing = project.weeklyFlatRate != null || project.hourlyRateUpTo40h != null || project.includedHoursPerWeek != null || project.overtimeRate != null;
 
   const fmt = (value?: number | null) => value != null ? `${value.toFixed(2)} EUR` : "-";
+
+  useEffect(() => {
+    setSelectedWorkerIds((project.assignments ?? []).map((assignment) => assignment.worker.id));
+  }, [project.assignments]);
+
+  async function saveAssignments() {
+    setAssignmentSaving(true);
+    setAssignmentErr(null);
+    setAssignmentMsg(null);
+    try {
+      const fallbackDate = new Date().toISOString().slice(0, 10);
+      await apiFetch(`/projects/${project.id}/assignments`, {
+        method: "PUT",
+        body: JSON.stringify({
+          workerIds: selectedWorkerIds,
+          startDate: project.plannedStartDate?.slice(0, 10) ?? fallbackDate,
+          endDate: project.plannedEndDate?.slice(0, 10) ?? undefined,
+        }),
+      });
+      setAssignmentMsg(l("proj.assignmentSaved"));
+      await onDataChanged();
+    } catch (error) {
+      setAssignmentErr(error instanceof Error ? error.message : l("common.error"));
+    } finally {
+      setAssignmentSaving(false);
+    }
+  }
 
   function printProject() {
     const addr = formatAddress([project.siteAddressLine1, project.sitePostalCode, project.siteCity, project.siteCountry]);
@@ -155,6 +190,41 @@ export function ProjectDetailCard({
             ))}
           </div>
         )}
+      </div>
+
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h4 className="mb-1 text-base font-semibold">{l("proj.manageAssignments")}</h4>
+        <p className="mb-3 text-sm text-slate-500">{l("proj.assignmentHint")}</p>
+        <MessageBar error={assignmentErr} success={assignmentMsg} />
+        <div className="mt-3 grid gap-2">
+          {workers
+            .filter((worker) => worker.active !== false || selectedWorkerIds.includes(worker.id))
+            .map((worker) => (
+            <label key={worker.id} className="flex items-center justify-between gap-3 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
+              <span>
+                {worker.firstName} {worker.lastName}
+                <span className="ml-2 text-xs text-slate-500">{worker.workerNumber}</span>
+                {worker.active === false ? <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">({l("common.inactive")})</span> : null}
+              </span>
+              <input
+                type="checkbox"
+                checked={selectedWorkerIds.includes(worker.id)}
+                onChange={(event) =>
+                  setSelectedWorkerIds((current) =>
+                    event.target.checked
+                      ? [...current, worker.id]
+                      : current.filter((id) => id !== worker.id),
+                  )
+                }
+              />
+            </label>
+          ))}
+        </div>
+        <div className="mt-3 flex gap-2">
+          <SecondaryButton onClick={() => void saveAssignments()}>
+            {assignmentSaving ? "..." : l("proj.assignmentSave")}
+          </SecondaryButton>
+        </div>
       </div>
 
       {/* ── Auswertung ──────────────────────────────────── */}

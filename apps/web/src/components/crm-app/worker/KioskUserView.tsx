@@ -43,7 +43,7 @@ export function KioskUserView({
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <SecondaryButton onClick={onLogout}>{l("worker.logout")}</SecondaryButton>
+            <SecondaryButton onClick={() => onLogout()}>{l("worker.logout")}</SecondaryButton>
           </div>
         </div>
 
