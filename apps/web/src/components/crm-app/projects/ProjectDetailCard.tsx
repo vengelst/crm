@@ -44,7 +44,7 @@ export function ProjectDetailCard({
   documentForm: DocumentFormState;
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
   authToken: string;
-  onUpload: () => void;
+  onUpload: () => void | Promise<void>;
   onDataChanged: () => Promise<void> | void;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {

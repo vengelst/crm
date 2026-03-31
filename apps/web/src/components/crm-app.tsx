@@ -1002,7 +1002,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     documentForm={documentForm}
                     setDocumentForm={setDocumentForm}
                     authToken={auth.accessToken}
-                    onUpload={() => void handleDocumentUpload("CUSTOMER", selectedCustomer.id)}
+                    onUpload={() => handleDocumentUpload("CUSTOMER", selectedCustomer.id)}
                     apiFetch={apiFetch}
                   />
                 </>
@@ -1073,7 +1073,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     documentForm={documentForm}
                     setDocumentForm={setDocumentForm}
                     authToken={auth.accessToken}
-                    onUpload={() => void handleDocumentUpload("PROJECT", selectedProject.id)}
+                    onUpload={() => handleDocumentUpload("PROJECT", selectedProject.id)}
                     onDataChanged={loadData}
                     apiFetch={apiFetch}
                   />
@@ -1381,7 +1381,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     documentForm={documentForm}
                     setDocumentForm={setDocumentForm}
                     authToken={auth.accessToken}
-                    onUpload={() => void handleDocumentUpload("WORKER", selectedWorker.id)}
+                    onUpload={() => handleDocumentUpload("WORKER", selectedWorker.id)}
                     onDataChanged={loadData}
                     apiFetch={apiFetch}
                   />

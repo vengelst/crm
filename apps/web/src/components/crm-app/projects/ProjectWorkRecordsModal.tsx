@@ -1,11 +1,10 @@
 "use client";
 
-import { type ChangeEvent, type Dispatch, type SetStateAction, useState } from "react";
+import { type Dispatch, type SetStateAction } from "react";
 import { useI18n } from "../../../i18n-context";
 import type { DocumentFormState, DocumentItem, TimesheetItem } from "../types";
-import { SecondaryButton, Field, SelectField, TextArea } from "../shared";
+import { SecondaryButton } from "../shared";
 import { DocumentPanel } from "../documents";
-import { getDocumentTypeOptions } from "../documents/document-types";
 import { TimesheetList } from "./TimesheetList";
 
 export function ProjectWorkRecordsModal({
@@ -42,8 +41,6 @@ export function ProjectWorkRecordsModal({
   onRejectDocument: (docId: string) => void;
 }) {
   const { t: l } = useI18n();
-  const documentTypeOptions = getDocumentTypeOptions(l);
-  const [newDocOpen, setNewDocOpen] = useState(false);
 
   return (
     <div
@@ -76,12 +73,6 @@ export function ProjectWorkRecordsModal({
           </section>
 
           <section className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-base font-semibold">{l("doc.docsTitle")}</h3>
-              <SecondaryButton onClick={() => setNewDocOpen(true)}>
-                {l("doc.newDocument")}
-              </SecondaryButton>
-            </div>
             <DocumentPanel
               documents={documents}
               onOpenDocument={onOpenDocument}
@@ -92,94 +83,11 @@ export function ProjectWorkRecordsModal({
               setDocumentForm={setDocumentForm}
               authToken={authToken}
               onUpload={onUpload}
-              hideInlineUpload
               onApproveDocument={onApproveDocument}
               onRejectDocument={onRejectDocument}
             />
           </section>
         </div>
-
-        {newDocOpen ? (
-          <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
-            onClick={() => setNewDocOpen(false)}
-            role="presentation"
-          >
-            <div
-              className="w-full max-w-lg rounded-2xl border border-black/10 bg-white p-5 shadow-xl dark:border-white/10 dark:bg-slate-900"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="mb-3 text-base font-semibold">{l("doc.newDocument")}</h3>
-              <div className="grid gap-3">
-                <Field
-                  label={l("doc.title")}
-                  value={documentForm.title}
-                  onChange={(event) =>
-                    setDocumentForm((current) => ({
-                      ...current,
-                      title: event.target.value,
-                    }))
-                  }
-                />
-                <SelectField
-                  label={l("doc.type")}
-                  value={documentForm.documentType}
-                  options={documentTypeOptions}
-                  onChange={(event) =>
-                    setDocumentForm((current) => ({
-                      ...current,
-                      documentType: event.target.value,
-                    }))
-                  }
-                />
-                <TextArea
-                  label={l("doc.description")}
-                  value={documentForm.description}
-                  onChange={(event) =>
-                    setDocumentForm((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                />
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium">{l("doc.fileOrImage")}</label>
-                  <input
-                    type="file"
-                    accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
-                    capture="environment"
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      setDocumentForm((current) => ({
-                        ...current,
-                        file: event.target.files?.[0] ?? null,
-                      }))
-                    }
-                    className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900"
-                  />
-                  <p className="text-xs text-slate-500">{l("doc.cameraHint")}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <SecondaryButton
-                    onClick={async () => {
-                      if (!documentForm.file) return;
-                      try {
-                        await Promise.resolve(onUpload());
-                        setNewDocOpen(false);
-                      } catch {
-                        /* Fehler zeigt runMutation / Parent */
-                      }
-                    }}
-                  >
-                    {l("doc.upload")}
-                  </SecondaryButton>
-                  <SecondaryButton onClick={() => setNewDocOpen(false)}>
-                    {l("common.cancel")}
-                  </SecondaryButton>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
       </div>
     </div>
   );

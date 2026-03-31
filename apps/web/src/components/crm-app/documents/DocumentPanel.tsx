@@ -20,11 +20,9 @@ export function DocumentPanel({
   authToken,
   onUpload,
   allowDelete = true,
-  uploadLabel,
   onApproveDocument,
   onRejectDocument,
   onSubmitDocument,
-  hideInlineUpload = false,
 }: {
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
@@ -34,14 +32,11 @@ export function DocumentPanel({
   documentForm: DocumentFormState;
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
   authToken: string;
-  onUpload: () => void;
+  onUpload: () => void | Promise<void>;
   allowDelete?: boolean;
-  uploadLabel?: string;
   onApproveDocument?: (documentId: string) => void;
   onRejectDocument?: (documentId: string) => void;
   onSubmitDocument?: (documentId: string) => void;
-  /** Hochladefelder ausblenden (z. B. separates Popup fuer Upload) */
-  hideInlineUpload?: boolean;
 }) {
   const { t: l } = useI18n();
   const documentTypeOptions = getDocumentTypeOptions(l);
@@ -52,6 +47,8 @@ export function DocumentPanel({
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
   const [thumbnailErrors, setThumbnailErrors] = useState<Record<string, string>>({});
   const [documentTypeFilter, setDocumentTypeFilter] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [drawingDraft, setDrawingDraft] = useState<{
     title: string;
     sourceUrl?: string;
@@ -61,6 +58,16 @@ export function DocumentPanel({
   const filteredDocuments = documentTypeFilter
     ? documents.filter((document) => document.documentType === documentTypeFilter)
     : documents;
+
+  async function handleUpload() {
+    setUploading(true);
+    try {
+      await Promise.resolve(onUpload());
+      setShowCreateModal(false);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -143,15 +150,24 @@ export function DocumentPanel({
 
   return (
     <div className="grid gap-4">
-      <h4 className="text-base font-semibold">{l("doc.docsTitle")}</h4>
-      {documents.length > 0 ? (
-        <SelectField
-          label={l("doc.filterType")}
-          value={documentTypeFilter}
-          onChange={(event) => setDocumentTypeFilter(event.target.value)}
-          options={documentTypeFilterOptions}
-        />
-      ) : null}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-[220px] flex-1">
+          <h4 className="text-base font-semibold">{l("doc.docsTitle")}</h4>
+          {documents.length > 0 ? (
+            <div className="mt-2 max-w-sm">
+              <SelectField
+                label={l("doc.filterType")}
+                value={documentTypeFilter}
+                onChange={(event) => setDocumentTypeFilter(event.target.value)}
+                options={documentTypeFilterOptions}
+              />
+            </div>
+          ) : null}
+        </div>
+        <SecondaryButton onClick={() => setShowCreateModal(true)}>
+          {l("doc.newDocument")}
+        </SecondaryButton>
+      </div>
       <div className="grid gap-2">
         {filteredDocuments.length === 0 ? (
           <p className="text-sm text-slate-500">{l("doc.none")}</p>
@@ -259,87 +275,91 @@ export function DocumentPanel({
           })
         )}
       </div>
-      {hideInlineUpload ? (
-        <div className="flex flex-wrap gap-2">
-          <SecondaryButton
-            onClick={() =>
-              setDrawingDraft({
-                title: l("doc.newDrawing"),
-                description: l("doc.freehandDrawing"),
-              })
-            }
+      {showCreateModal ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowCreateModal(false)}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-black/10 bg-white p-5 shadow-xl dark:border-white/10 dark:bg-slate-900"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-labelledby="document-create-modal-title"
           >
-            {l("doc.createDrawing")}
-          </SecondaryButton>
+            <h3 id="document-create-modal-title" className="mb-3 text-base font-semibold">
+              {l("doc.newDocument")}
+            </h3>
+            <div className="grid gap-3">
+              <Field
+                label={l("doc.title")}
+                value={documentForm.title}
+                onChange={(event) =>
+                  setDocumentForm((current) => ({
+                    ...current,
+                    title: event.target.value,
+                  }))
+                }
+              />
+              <SelectField
+                label={l("doc.type")}
+                value={documentForm.documentType}
+                options={documentTypeOptions}
+                onChange={(event) =>
+                  setDocumentForm((current) => ({
+                    ...current,
+                    documentType: event.target.value,
+                  }))
+                }
+              />
+              <TextArea
+                label={l("doc.description")}
+                value={documentForm.description}
+                onChange={(event) =>
+                  setDocumentForm((current) => ({
+                    ...current,
+                    description: event.target.value,
+                  }))
+                }
+              />
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">{l("doc.fileOrImage")}</label>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
+                  capture="environment"
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    setDocumentForm((current) => ({
+                      ...current,
+                      file: event.target.files?.[0] ?? null,
+                    }))
+                  }
+                  className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900"
+                />
+                <p className="text-xs text-slate-500">{l("doc.cameraHint")}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <SecondaryButton onClick={() => void handleUpload()}>
+                  {uploading ? l("common.saving") : l("doc.upload")}
+                </SecondaryButton>
+                <SecondaryButton
+                  onClick={() =>
+                    setDrawingDraft({
+                      title: l("doc.newDrawing"),
+                      description: l("doc.freehandDrawing"),
+                    })
+                  }
+                >
+                  {l("doc.createDrawing")}
+                </SecondaryButton>
+                <SecondaryButton onClick={() => setShowCreateModal(false)}>
+                  {l("common.cancel")}
+                </SecondaryButton>
+              </div>
+            </div>
+          </div>
         </div>
-      ) : (
-        <div className="grid gap-3 rounded-2xl border border-black/10 p-3 dark:border-white/10">
-          <Field
-            label={l("doc.title")}
-            value={documentForm.title}
-            onChange={(event) =>
-              setDocumentForm((current) => ({
-                ...current,
-                title: event.target.value,
-              }))
-            }
-          />
-          <SelectField
-            label={l("doc.type")}
-            value={documentForm.documentType}
-            options={documentTypeOptions}
-            onChange={(event) =>
-              setDocumentForm((current) => ({
-                ...current,
-                documentType: event.target.value,
-              }))
-            }
-          />
-          <TextArea
-            label={l("doc.description")}
-            value={documentForm.description}
-            onChange={(event) =>
-              setDocumentForm((current) => ({
-                ...current,
-                description: event.target.value,
-              }))
-            }
-          />
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">{l("doc.fileOrImage")}</label>
-            <input
-              type="file"
-              accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
-              capture="environment"
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                setDocumentForm((current) => ({
-                  ...current,
-                  file: event.target.files?.[0] ?? null,
-                }))
-              }
-              className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900"
-            />
-            <p className="text-xs text-slate-500">
-              {l("doc.cameraHint")}
-            </p>
-          </div>
-          <div>
-            <SecondaryButton onClick={onUpload}>{uploadLabel || l("doc.upload")}</SecondaryButton>
-          </div>
-          <div>
-            <SecondaryButton
-              onClick={() =>
-                setDrawingDraft({
-                  title: l("doc.newDrawing"),
-                  description: l("doc.freehandDrawing"),
-                })
-              }
-            >
-              {l("doc.createDrawing")}
-            </SecondaryButton>
-          </div>
-        </div>
-      )}
+      ) : null}
       {drawingDraft ? (
         <DrawingEditorModal
           title={drawingDraft.title}
@@ -367,6 +387,7 @@ export function DocumentPanel({
                 description: current.description || drawingDraft.description || "",
                 file,
               }));
+              setShowCreateModal(true);
               setDrawingDraft(null);
             }
           }}

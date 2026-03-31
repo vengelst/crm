@@ -38,7 +38,7 @@ export function CustomerDetailCard({
   documentForm: DocumentFormState;
   setDocumentForm: Dispatch<SetStateAction<DocumentFormState>>;
   authToken: string;
-  onUpload: () => void;
+  onUpload: () => void | Promise<void>;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
   const { t: l } = useI18n();

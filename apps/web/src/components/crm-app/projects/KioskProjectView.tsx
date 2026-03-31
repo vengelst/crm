@@ -30,7 +30,6 @@ export function KioskProjectView({ project, timesheets, apiFetch, workerId, auth
   const [projectDocs, setProjectDocs] = useState<DocumentItem[]>([]);
   const [documentForm, setDocumentForm] = useState<DocumentFormState>(emptyDocumentForm);
   const [documentPreview, setDocumentPreview] = useState<DocumentPreviewState | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [docMsg, setDocMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,7 +38,7 @@ export function KioskProjectView({ project, timesheets, apiFetch, workerId, auth
 
   async function uploadDoc() {
     if (!documentForm.file) return;
-    setUploading(true); setDocMsg(null);
+    setDocMsg(null);
     try {
       const fd = new FormData();
       fd.append("file", documentForm.file);
@@ -54,7 +53,6 @@ export function KioskProjectView({ project, timesheets, apiFetch, workerId, auth
       const docs = await apiFetch<DocumentItem[]>(`/documents?entityType=PROJECT&entityId=${project.id}`);
       setProjectDocs(docs);
     } catch (e) { setDocMsg(e instanceof Error ? e.message : l("kiosk.uploadFailed")); }
-    finally { setUploading(false); }
   }
 
   const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
@@ -212,9 +210,8 @@ export function KioskProjectView({ project, timesheets, apiFetch, workerId, auth
           documentForm={documentForm}
           setDocumentForm={setDocumentForm}
           authToken={authToken}
-          onUpload={() => void uploadDoc()}
+          onUpload={() => uploadDoc()}
           allowDelete={false}
-          uploadLabel={uploading ? l("kiosk.uploading") : l("kiosk.uploadDoc")}
           onSubmitDocument={(docId) => void apiFetch(`/documents/${docId}/submit`, { method: "POST", body: JSON.stringify({}) }).then(() => { setDocMsg(l("kiosk.docSubmitted")); }).catch(() => { setDocMsg(l("kiosk.docSubmitFailed")); })}
         />
       </div>
