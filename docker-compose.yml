@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USERNAME: minioad
+      MINIO_ROOT_USER: minioad
       MINIO_ROOT_PASSWORD: Vivahome%2026
       MINIO_BROWSER_REDIRECT_URL: https://s3.vivahome.de
     ports:
