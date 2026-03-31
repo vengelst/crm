@@ -70,6 +70,18 @@ enum DocumentApprovalStatus {
   ARCHIVED
 }
 
+enum OfficeReminderStatus {
+  OPEN
+  COMPLETED
+  CANCELED
+}
+
+enum OfficeReminderKind {
+  TODO
+  CALLBACK
+  FOLLOW_UP
+}
+
 enum SignerType {
   WORKER
   CUSTOMER
@@ -93,6 +105,9 @@ model User {
   kioskDevices KioskDevice[]
   notifications Notification[]
   createdNotes  Note[]           @relation("NoteCreator")
+  assignedOfficeReminders OfficeReminder[] @relation("OfficeReminderAssignee")
+  createdOfficeReminders  OfficeReminder[] @relation("OfficeReminderCreator")
+  completedOfficeReminders OfficeReminder[] @relation("OfficeReminderCompleter")
 }
 
 model Role {
@@ -179,6 +194,7 @@ model Customer {
   callLogs       CustomerCallLog[]
   crmNotes       Note[]
   customerNotes  CustomerNote[]
+  officeReminders OfficeReminder[]
 }
 
 model CustomerBranch {
@@ -217,6 +233,7 @@ model CustomerContact {
   branch              CustomerBranch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
   primaryProjects     Project[]        @relation("ProjectPrimaryContact")
   crmNotes            Note[]
+  officeReminders     OfficeReminder[]
 }
 
 model Project {
@@ -270,6 +287,7 @@ model Project {
   checklists                   ProjectChecklist[]
   notices                      ProjectNotice[]
   noticeAcknowledgements       ProjectNoticeAcknowledgement[]
+  officeReminders              OfficeReminder[]
 }
 
 model Worker {
@@ -758,11 +776,48 @@ model Note {
   contact         CustomerContact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
   project         Project?         @relation("NoteProject", fields: [projectId], references: [id], onDelete: SetNull)
   createdBy       User             @relation("NoteCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  officeReminders OfficeReminder[]
 
   @@index([customerId])
   @@index([contactId])
   @@index([projectId])
   @@index([createdAt])
+}
+
+model OfficeReminder {
+  id                String               @id @default(cuid())
+  title             String
+  description       String?
+  kind              OfficeReminderKind   @default(TODO)
+  status            OfficeReminderStatus @default(OPEN)
+  dueAt             DateTime?
+  remindAt          DateTime
+  channels          String[]             @default([])
+  smsNumber         String?
+  assignedUserId    String
+  createdByUserId   String
+  completedByUserId String?
+  completedAt       DateTime?
+  customerId        String?
+  contactId         String?
+  projectId         String?
+  noteId            String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  assignedUser      User                 @relation("OfficeReminderAssignee", fields: [assignedUserId], references: [id], onDelete: Cascade)
+  createdBy         User                 @relation("OfficeReminderCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  completedBy       User?                @relation("OfficeReminderCompleter", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  customer          Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  contact           CustomerContact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  project           Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  note              Note?                @relation(fields: [noteId], references: [id], onDelete: SetNull)
+
+  @@index([status, remindAt])
+  @@index([assignedUserId, status])
+  @@index([customerId])
+  @@index([contactId])
+  @@index([projectId])
+  @@index([noteId])
 }
 
 model Counter {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useI18n } from "../../../i18n-context";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { NoteItem } from "../types";
 import { SecondaryButton, TextArea, Field } from "../shared";
@@ -163,29 +164,37 @@ export function InlineNotesSection({
       ) : (
         <div className="grid gap-2">
           {notes.map((note) => (
-            <button
+            <div
               key={note.id}
-              type="button"
-              onClick={() => setSelectedNote(note)}
               className="w-full rounded-xl border border-black/10 bg-white/60 p-3 text-left transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900/60 dark:hover:bg-slate-800/60"
             >
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
-                  {note.title ? <div className="text-sm font-semibold">{note.title}</div> : null}
-                  <MarkdownContent content={note.content} className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2" clamp />
+                  <button type="button" onClick={() => setSelectedNote(note)} className="w-full text-left">
+                    {note.title ? <div className="text-sm font-semibold">{note.title}</div> : null}
+                    <MarkdownContent content={note.content} className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2" clamp />
+                  </button>
                   <div className="mt-1 flex gap-3 text-xs text-slate-400">
                     <span>{new Date(note.createdAt).toLocaleDateString(locale)}</span>
                     {note.createdBy ? <span>{note.createdBy.displayName}</span> : null}
                     {note.project ? <span>{l("notes.project")}: {note.project.projectNumber}</span> : null}
                   </div>
                 </div>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <Link
+                    href={`/settings?tab=reminders&kind=FOLLOW_UP&customerId=${encodeURIComponent(note.customer?.id ?? customerId)}${contactId ? `&contactId=${encodeURIComponent(contactId)}` : ""}${note.project?.id ? `&projectId=${encodeURIComponent(note.project.id)}` : ""}&noteId=${encodeURIComponent(note.id)}&title=${encodeURIComponent(`Wiedervorlage ${note.title || note.content.slice(0, 24)}`)}`}
+                    className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+                  >
+                    {l("settings.remindersQuickCreate")}
+                  </Link>
                 {note.isPhoneNote ? (
                   <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">
                     {l("notes.phoneNote")}
                   </span>
                 ) : null}
+                </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}

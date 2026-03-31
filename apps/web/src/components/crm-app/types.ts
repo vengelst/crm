@@ -7,6 +7,7 @@ export type AppSection =
   | "workers"
   | "planning"
   | "reports"
+  | "tasks"
   | "settings"
   | "users"
   | "notes";
@@ -515,6 +516,84 @@ export type NotificationItem = {
   linkId?: string | null;
   read: boolean;
   createdAt: string;
+};
+
+export type ReminderConfig = {
+  enabled: boolean;
+  missingTime: boolean;
+  openSignatures: boolean;
+  openApprovals: boolean;
+  projectStart: boolean;
+  emailEnabled: boolean;
+  intervalHours: number;
+};
+
+export type OfficeReminderItem = {
+  id: string;
+  title: string;
+  description?: string | null;
+  kind: "TODO" | "CALLBACK" | "FOLLOW_UP";
+  status: "OPEN" | "COMPLETED" | "CANCELED";
+  dueAt?: string | null;
+  remindAt: string;
+  channels: string[];
+  smsNumber?: string | null;
+  assignedUserId: string;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assignedUser: { id: string; displayName: string; email: string };
+  createdBy: { id: string; displayName: string; email: string };
+  completedBy?: { id: string; displayName: string; email: string } | null;
+  customer?: { id: string; companyName: string; customerNumber: string } | null;
+  contact?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    customer?: { id: string; companyName: string; customerNumber: string } | null;
+  } | null;
+  project?: {
+    id: string;
+    title: string;
+    projectNumber: string;
+    customerId: string;
+    customer?: { id: string; companyName: string; customerNumber: string } | null;
+  } | null;
+  note?: {
+    id: string;
+    title?: string | null;
+    content: string;
+    customerId?: string | null;
+    contactId?: string | null;
+    projectId?: string | null;
+  } | null;
+};
+
+export type ReminderReferenceData = {
+  users: Array<{ id: string; displayName: string; email: string }>;
+  customers: Array<{ id: string; companyName: string; customerNumber: string }>;
+  contacts: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    customerId: string;
+    customer: { id: string; companyName: string; customerNumber: string };
+  }>;
+  projects: Array<{
+    id: string;
+    title: string;
+    projectNumber: string;
+    customerId: string;
+    customer: { id: string; companyName: string; customerNumber: string };
+  }>;
+  notes: Array<{
+    id: string;
+    title?: string | null;
+    content: string;
+    customerId?: string | null;
+    contactId?: string | null;
+    projectId?: string | null;
+  }>;
 };
 
 export const API_ROOT = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");

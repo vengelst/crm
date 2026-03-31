@@ -1,5 +1,6 @@
 "use client";
 import { useI18n } from "../../../i18n-context";
+import { useSearchParams } from "next/navigation";
 
 import { type ChangeEvent, type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useState } from "react";
 import type {
@@ -41,6 +42,7 @@ export function SettingsPanel({
   success: string | null;
 }) {
   const { t: l } = useI18n();
+  const searchParams = useSearchParams();
   const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "company" | "pdfconfig" | "smtp" | "backup" | "gcal" | "devices" | "templates" | "reminders">("general");
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState("");
@@ -76,6 +78,25 @@ export function SettingsPanel({
     if (!selectedRoleId) { setRolePermissionIds([]); return; }
     void apiFetch<PermissionItem[]>(`/settings/roles/${selectedRoleId}/permissions`).then((perms) => setRolePermissionIds(perms.map((p) => p.id))).catch(() => {});
   }, [apiFetch, selectedRoleId]);
+
+  useEffect(() => {
+    const requestedTab = searchParams.get("tab");
+    if (
+      requestedTab === "general" ||
+      requestedTab === "users" ||
+      requestedTab === "roles" ||
+      requestedTab === "company" ||
+      requestedTab === "pdfconfig" ||
+      requestedTab === "smtp" ||
+      requestedTab === "backup" ||
+      requestedTab === "gcal" ||
+      requestedTab === "devices" ||
+      requestedTab === "templates" ||
+      requestedTab === "reminders"
+    ) {
+      setSettingsTab(requestedTab);
+    }
+  }, [searchParams]);
 
   async function saveRolePermissions() {
     setPanelError(null); setPanelSuccess(null);

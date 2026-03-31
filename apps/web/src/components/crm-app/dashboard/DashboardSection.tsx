@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { Summary, Customer, Project, Worker, TeamItem, TimesheetItem } from "../types";
-import { cx, SectionCard, MiniStat } from "../shared";
+import type { Summary, Customer, OfficeReminderItem, Project, Worker, TeamItem, TimesheetItem } from "../types";
+import { cx, MessageBar, SectionCard, MiniStat } from "../shared";
 import { DashboardList } from "./DashboardList";
 import { useI18n } from "../../../i18n-context";
 import { formatMinutes } from "../worker/format-minutes";
@@ -14,15 +14,20 @@ export function DashboardSection({
   projects,
   workers,
   teams,
+  apiFetch,
 }: {
   summary: Summary | null;
   customers: Customer[];
   projects: Project[];
   workers: Worker[];
   teams: TeamItem[];
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
   const { t: l, locale } = useI18n();
   const [nowTick, setNowTick] = useState(0);
+  const [reminders, setReminders] = useState<OfficeReminderItem[]>([]);
+  const [completingReminderId, setCompletingReminderId] = useState<string | null>(null);
+  const [reminderActionError, setReminderActionError] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -30,6 +35,12 @@ export function DashboardSection({
     }, 60000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    void apiFetch<OfficeReminderItem[]>("/reminders/items?status=OPEN")
+      .then((data) => setReminders(data))
+      .catch(() => setReminders([]));
+  }, [apiFetch]);
 
   function mapsUrl(latitude?: number | null, longitude?: number | null) {
     if (latitude == null || longitude == null) return null;
@@ -95,6 +106,30 @@ export function DashboardSection({
     };
   }
 
+  function reminderState(item: OfficeReminderItem) {
+    const dueBase = new Date(item.dueAt || item.remindAt);
+    const startToday = new Date();
+    startToday.setHours(0, 0, 0, 0);
+    const endToday = new Date(startToday);
+    endToday.setHours(23, 59, 59, 999);
+    if (dueBase < startToday) return l("settings.remindersTimeOverdue");
+    if (dueBase <= endToday) return l("settings.remindersTimeToday");
+    return l("settings.remindersTimeWeek");
+  }
+
+  async function completeReminder(id: string) {
+    setCompletingReminderId(id);
+    setReminderActionError(null);
+    try {
+      await apiFetch(`/reminders/items/${id}/complete`, { method: "POST" });
+      setReminders((current) => current.filter((item) => item.id !== id));
+    } catch (error) {
+      setReminderActionError(error instanceof Error ? error.message : l("common.error"));
+    } finally {
+      setCompletingReminderId(null);
+    }
+  }
+
   return (
     <div className="grid gap-6">
       {summary ? (
@@ -155,7 +190,12 @@ export function DashboardSection({
                         <div>{l("dashboard.currentProject")}: {meta.projectLabel}</div>
                       ) : null}
                       {meta.durationLabel && meta.durationValue ? (
-                        <div>{meta.durationLabel}: {meta.durationValue}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <span>{meta.durationLabel}:</span>
+                          <span className="rounded-lg bg-emerald-100 px-3 py-1 text-base font-extrabold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
+                            {meta.durationValue}
+                          </span>
+                        </div>
                       ) : null}
                       <div>
                         {meta.mapUrl ? (
@@ -182,6 +222,55 @@ export function DashboardSection({
             );
           })}
         </div>
+      </SectionCard>
+
+      <SectionCard title={l("dashboard.remindersTitle")}>
+        <MessageBar error={reminderActionError} success={null} />
+        {reminders.length === 0 ? (
+          <p className="text-sm text-slate-500">{l("dashboard.remindersEmpty")}</p>
+        ) : (
+          <div className="grid gap-2">
+            {reminders.slice(0, 5).map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-3 rounded-2xl border border-black/10 px-4 py-3 transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
+              >
+                <Link
+                  href={`/settings?tab=reminders&itemId=${encodeURIComponent(item.id)}`}
+                  className="min-w-0 flex-1"
+                >
+                  <div className="font-medium">{item.title}</div>
+                  <div className="text-xs text-slate-500">
+                    {item.assignedUser.displayName} · {new Date(item.remindAt).toLocaleString(locale)}
+                  </div>
+                </Link>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className={cx(
+                    "rounded-full px-2 py-1 text-xs font-semibold",
+                    reminderState(item) === l("settings.remindersTimeOverdue")
+                      ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300"
+                      : reminderState(item) === l("settings.remindersTimeToday")
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
+                        : "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300",
+                  )}>
+                    {reminderState(item)}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={completingReminderId === item.id}
+                    onClick={() => void completeReminder(item.id)}
+                    className="rounded-xl border border-emerald-200 px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-500/30 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
+                  >
+                    {completingReminderId === item.id ? "..." : l("settings.remindersMarkDone")}
+                  </button>
+                </div>
+              </div>
+            ))}
+            <Link href="/settings?tab=reminders" className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+              {l("dashboard.remindersOpenAll")}
+            </Link>
+          </div>
+        )}
       </SectionCard>
     </div>
   );

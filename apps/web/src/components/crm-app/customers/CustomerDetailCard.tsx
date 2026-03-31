@@ -82,6 +82,8 @@ export function CustomerDetailCard({
     }
   };
 
+  const customerReminderHref = `/settings?tab=reminders&kind=FOLLOW_UP&customerId=${encodeURIComponent(customer.id)}&title=${encodeURIComponent(`Wiedervorlage ${customer.companyName}`)}`;
+
   function printCustomer() {
     const addr = formatAddress([customer.addressLine1, customer.addressLine2, customer.postalCode, customer.city, customer.country]);
     const branches = customer.branches.map((b) => `<tr><td>${b.name}</td><td>${formatAddress([b.addressLine1, b.postalCode, b.city])}</td><td>${b.phone ?? "-"}</td><td>${b.email ?? "-"}</td></tr>`).join("");
@@ -114,6 +116,9 @@ export function CustomerDetailCard({
           </div>
           <div className="flex gap-2">
             {customerMapsUrl ? <MapLinkButton href={customerMapsUrl}>{l("common.googleMaps")}</MapLinkButton> : null}
+            <Link href={customerReminderHref} className="inline-flex items-center rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800">
+              {l("settings.remindersQuickCreate")}
+            </Link>
             <PrintButton onClick={printCustomer} label={l("cust.printSheet")} />
           </div>
         </div>
@@ -343,6 +348,9 @@ function ContactCardWithNotes({
 }) {
   const { t: l } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const reminderHref = contact.id
+    ? `/settings?tab=reminders&kind=CALLBACK&customerId=${encodeURIComponent(customerId)}&contactId=${encodeURIComponent(contact.id)}&title=${encodeURIComponent(`Rueckruf ${contact.firstName} ${contact.lastName}`)}`
+    : "";
 
   return (
     <div className="rounded-xl bg-slate-50/70 p-3 text-sm dark:bg-slate-950/40">
@@ -357,15 +365,25 @@ function ContactCardWithNotes({
             {contact.phoneLandline || "-"}
           </div>
         </div>
-        {contact.id ? (
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="shrink-0 rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
-          >
-            {expanded ? l("notes.title") + " ▲" : l("notes.title") + " ▼"}
-          </button>
-        ) : null}
+        <div className="flex shrink-0 gap-2">
+          {contact.id ? (
+            <Link
+              href={reminderHref}
+              className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+            >
+              {l("settings.remindersQuickCallback")}
+            </Link>
+          ) : null}
+          {contact.id ? (
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+            >
+              {expanded ? l("notes.title") + " ▲" : l("notes.title") + " ▼"}
+            </button>
+          ) : null}
+        </div>
       </div>
       {expanded && contact.id ? (
         <div className="mt-3 border-t border-black/10 pt-3 dark:border-white/10">

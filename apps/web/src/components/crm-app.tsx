@@ -7,6 +7,7 @@ import {
   FolderKanban,
   HardHat,
   LayoutDashboard,
+  ListTodo,
   NotebookText,
   Settings as SettingsIcon,
 } from "lucide-react";
@@ -50,7 +51,7 @@ import { WorkerTimeView, WorkerDetailCard, KioskUserView, getDeviceUuid, getDevi
 import { CustomerDetailCard, CreateCustomerModal } from "./crm-app/customers";
 import { NoteDetailModal, SpeechButton, MarkdownContent } from "./crm-app/notes";
 import { appendSpeechTranscript } from "./crm-app/notes/speech-format";
-import { SettingsPanel } from "./crm-app/settings";
+import { ReminderSettings, SettingsPanel } from "./crm-app/settings";
 import { DocumentPanel, DocumentPreviewModal } from "./crm-app/documents";
 import { DashboardSection, EntityList } from "./crm-app/dashboard";
 import { ReportsSection } from "./crm-app/reports";
@@ -946,6 +947,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     { key: "workers" as const, href: "/workers", label: l("nav.workers"), icon: <HardHat className="h-5 w-5" />, color: "text-amber-500 dark:text-amber-400" },
     { key: "planning" as const, href: "/planning", label: l("nav.planning"), icon: <CalendarDays className="h-5 w-5" />, color: "text-rose-500 dark:text-rose-400" },
     { key: "reports" as const, href: "/reports", label: l("nav.reports"), icon: <BarChart3 className="h-5 w-5" />, color: "text-cyan-500 dark:text-cyan-400" },
+    { key: "tasks" as const, href: "/tasks", label: l("nav.tasks"), icon: <ListTodo className="h-5 w-5" />, color: "text-orange-500 dark:text-orange-400" },
     { key: "notes" as const, href: "/notes", label: l("nav.notes"), icon: <NotebookText className="h-5 w-5" />, color: "text-fuchsia-500 dark:text-fuchsia-400" },
   ];
 
@@ -1063,6 +1065,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
             projects={projects}
             workers={workers}
             teams={teams}
+            apiFetch={apiFetch}
           />
         ) : null}
 
@@ -1875,6 +1878,21 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
         {section === "notes" ? (
           <NotesSection customers={customers} projects={projects} apiFetch={apiFetch} auth={auth} />
+        ) : null}
+
+        {section === "tasks" ? (
+          canManageSettings ? (
+            <ReminderSettings
+              apiFetch={apiFetch}
+              setPanelSuccess={setSuccess}
+              setPanelError={setError}
+              showSystemSection={false}
+              showOfficeSection
+              officeListFirst
+            />
+          ) : (
+            <InfoCard title={l("settings.noAccess")}>{l("settings.noAccess")}</InfoCard>
+          )
         ) : null}
 
         {section === "settings" ? (

@@ -31,8 +31,17 @@ export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Get()
+  @Roles(
+    RoleCode.SUPERADMIN,
+    RoleCode.OFFICE,
+    RoleCode.PROJECT_MANAGER,
+    RoleCode.WORKER,
+  )
   @KioskAllowed()
   list(@Req() request: RequestWithUser) {
+    if (request.user?.type === 'worker') {
+      return this.projectsService.listForWorker(request.user.sub);
+    }
     if (request.user?.type === 'kiosk-user') {
       return this.projectsService.listForManager(request.user.sub);
     }
@@ -40,8 +49,17 @@ export class ProjectsController {
   }
 
   @Get(':id')
+  @Roles(
+    RoleCode.SUPERADMIN,
+    RoleCode.OFFICE,
+    RoleCode.PROJECT_MANAGER,
+    RoleCode.WORKER,
+  )
   @KioskAllowed()
-  getById(@Param('id') id: string) {
+  getById(@Param('id') id: string, @Req() request: RequestWithUser) {
+    if (request.user?.type === 'worker') {
+      return this.projectsService.getByIdForWorker(id, request.user.sub);
+    }
     return this.projectsService.getById(id);
   }
 

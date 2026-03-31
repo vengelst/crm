@@ -53,6 +53,7 @@ export function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, ini
       case "SIGNATURE": return "Signatur";
       case "APPROVAL": return "Freigabe";
       case "MISSING_TIME": return "Fehlzeit";
+      case "REMINDER": return "Erinnerung";
       default: return "Info";
     }
   };
@@ -86,6 +87,7 @@ export function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, ini
                   if (!n.read) void markRead(n.id);
                   if (n.linkType && n.linkId) {
                     const path = n.linkType === "PROJECT" ? `/projects/${n.linkId}`
+                      : n.linkType === "CUSTOMER" ? `/customers/${n.linkId}`
                       : n.linkType === "DOCUMENT" ? `/projects` // Dokument → Projekte-Seite
                       : n.linkType === "TIMESHEET" ? `/projects` // Timesheet → Projekte-Seite
                       : null;
@@ -98,6 +100,7 @@ export function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, ini
                       n.type === "ASSIGNMENT" ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400" :
                       n.type === "SIGNATURE" ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400" :
                       n.type === "APPROVAL" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" :
+                      n.type === "REMINDER" ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300" :
                       "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                     )}>{typeIcon(n.type)}</span>
                     <div className="min-w-0 flex-1">

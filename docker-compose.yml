@@ -23,8 +23,8 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USERNAME: minioad
+      MINIO_ROOT_PASSWORD: Vivahome%2026
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -47,8 +47,8 @@ services:
       API_PORT: 3801
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: minioad
+      MINIO_ROOT_PASSWORD: Vivahome%2026
       MINIO_BUCKET: crm-documents
       SMTP_HOST: localhost
       SMTP_PORT: 1025

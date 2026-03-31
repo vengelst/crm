@@ -56,11 +56,80 @@ export class ProjectsService {
     });
   }
 
+  listForWorker(workerId: string) {
+    return this.prisma.project.findMany({
+      where: {
+        deletedAt: null,
+        assignments: {
+          some: {
+            workerId,
+            active: true,
+          },
+        },
+      },
+      include: {
+        customer: true,
+        branch: true,
+        assignments: {
+          include: {
+            worker: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+  }
+
   async getById(id: string) {
     const project = await this.prisma.project.findFirst({
       where: {
         id,
         deletedAt: null,
+      },
+      include: {
+        customer: true,
+        branch: true,
+        primaryCustomerContact: true,
+        assignments: {
+          include: {
+            worker: true,
+          },
+        },
+        timeEntries: {
+          orderBy: {
+            occurredAtServer: 'desc',
+          },
+          take: 25,
+        },
+        weeklyTimesheets: {
+          orderBy: {
+            generatedAt: 'desc',
+          },
+          take: 10,
+        },
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundException('Projekt nicht gefunden.');
+    }
+
+    return project;
+  }
+
+  async getByIdForWorker(id: string, workerId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        assignments: {
+          some: {
+            workerId,
+            active: true,
+          },
+        },
       },
       include: {
         customer: true,

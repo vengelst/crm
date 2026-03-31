@@ -61,6 +61,7 @@ export function ProjectDetailCard({
   ]);
 
   const hasPricing = project.weeklyFlatRate != null || project.hourlyRateUpTo40h != null || project.includedHoursPerWeek != null || project.overtimeRate != null;
+  const projectReminderHref = `/settings?tab=reminders&kind=TODO&customerId=${encodeURIComponent(project.customerId)}&projectId=${encodeURIComponent(project.id)}&title=${encodeURIComponent(`To-do ${project.projectNumber} ${project.title}`)}`;
 
   const fmt = (value?: number | null) => value != null ? `${value.toFixed(2)} EUR` : "-";
 
@@ -129,6 +130,9 @@ export function ProjectDetailCard({
           </div>
           <div className="flex gap-2">
             {projectMapsUrl ? <MapLinkButton href={projectMapsUrl}>{l("common.googleMaps")}</MapLinkButton> : null}
+            <Link href={projectReminderHref} className="inline-flex items-center rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800">
+              {l("settings.remindersQuickCreate")}
+            </Link>
             <PrintButton onClick={printProject} label={l("proj.printProject")} />
           </div>
         </div>
