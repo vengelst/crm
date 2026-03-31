@@ -2,14 +2,15 @@
 import { useI18n } from "../../../i18n-context";
 
 import Link from "next/link";
-import { type ChangeEvent, type Dispatch, type FormEvent, type SetStateAction, Fragment, useEffect, useState } from "react";
+import { type Dispatch, type SetStateAction, Fragment, useEffect, useState } from "react";
 import type {
   Project, ProjectFinancials, TimesheetItem, DocumentItem, Worker,
-  DocumentFormState, DocumentPreviewState,
+  DocumentFormState,
 } from "../types";
-import { cx, formatAddress, mapsUrlFromParts, SectionCard, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow, MessageBar } from "../shared";
+import { cx, formatAddress, mapsUrlFromParts, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow, MessageBar } from "../shared";
 import { DocumentPanel } from "../documents";
 import { TimesheetList } from "./TimesheetList";
+import { ProjectWorkRecordsModal } from "./ProjectWorkRecordsModal";
 import { ProjectChecklistSection } from "./ProjectChecklistSection";
 import { ProjectNoticesSection } from "./ProjectNoticesSection";
 import { FinancialKpi } from "./FinancialKpi";
@@ -48,6 +49,7 @@ export function ProjectDetailCard({
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
   const { t: l, locale } = useI18n();
+  const [showWorkRecords, setShowWorkRecords] = useState(false);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
   const [assignmentSaving, setAssignmentSaving] = useState(false);
   const [assignmentMsg, setAssignmentMsg] = useState<string | null>(null);
@@ -314,6 +316,19 @@ export function ProjectDetailCard({
       ) : null}
 
       {/* ── Stundenzettel ──────────────────────────────── */}
+      <div className="flex items-center justify-between rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <h4 className="text-base font-semibold">{l("ts.title")}</h4>
+        <button
+          type="button"
+          onClick={() => setShowWorkRecords(true)}
+          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+            <path fillRule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.621a1.5 1.5 0 00-.44-1.06l-4.12-4.122A1.5 1.5 0 0011.378 2H4.5zm4.75 11.25a.75.75 0 000 1.5h1.5a.75.75 0 000-1.5h-1.5zM7.5 15a.75.75 0 01.75-.75h3.5a.75.75 0 010 1.5h-3.5A.75.75 0 017.5 15zm.75-3.75a.75.75 0 000 1.5h3.5a.75.75 0 000-1.5h-3.5z" clipRule="evenodd" />
+          </svg>
+          {l("proj.openWorkRecords")}
+        </button>
+      </div>
       <TimesheetList timesheets={timesheets} apiFetch={apiFetch} />
 
       {/* ── Checklisten ────────────────────────────────── */}
@@ -361,6 +376,26 @@ export function ProjectDetailCard({
           onRejectDocument={(docId) => void apiFetch(`/documents/${docId}/reject`, { method: "POST", body: JSON.stringify({}) })}
         />
       </div>
+
+      {showWorkRecords ? (
+        <ProjectWorkRecordsModal
+          onClose={() => setShowWorkRecords(false)}
+          timesheets={timesheets}
+          apiFetch={apiFetch}
+          onRefreshTimesheets={async () => { if (onDataChanged) await onDataChanged(); }}
+          documents={documents}
+          onOpenDocument={onOpenDocument}
+          onPrintDocument={onPrintDocument}
+          onDownload={onDownload}
+          onDeleteDocument={onDeleteDocument}
+          documentForm={documentForm}
+          setDocumentForm={setDocumentForm}
+          authToken={authToken}
+          onUpload={onUpload}
+          onApproveDocument={(docId) => void apiFetch(`/documents/${docId}/approve`, { method: "POST", body: JSON.stringify({}) })}
+          onRejectDocument={(docId) => void apiFetch(`/documents/${docId}/reject`, { method: "POST", body: JSON.stringify({}) })}
+        />
+      ) : null}
     </div>
   );
 }

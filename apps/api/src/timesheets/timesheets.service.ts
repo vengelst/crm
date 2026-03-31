@@ -20,8 +20,12 @@ export class TimesheetsService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  list(workerId?: string, projectId?: string) {
-    return this.prisma.weeklyTimesheet.findMany({
+  async list(
+    workerId?: string,
+    projectId?: string,
+    includeWorkWeeks?: boolean,
+  ) {
+    const timesheets = await this.prisma.weeklyTimesheet.findMany({
       where: {
         workerId: workerId || undefined,
         projectId: projectId || undefined,
@@ -33,6 +37,110 @@ export class TimesheetsService {
         signatures: true,
       },
       orderBy: [{ weekYear: 'desc' }, { weekNumber: 'desc' }],
+    });
+
+    if (!includeWorkWeeks) return timesheets;
+
+    // Find weeks with TimeEntry records that have no corresponding WeeklyTimesheet
+    const entryWhere: Record<string, unknown> = {};
+    if (workerId) entryWhere.workerId = workerId;
+    if (projectId) entryWhere.projectId = projectId;
+
+    const entries = await this.prisma.timeEntry.findMany({
+      where: entryWhere,
+      select: {
+        workerId: true,
+        projectId: true,
+        occurredAtServer: true,
+        worker: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            workerNumber: true,
+          },
+        },
+        project: { select: { id: true, title: true, projectNumber: true } },
+      },
+      orderBy: { occurredAtServer: 'desc' },
+    });
+
+    // Build a set of existing timesheet keys
+    const existingKeys = new Set(
+      timesheets.map(
+        (ts) =>
+          `${ts.workerId}:${ts.projectId}:${ts.weekYear}:${ts.weekNumber}`,
+      ),
+    );
+
+    // Group time entries by worker-project-week
+    const workWeekMap = new Map<
+      string,
+      {
+        workerId: string;
+        projectId: string;
+        weekYear: number;
+        weekNumber: number;
+        worker: {
+          id: string;
+          firstName: string;
+          lastName: string;
+          workerNumber: string;
+        };
+        project: { id: string; title: string; projectNumber: string };
+        totalMinutes: number;
+      }
+    >();
+
+    for (const entry of entries) {
+      const d = new Date(entry.occurredAtServer);
+      const { year: weekYear, week: weekNumber } = getIsoWeekNumber(d);
+      const key = `${entry.workerId}:${entry.projectId}:${weekYear}:${weekNumber}`;
+
+      if (existingKeys.has(key)) continue; // already has a timesheet
+
+      if (!workWeekMap.has(key)) {
+        workWeekMap.set(key, {
+          workerId: entry.workerId,
+          projectId: entry.projectId,
+          weekYear,
+          weekNumber,
+          worker: entry.worker,
+          project: entry.project,
+          totalMinutes: 0,
+        });
+      }
+    }
+
+    // Build virtual timesheet entries for work weeks without a timesheet
+    const virtualEntries = Array.from(workWeekMap.values()).map((ww) => ({
+      id: `work-week:${ww.workerId}:${ww.projectId}:${ww.weekYear}:${ww.weekNumber}`,
+      workerId: ww.workerId,
+      projectId: ww.projectId,
+      weekYear: ww.weekYear,
+      weekNumber: ww.weekNumber,
+      status: 'NO_TIMESHEET' as const,
+      totalMinutesGross: 0,
+      totalMinutesNet: 0,
+      totalBreakMinutes: 0,
+      generatedAt: null,
+      lockedAt: null,
+      approvedAt: null,
+      approvedByUserId: null,
+      approvalComment: null,
+      billedAt: null,
+      billedByUserId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      worker: ww.worker,
+      project: ww.project,
+      days: [],
+      signatures: [],
+    }));
+
+    return [...timesheets, ...virtualEntries].sort((a, b) => {
+      if (a.weekYear !== b.weekYear) return b.weekYear - a.weekYear;
+      return b.weekNumber - a.weekNumber;
     });
   }
 
@@ -897,6 +1005,20 @@ function calculateBreakMinutes(
   }
 
   return 0;
+}
+
+/** Returns ISO year and week number for a given date. */
+function getIsoWeekNumber(date: Date): { year: number; week: number } {
+  const d = new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+  );
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(
+    ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
+  return { year: d.getUTCFullYear(), week };
 }
 
 function getIsoWeekRange(year: number, week: number) {

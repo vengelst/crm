@@ -1,7 +1,7 @@
 "use client";
 import { useI18n } from "../../../i18n-context";
 
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ProjectNotice } from "../types";
 import { cx, SecondaryButton, Field, TextArea } from "../shared";
 

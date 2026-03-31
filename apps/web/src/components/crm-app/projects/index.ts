@@ -5,3 +5,4 @@ export { ProjectNoticesSection } from "./ProjectNoticesSection";
 export { PlanningCalendar } from "./PlanningCalendar";
 export { TimesheetList } from "./TimesheetList";
 export { FinancialKpi } from "./FinancialKpi";
+export { ProjectWorkRecordsModal } from "./ProjectWorkRecordsModal";

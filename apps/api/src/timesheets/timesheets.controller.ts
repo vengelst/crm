@@ -40,15 +40,17 @@ export class TimesheetsController {
   list(
     @Query('workerId') workerId?: string,
     @Query('projectId') projectId?: string,
+    @Query('includeWorkWeeks') includeWorkWeeks?: string,
     @Req() request?: RequestWithUser,
   ) {
     this.rejectKioskUser(request);
+    const withWorkWeeks = includeWorkWeeks === 'true';
     // Worker: nur eigene Stundenzettel
     if (request?.user?.type === 'worker') {
       const ownId = request.user.workerId ?? request.user.sub;
-      return this.timesheetsService.list(ownId, projectId);
+      return this.timesheetsService.list(ownId, projectId, withWorkWeeks);
     }
-    return this.timesheetsService.list(workerId, projectId);
+    return this.timesheetsService.list(workerId, projectId, withWorkWeeks);
   }
 
   @Post('weekly')

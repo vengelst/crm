@@ -2,7 +2,7 @@
 import { useI18n } from "../../../i18n-context";
 import { useSearchParams } from "next/navigation";
 
-import { type ChangeEvent, type Dispatch, type FormEvent, type SetStateAction, useCallback, useEffect, useState } from "react";
+import { type Dispatch, type FormEvent, type SetStateAction, useEffect, useState } from "react";
 import type {
   AppSettings, UserItem, RoleItem, Worker,
   UserFormState, PermissionItem, SmtpFormState,
@@ -17,7 +17,6 @@ import { GoogleCalendarSettings } from "./GoogleCalendarSettings";
 import { ChecklistTemplateSettings } from "./ChecklistTemplateSettings";
 import { ReminderSettings } from "./ReminderSettings";
 import { KioskDeviceSettings } from "./KioskDeviceSettings";
-import { SUPPORTED_LANGUAGES } from "../../../i18n";
 import { EntityList } from "../dashboard";
 
 export function SettingsPanel({

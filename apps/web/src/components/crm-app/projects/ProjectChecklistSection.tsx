@@ -1,15 +1,14 @@
 "use client";
 import { useI18n } from "../../../i18n-context";
 
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Checklist, ChecklistTemplate } from "../types";
-import { cx, SectionCard, SecondaryButton } from "../shared";
+import { cx, SecondaryButton } from "../shared";
 
-export function ProjectChecklistSection({ projectId, apiFetch, isAdmin, workerName }: {
+export function ProjectChecklistSection({ projectId, apiFetch, isAdmin }: {
   projectId: string;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   isAdmin: boolean;
-  workerName?: string;
 }) {
   const { t: l, locale } = useI18n();
   const [checklists, setChecklists] = useState<Checklist[]>([]);

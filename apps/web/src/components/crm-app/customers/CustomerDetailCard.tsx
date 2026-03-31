@@ -2,12 +2,12 @@
 
 import { useI18n } from "../../../i18n-context";
 import Link from "next/link";
-import { type Dispatch, type SetStateAction, useEffect, useState, useCallback } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import type {
   Customer, Project, CustomerFinancials, DocumentItem,
   DocumentFormState, TimesheetItem,
 } from "../types";
-import { cx, formatAddress, mapsUrlFromParts, SectionCard, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow } from "../shared";
+import { cx, formatAddress, mapsUrlFromParts, MapLinkButton, PrintButton, openPrintWindow } from "../shared";
 import { DocumentPanel } from "../documents";
 import { TimesheetList, FinancialKpi } from "../projects";
 import { InlineNotesSection } from "../notes";
@@ -41,7 +41,7 @@ export function CustomerDetailCard({
   onUpload: () => void;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
-  const { t: l, locale } = useI18n();
+  const { t: l } = useI18n();
   const [customerTimesheets, setCustomerTimesheets] = useState<TimesheetItem[]>([]);
 
   useEffect(() => {

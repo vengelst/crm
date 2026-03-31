@@ -641,6 +641,8 @@ const de: Record<string, string> = {
   "proj.billingMark": "Abrechnungsbereit markieren",
   "proj.billingRevoke": "Freigabe zuruecknehmen",
   "proj.billingReadySince": "seit",
+  "proj.openWorkRecords": "Stundenzettel & Dokumente",
+  "proj.workRecordsModalTitle": "Stundenzettel & Dokumente",
   "proj.assignments": "Zugeordnete Monteure",
   "proj.noAssignments": "Keine Monteure zugeordnet.",
   "proj.manageAssignments": "Monteurzuordnung verwalten",
@@ -807,6 +809,7 @@ const de: Record<string, string> = {
   "settings.smtpTesting": "Testet ...",
   // ── Additional documents ─────────────────────
   "doc.docsTitle": "Dokumente",
+  "doc.newDocument": "Neues Dokument",
   "doc.none": "Keine Dokumente vorhanden.",
   "doc.annotation": "Anmerkung",
   "doc.annotationOf": "Anmerkung zu",
@@ -853,6 +856,8 @@ const de: Record<string, string> = {
   "ts.generating": "Erzeugt ...",
   "ts.workerSignedShort": "Monteur unterschrieben",
   "ts.customerSignedShort": "Kunde unterschrieben",
+  "ts.pendingFromTimeEntries": "Offen (Arbeit vorhanden)",
+  "ts.signaturesColumn": "Unterschriften",
   // ── Additional settings ──────────────────────
   "settings.deviceBindingTitle": "Geraetebindung",
   "settings.deviceBindingSaved": "Geraetebindung gespeichert.",
@@ -1555,6 +1560,8 @@ const en: Record<string, string> = {
   "proj.billingMark": "Mark as ready for billing",
   "proj.billingRevoke": "Revoke approval",
   "proj.billingReadySince": "since",
+  "proj.openWorkRecords": "Timesheets & Documents",
+  "proj.workRecordsModalTitle": "Timesheets & Documents",
   "proj.assignments": "Assigned Technicians",
   "proj.noAssignments": "No technicians assigned.",
   "proj.manageAssignments": "Manage technician assignments",
@@ -1721,6 +1728,7 @@ const en: Record<string, string> = {
   "settings.smtpTesting": "Testing...",
   // ── Additional documents ─────────────────────
   "doc.docsTitle": "Documents",
+  "doc.newDocument": "New Document",
   "doc.none": "No documents available.",
   "doc.annotation": "Annotation",
   "doc.annotationOf": "Annotation of",
@@ -1767,6 +1775,8 @@ const en: Record<string, string> = {
   "ts.generating": "Generating...",
   "ts.workerSignedShort": "Worker signed",
   "ts.customerSignedShort": "Customer signed",
+  "ts.pendingFromTimeEntries": "Pending (work recorded)",
+  "ts.signaturesColumn": "Signatures",
   // ── Additional settings ──────────────────────
   "settings.deviceBindingTitle": "Device Binding",
   "settings.deviceBindingSaved": "Device binding saved.",

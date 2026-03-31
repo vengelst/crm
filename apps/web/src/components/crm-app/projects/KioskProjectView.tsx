@@ -1,9 +1,9 @@
 "use client";
 
-import { type ChangeEvent, type Dispatch, type SetStateAction, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Project, TimesheetItem, DocumentItem, DocumentFormState, DocumentPreviewState } from "../types";
 import { t, type SupportedLang } from "../../../i18n";
-import { cx, SecondaryButton, formatAddress } from "../shared";
+import { formatAddress } from "../shared";
 import { DocumentPanel, DocumentPreviewModal } from "../documents";
 import { ProjectChecklistSection } from "./ProjectChecklistSection";
 import { ProjectNoticesSection } from "./ProjectNoticesSection";

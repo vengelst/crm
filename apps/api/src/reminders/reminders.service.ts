@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import {
   OfficeReminderKind,
@@ -208,7 +213,10 @@ export class RemindersService {
     return { users, customers, contacts, projects, notes };
   }
 
-  async createOfficeReminder(dto: OfficeReminderInput, createdByUserId: string) {
+  async createOfficeReminder(
+    dto: OfficeReminderInput,
+    createdByUserId: string,
+  ) {
     const data = await this.normalizeOfficeReminderInput(dto);
     const created = await this.prisma.officeReminder.create({
       data: {
@@ -221,11 +229,7 @@ export class RemindersService {
     return created;
   }
 
-  async updateOfficeReminder(
-    id: string,
-    dto: OfficeReminderInput,
-    _updatedByUserId: string,
-  ) {
+  async updateOfficeReminder(id: string, dto: OfficeReminderInput) {
     await this.getOfficeReminderOrThrow(id);
     const data = await this.normalizeOfficeReminderInput(dto);
     const updated = await this.prisma.officeReminder.update({
@@ -365,7 +369,11 @@ export class RemindersService {
       }
 
       if (
-        await this.wasOfficeReminderChannelSent(reminder.id, channel, recipientId)
+        await this.wasOfficeReminderChannelSent(
+          reminder.id,
+          channel,
+          recipientId,
+        )
       ) {
         continue;
       }
@@ -692,12 +700,16 @@ export class RemindersService {
   }
 
   private normalizeChannels(channels?: string[]) {
-    const normalized = [...new Set((channels ?? []).map((channel) => channel.toUpperCase()))];
+    const normalized = [
+      ...new Set((channels ?? []).map((channel) => channel.toUpperCase())),
+    ];
     if (normalized.length === 0) {
       throw new BadRequestException('Mindestens ein Kanal ist erforderlich.');
     }
     for (const channel of normalized) {
-      if (!OFFICE_CHANNELS.includes(channel as (typeof OFFICE_CHANNELS)[number])) {
+      if (
+        !OFFICE_CHANNELS.includes(channel as (typeof OFFICE_CHANNELS)[number])
+      ) {
         throw new BadRequestException('Ungueltiger Erinnerungskanal.');
       }
     }
@@ -723,7 +735,9 @@ export class RemindersService {
     const channels = this.normalizeChannels(dto.channels);
     const smsNumber = dto.smsNumber?.trim() || null;
     if (channels.includes('SMS') && !smsNumber) {
-      throw new BadRequestException('Fuer SMS ist eine Rufnummer erforderlich.');
+      throw new BadRequestException(
+        'Fuer SMS ist eine Rufnummer erforderlich.',
+      );
     }
 
     const resolved = await this.resolveReminderLinks(dto);
@@ -748,7 +762,7 @@ export class RemindersService {
     let customerId = dto.customerId ?? null;
     let contactId = dto.contactId ?? null;
     let projectId = dto.projectId ?? null;
-    let noteId = dto.noteId ?? null;
+    const noteId = dto.noteId ?? null;
 
     if (contactId) {
       const contact = await this.prisma.customerContact.findUnique({
@@ -856,7 +870,9 @@ export class RemindersService {
       parts.push(`${reminder.contact.firstName} ${reminder.contact.lastName}`);
     }
     if (reminder.project) {
-      parts.push(`${reminder.project.projectNumber} - ${reminder.project.title}`);
+      parts.push(
+        `${reminder.project.projectNumber} - ${reminder.project.title}`,
+      );
     }
     if (reminder.note) {
       parts.push(
@@ -1064,7 +1080,12 @@ export class RemindersService {
       });
 
       if (entityId && recipientId) {
-        await this.logOfficeReminderDispatch(entityId, channel, recipientId, 'SENT');
+        await this.logOfficeReminderDispatch(
+          entityId,
+          channel,
+          recipientId,
+          'SENT',
+        );
       }
       return true;
     } catch (error) {
@@ -1109,14 +1130,24 @@ export class RemindersService {
       if (!response.ok) {
         const raw = await response.text();
         this.logger.warn(`SMS an ${to} fehlgeschlagen: ${raw}`);
-        await this.logOfficeReminderDispatch(entityId, 'SMS', recipientId, 'FAILED');
+        await this.logOfficeReminderDispatch(
+          entityId,
+          'SMS',
+          recipientId,
+          'FAILED',
+        );
         return false;
       }
 
       return true;
     } catch (error) {
       this.logger.warn(`SMS an ${to} fehlgeschlagen: ${error}`);
-      await this.logOfficeReminderDispatch(entityId, 'SMS', recipientId, 'FAILED');
+      await this.logOfficeReminderDispatch(
+        entityId,
+        'SMS',
+        recipientId,
+        'FAILED',
+      );
       return false;
     }
   }

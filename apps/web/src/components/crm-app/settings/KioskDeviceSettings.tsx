@@ -3,7 +3,7 @@ import { useI18n } from "../../../i18n-context";
 
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
 import type { KioskDevice, DeviceBindingConfig, Worker, UserItem } from "../types";
-import { cx, SectionCard, SecondaryButton, PrimaryButton, FormRow, Field, SelectField } from "../shared";
+import { cx, SectionCard, SecondaryButton, FormRow, Field, SelectField } from "../shared";
 
 export function KioskDeviceSettings({ apiFetch, workers, users, setPanelSuccess, setPanelError }: {
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;

@@ -1,6 +1,7 @@
 "use client";
 
-import { type ChangeEvent, type Dispatch, type FormEvent, type SetStateAction, useEffect, useState } from "react";
+import Image from "next/image";
+import { type Dispatch, type FormEvent, type SetStateAction, useEffect, useState } from "react";
 import { SectionCard, SecondaryButton, PrimaryButton, FormRow, Field } from "../shared";
 import { useI18n } from "../../../i18n-context";
 
@@ -67,7 +68,14 @@ export function CompanySettingsTab({ companyForm, setCompanyForm, onSave, submit
         <div className="grid gap-4">
           {logoPath ? (
             <div className="flex items-center gap-4">
-              <img src={`${apiRoot}/api/settings/logo/file?t=${Date.now()}`} alt="Logo" className="h-16 rounded-lg border border-black/10 dark:border-white/10" />
+              <Image
+                src={`${apiRoot}/api/settings/logo/file?t=${Date.now()}`}
+                alt="Logo"
+                width={128}
+                height={64}
+                unoptimized
+                className="h-16 w-auto rounded-lg border border-black/10 dark:border-white/10"
+              />
               <div className="grid gap-2">
                 <p className="text-sm text-slate-500">{l("settings.logoPresent")}</p>
                 <SecondaryButton onClick={() => void deleteLogo()}>{l("settings.logoDelete")}</SecondaryButton>
@@ -87,5 +95,3 @@ export function CompanySettingsTab({ companyForm, setCompanyForm, onSave, submit
     </div>
   );
 }
-
-type BackupEntry = { id: string; createdAt: string; hasDatabase: boolean; databaseStatus?: string; hasSettings: boolean; settingsStatus?: string; hasDocuments: boolean; documentsStatus?: string; sizeBytes: number };

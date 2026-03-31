@@ -193,7 +193,9 @@ export class WorkersService {
       }
     }
 
-    throw new BadRequestException('Monteurnummer konnte nicht vergeben werden.');
+    throw new BadRequestException(
+      'Monteurnummer konnte nicht vergeben werden.',
+    );
   }
 
   async update(id: string, dto: SaveWorkerDto) {

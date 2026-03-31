@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { SupportedLang } from "../../../i18n";
 import { cx, SecondaryButton } from "../shared";
 
 export function DrawingEditorModal({

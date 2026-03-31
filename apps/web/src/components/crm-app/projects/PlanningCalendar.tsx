@@ -1,6 +1,6 @@
 "use client";
 
-import { type Dispatch, type SetStateAction, useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { Project, Worker, TeamItem } from "../types";
 import { cx, SectionCard, SecondaryButton, MessageBar, FormRow, Field, SelectField } from "../shared";
 import { useI18n } from "../../../i18n-context";
@@ -10,7 +10,7 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
   const [viewMonth, setViewMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [planForm, setPlanForm] = useState({ projectId: "", startDate: "", endDate: "", teamId: "", workerIds: [] as string[] });
-  const [planConflicts, setPlanConflicts] = useState<string[]>([]);
+  const [, setPlanConflicts] = useState<string[]>([]);
   const [planSaving, setPlanSaving] = useState(false);
   const [planMsg, setPlanMsg] = useState<string | null>(null);
   const [planErr, setPlanErr] = useState<string | null>(null);

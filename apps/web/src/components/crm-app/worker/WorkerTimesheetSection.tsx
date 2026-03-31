@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChangeEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { TimesheetItem } from "../types";
 import { SectionCard, SecondaryButton, MessageBar, Field } from "../shared";
 import { useI18n } from "../../../i18n-context";

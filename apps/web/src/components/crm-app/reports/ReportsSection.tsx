@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "../../../i18n-context";
-import type { Project, Worker, TeamItem, Customer, CustomerFinancials, ProjectFinancials, TimesheetItem } from "../types";
-import { cx, SectionCard, SecondaryButton, MiniStat, FormRow, SelectField } from "../shared";
-import { TimesheetList, FinancialKpi } from "../projects";
+import type { Project, Worker, Customer, TimesheetItem } from "../types";
+import { cx, SectionCard, MiniStat, SelectField } from "../shared";
+import { TimesheetList } from "../projects";
 
 export function ReportsSection({
   customers,
@@ -48,9 +48,13 @@ export function ReportsSection({
     return () => { cancelled = true; };
   }, [apiFetch, customers]);
 
-  useEffect(() => {
-    void apiFetch<TimesheetItem[]>("/timesheets/weekly").then(setAllTimesheets).catch(() => setAllTimesheets([]));
+  const reloadTimesheets = useCallback(() => {
+    return apiFetch<TimesheetItem[]>("/timesheets/weekly?includeWorkWeeks=true").then(setAllTimesheets).catch(() => setAllTimesheets([]));
   }, [apiFetch]);
+
+  useEffect(() => {
+    void reloadTimesheets();
+  }, [reloadTimesheets]);
 
   const filteredTimesheets = allTimesheets.filter((ts) => {
     if (tsFilter.project && ts.project.id !== tsFilter.project) return false;
@@ -160,14 +164,23 @@ export function ReportsSection({
             options={activeWorkers.map((w) => ({ value: w.id, label: `${w.firstName} ${w.lastName}` }))} />
           <SelectField label={l("table.status")} value={tsFilter.status} onChange={(e) => setTsFilter((c) => ({ ...c, status: e.target.value }))}
             options={[
+              { value: "NO_TIMESHEET", label: l("ts.pendingFromTimeEntries") },
               { value: "DRAFT", label: l("ts.draft") },
               { value: "WORKER_SIGNED", label: l("ts.workerSigned") },
               { value: "CUSTOMER_SIGNED", label: l("ts.customerSigned") },
               { value: "COMPLETED", label: l("ts.completed") },
+              { value: "APPROVED", label: l("ts.approved") },
+              { value: "BILLED", label: l("ts.billed") },
               { value: "LOCKED", label: l("ts.locked") },
             ]} />
         </div>
-        <TimesheetList timesheets={filteredTimesheets} apiFetch={apiFetch} title={`${filteredTimesheets.length} ${l("ts.title")}`} />
+        <TimesheetList
+          timesheets={filteredTimesheets}
+          apiFetch={apiFetch}
+          title={`${filteredTimesheets.length} ${l("ts.title")}`}
+          signatureDisplay="detail"
+          onAfterTimesheetChange={reloadTimesheets}
+        />
       </SectionCard>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { Summary, Customer, OfficeReminderItem, Project, Worker, TeamItem, TimesheetItem } from "../types";
+import type { Summary, Customer, OfficeReminderItem, Project, Worker, TeamItem } from "../types";
 import { cx, MessageBar, SectionCard, MiniStat } from "../shared";
 import { DashboardList } from "./DashboardList";
 import { useI18n } from "../../../i18n-context";

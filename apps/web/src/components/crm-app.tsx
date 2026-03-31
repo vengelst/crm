@@ -15,11 +15,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
-  type ChangeEvent,
   type FormEvent,
-  type Dispatch,
   type ReactNode,
-  type SetStateAction,
   useCallback,
   useEffect,
   useMemo,
@@ -27,20 +24,20 @@ import {
 } from "react";
 import { ThemeToggle } from "./theme-toggle";
 import type {
-  AppSection, CrmAppProps, Summary, AuthState,
-  CustomerBranch, CustomerContact, Customer,
+  CrmAppProps, Summary, AuthState,
+  Customer,
   Project, Worker,
   DocumentItem, TeamItem, TeamFormState,
   RoleItem, UserItem,
   AppSettings,
-  CustomerFormState, ProjectFormState, WorkerFormState, UserFormState,
+  ProjectFormState, WorkerFormState, UserFormState,
   DocumentFormState, DocumentPreviewState,
   TimesheetItem, NoteItem,
   ProjectFinancials, CustomerFinancials,
 } from "./crm-app/types";
 import { API_ROOT, AUTH_STORAGE_KEY } from "./crm-app/types";
 import {
-  cx, formatAddress, toDateInput, sanitizeForApi,
+  toDateInput, sanitizeForApi,
   NavLink, IconNavLink, PrimaryButton, SecondaryButton,
   SectionCard, InfoCard, MessageBar,
   FormRow, Field, SelectField, TextArea,
@@ -52,7 +49,7 @@ import { CustomerDetailCard, CreateCustomerModal } from "./crm-app/customers";
 import { NoteDetailModal, SpeechButton, MarkdownContent } from "./crm-app/notes";
 import { appendSpeechTranscript } from "./crm-app/notes/speech-format";
 import { ReminderSettings, SettingsPanel } from "./crm-app/settings";
-import { DocumentPanel, DocumentPreviewModal } from "./crm-app/documents";
+import { DocumentPreviewModal } from "./crm-app/documents";
 import { DashboardSection, EntityList } from "./crm-app/dashboard";
 import { ReportsSection } from "./crm-app/reports";
 import { NotificationBell } from "./crm-app/notifications";
@@ -61,26 +58,6 @@ import { SUPPORTED_LANGUAGES, t, type SupportedLang } from "../i18n";
 import { I18nProvider } from "../i18n-context";
 
 export type { CrmAppProps } from "./crm-app/types";
-
-const emptyCustomerForm = (): CustomerFormState => ({
-  customerNumber: "",
-  companyName: "",
-  legalForm: "",
-  status: "ACTIVE",
-  billingEmail: "",
-  phone: "",
-  email: "",
-  website: "",
-  vatId: "",
-  addressLine1: "",
-  addressLine2: "",
-  postalCode: "",
-  city: "",
-  country: "DE",
-  notes: "",
-  branches: [],
-  contacts: [],
-});
 
 const emptyProjectForm = (): ProjectFormState => ({
   projectNumber: "",
@@ -168,11 +145,12 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [success, setSuccess] = useState<string | null>(null);
   const [deviceWarning, setDeviceWarning] = useState<string | null>(null);
 
-  const [loginTab, setLoginTab] = useState<"admin" | "kiosk">("admin");
   const [loginEmail, setLoginEmail] = useState("admin@example.local");
   const [loginPassword, setLoginPassword] = useState("admin12345");
   const [loginPin, setLoginPin] = useState("");
   const [loginLang, setLoginLang] = useState<SupportedLang>("de");
+  const activeLang: SupportedLang = auth?.sessionLang === "en" ? "en" : loginLang;
+  const l = useCallback((key: string) => t(key, activeLang), [activeLang]);
 
   const [summary, setSummary] = useState<Summary | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -184,7 +162,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
-  const [customerForm, setCustomerForm] = useState<CustomerFormState>(emptyCustomerForm);
   const [projectForm, setProjectForm] = useState<ProjectFormState>(emptyProjectForm);
   const [workerForm, setWorkerForm] = useState<WorkerFormState>(emptyWorkerForm);
   const [teamForm, setTeamForm] = useState<TeamFormState>({ name: "", notes: "", active: true, memberWorkerIds: [] });
@@ -269,7 +246,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
       return (await response.json()) as T;
     },
-    [auth?.accessToken],
+    [auth?.accessToken, l],
   );
 
   useEffect(() => {
@@ -332,7 +309,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     } finally {
       setLoading(false);
     }
-  }, [apiFetch, auth, canManageSettings, canManageUsers]);
+  }, [apiFetch, auth, canManageSettings, canManageUsers, l]);
 
   useEffect(() => {
     if (!auth) {
@@ -356,11 +333,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
   useEffect(() => {
     if (selectedCustomer) {
-      setCustomerForm(mapCustomerToForm(selectedCustomer));
       setDocumentForm(emptyDocumentForm());
       void apiFetch<CustomerFinancials>(`/customers/${selectedCustomer.id}/financials`).then(setCustomerFinancials).catch(() => setCustomerFinancials(null));
     } else if (section === "customers") {
-      setCustomerForm(emptyCustomerForm());
       setCustomerFinancials(null);
     }
   }, [section, selectedCustomer, apiFetch]);
@@ -370,7 +345,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       setProjectForm(mapProjectToForm(selectedProject));
       setDocumentForm(emptyDocumentForm());
       void apiFetch<ProjectFinancials>(`/projects/${selectedProject.id}/financials`).then(setProjectFinancials).catch(() => setProjectFinancials(null));
-      void apiFetch<TimesheetItem[]>(`/timesheets/weekly?projectId=${selectedProject.id}`).then(setProjectTimesheets).catch(() => setProjectTimesheets([]));
+      void apiFetch<TimesheetItem[]>(`/timesheets/weekly?projectId=${selectedProject.id}&includeWorkWeeks=true`).then(setProjectTimesheets).catch(() => setProjectTimesheets([]));
     } else if (section === "projects") {
       setProjectForm(emptyProjectForm());
       setProjectFinancials(null);
@@ -519,71 +494,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     setSummary(null);
     setSuccess(null);
     setError(nextError ?? null);
-  }
-
-  async function handleCustomerSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await runMutation(async () => {
-      const payload = sanitizeForApi({
-        customerNumber: customerForm.customerNumber,
-        companyName: customerForm.companyName,
-        legalForm: customerForm.legalForm,
-        status: customerForm.status,
-        billingEmail: customerForm.billingEmail,
-        phone: customerForm.phone,
-        email: customerForm.email,
-        website: customerForm.website,
-        vatId: customerForm.vatId,
-        addressLine1: customerForm.addressLine1,
-        addressLine2: customerForm.addressLine2,
-        postalCode: customerForm.postalCode,
-        city: customerForm.city,
-        country: customerForm.country,
-        notes: customerForm.notes,
-        branches: customerForm.branches.map((b) => ({
-          name: b.name,
-          addressLine1: b.addressLine1,
-          addressLine2: b.addressLine2,
-          postalCode: b.postalCode,
-          city: b.city,
-          country: b.country,
-          phone: b.phone,
-          email: b.email,
-          notes: b.notes,
-          active: b.active ?? true,
-        })),
-        contacts: customerForm.contacts.map((c) => ({
-          branchId: c.branchId,
-          branchName: c.branchName,
-          firstName: c.firstName,
-          lastName: c.lastName,
-          role: c.role,
-          email: c.email,
-          phoneMobile: c.phoneMobile,
-          phoneLandline: c.phoneLandline,
-          isAccountingContact: c.isAccountingContact,
-          isProjectContact: c.isProjectContact,
-          isSignatory: c.isSignatory,
-          notes: c.notes,
-        })),
-      });
-
-      if (customerForm.id) {
-        await apiFetch(`/customers/${customerForm.id}`, {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await apiFetch("/customers", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-      }
-
-      setCustomerForm(emptyCustomerForm());
-      await loadData();
-      setSuccess(l("common.success"));
-    });
   }
 
   async function handleProjectSubmit(event: FormEvent<HTMLFormElement>) {
@@ -940,8 +850,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     }
   }
 
-  const activeLang: SupportedLang = auth?.sessionLang === "en" ? "en" : loginLang;
-  const l = (key: string) => t(key, activeLang);
   const navItems = [
     { key: "dashboard" as const, href: "/dashboard", label: l("nav.dashboard"), icon: <LayoutDashboard className="h-5 w-5" />, color: "text-sky-500 dark:text-sky-400" },
     { key: "customers" as const, href: "/customers", label: l("nav.customers"), icon: <Building2 className="h-5 w-5" />, color: "text-emerald-500 dark:text-emerald-400" },
@@ -1937,37 +1845,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     </I18nProvider>
   );
 
-  function updateBranch(index: number, patch: Partial<CustomerBranch>) {
-    setCustomerForm((current) => ({
-      ...current,
-      branches: current.branches.map((branch, branchIndex) =>
-        branchIndex === index ? { ...branch, ...patch } : branch,
-      ),
-    }));
-  }
-
-  function removeBranch(index: number) {
-    setCustomerForm((current) => ({
-      ...current,
-      branches: current.branches.filter((_, branchIndex) => branchIndex !== index),
-    }));
-  }
-
-  function updateContact(index: number, patch: Partial<CustomerContact>) {
-    setCustomerForm((current) => ({
-      ...current,
-      contacts: current.contacts.map((contact, contactIndex) =>
-        contactIndex === index ? { ...contact, ...patch } : contact,
-      ),
-    }));
-  }
-
-  function removeContact(index: number) {
-    setCustomerForm((current) => ({
-      ...current,
-      contacts: current.contacts.filter((_, contactIndex) => contactIndex !== index),
-    }));
-  }
 }
 
 // ── Monteur Stundenzettel ────────────────────────────────────
@@ -2268,55 +2145,6 @@ function PopupFrame({
 
 function hasRole(auth: AuthState | null, roles: string[]) {
   return roles.some((role) => auth?.user.roles.includes(role));
-}
-
-function mapCustomerToForm(customer: Customer): CustomerFormState {
-  return {
-    id: customer.id,
-    customerNumber: customer.customerNumber,
-    companyName: customer.companyName,
-    legalForm: customer.legalForm ?? "",
-    status: customer.status ?? "ACTIVE",
-    billingEmail: customer.billingEmail ?? "",
-    phone: customer.phone ?? "",
-    email: customer.email ?? "",
-    website: customer.website ?? "",
-    vatId: customer.vatId ?? "",
-    addressLine1: customer.addressLine1 ?? "",
-    addressLine2: customer.addressLine2 ?? "",
-    postalCode: customer.postalCode ?? "",
-    city: customer.city ?? "",
-    country: customer.country ?? "DE",
-    notes: customer.notes ?? "",
-    branches: (customer.branches ?? []).map((b) => ({
-      id: b.id,
-      name: b.name,
-      addressLine1: b.addressLine1,
-      addressLine2: b.addressLine2,
-      postalCode: b.postalCode,
-      city: b.city,
-      country: b.country,
-      phone: b.phone,
-      email: b.email,
-      notes: b.notes,
-      active: b.active,
-    })),
-    contacts: (customer.contacts ?? []).map((c) => ({
-      id: c.id,
-      branchId: c.branchId,
-      branchName: c.branchName,
-      firstName: c.firstName,
-      lastName: c.lastName,
-      role: c.role,
-      email: c.email,
-      phoneMobile: c.phoneMobile,
-      phoneLandline: c.phoneLandline,
-      isAccountingContact: c.isAccountingContact,
-      isProjectContact: c.isProjectContact,
-      isSignatory: c.isSignatory,
-      notes: c.notes,
-    })),
-  };
 }
 
 function mapProjectToForm(project: Project): ProjectFormState {

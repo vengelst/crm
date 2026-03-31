@@ -1,22 +1,53 @@
 "use client";
 
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import type { TimesheetItem } from "../types";
-import { cx, SectionCard, SecondaryButton, MessageBar, Field } from "../shared";
+import { cx, SecondaryButton, Field } from "../shared";
 import { useI18n } from "../../../i18n-context";
 
-export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }: {
+function isWorkWeekPendingRow(ts: TimesheetItem): boolean {
+  return ts.id.startsWith("work-week:");
+}
+
+function parseWorkWeekPendingId(id: string): {
+  workerId: string;
+  projectId: string;
+  weekYear: number;
+  weekNumber: number;
+} | null {
+  const m = /^work-week:([^:]+):([^:]+):(\d+):(\d+)$/.exec(id);
+  if (!m) return null;
+  return {
+    workerId: m[1],
+    projectId: m[2],
+    weekYear: Number(m[3]),
+    weekNumber: Number(m[4]),
+  };
+}
+
+export function TimesheetList({
+  timesheets,
+  apiFetch,
+  title,
+  signatureDisplay = "count",
+  onAfterTimesheetChange,
+}: {
   timesheets: TimesheetItem[];
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   title?: string;
+  signatureDisplay?: "count" | "detail";
+  onAfterTimesheetChange?: () => Promise<void>;
 }) {
-  const { t: l } = useI18n();
+  const { t: l, locale } = useI18n();
+  const heading = title ?? l("ts.title");
   const [emailTsId, setEmailTsId] = useState<string | null>(null);
   const [emailRecipient, setEmailRecipient] = useState("");
   const [sending, setSending] = useState(false);
   const [tsMsg, setTsMsg] = useState<string | null>(null);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
 
   async function downloadPdf(tsId: string) {
+    if (tsId.startsWith("work-week:")) return;
     try {
       const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
       const token = typeof window !== "undefined" ? (JSON.parse(window.localStorage.getItem("crm-admin-auth") ?? "{}") as { accessToken?: string }).accessToken ?? "" : "";
@@ -40,10 +71,12 @@ export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }:
   }
 
   const statusLabel = (s: string) => {
+    if (s === "NO_TIMESHEET") return l("ts.pendingFromTimeEntries");
     switch (s) { case "DRAFT": return l("ts.draft"); case "WORKER_SIGNED": return l("ts.workerSigned"); case "CUSTOMER_SIGNED": return l("ts.customerSigned"); case "COMPLETED": return l("ts.completed"); case "APPROVED": return l("ts.approved"); case "BILLED": return l("ts.billed"); case "LOCKED": return l("ts.locked"); default: return s; }
   };
 
   const statusColor = (s: string) => {
+    if (s === "NO_TIMESHEET") return "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300";
     switch (s) {
       case "DRAFT": return "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
       case "WORKER_SIGNED": return "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400";
@@ -61,6 +94,7 @@ export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }:
     try {
       await apiFetch(`/timesheets/${tsId}/approve`, { method: "POST", body: JSON.stringify({}) });
       setTsMsg(l("ts.approvedMsg"));
+      await onAfterTimesheetChange?.();
     } catch (e) { setTsMsg(e instanceof Error ? e.message : l("common.error")); }
   }
 
@@ -69,12 +103,65 @@ export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }:
     try {
       await apiFetch(`/timesheets/${tsId}/mark-billed`, { method: "POST", body: JSON.stringify({}) });
       setTsMsg(l("ts.billedMsg"));
+      await onAfterTimesheetChange?.();
     } catch (e) { setTsMsg(e instanceof Error ? e.message : l("common.error")); }
+  }
+
+  async function generatePending(ts: TimesheetItem) {
+    const parsed = parseWorkWeekPendingId(ts.id);
+    if (!parsed) return;
+    setGeneratingId(ts.id);
+    setTsMsg(null);
+    try {
+      await apiFetch("/timesheets/weekly", {
+        method: "POST",
+        body: JSON.stringify({
+          workerId: parsed.workerId,
+          projectId: parsed.projectId,
+          weekYear: parsed.weekYear,
+          weekNumber: parsed.weekNumber,
+        }),
+      });
+      setTsMsg(l("ts.generatedMsg"));
+      await onAfterTimesheetChange?.();
+    } catch (e) {
+      setTsMsg(e instanceof Error ? e.message : l("common.error"));
+    } finally {
+      setGeneratingId(null);
+    }
+  }
+
+  function signerKindLabel(signerType: string) {
+    if (signerType === "WORKER") return l("pdf.workerSignature");
+    if (signerType === "CUSTOMER") return l("pdf.customerSignature");
+    return signerType;
+  }
+
+  function formatSignatureCell(ts: TimesheetItem) {
+    if (ts.signatures.length === 0) return "–";
+    if (signatureDisplay === "count") {
+      return `${ts.signatures.length}×`;
+    }
+    return (
+      <ul className="max-w-[14rem] space-y-0.5 text-[10px] leading-tight text-slate-600 dark:text-slate-400">
+        {ts.signatures.map((s, i) => (
+          <li key={`${s.signedAt}-${i}`}>
+            <span className="font-medium text-slate-700 dark:text-slate-300">{signerKindLabel(s.signerType)}</span>
+            {": "}
+            {s.signerName}
+            <span className="text-slate-400">
+              {" · "}
+              {new Date(s.signedAt).toLocaleString(locale)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
   }
 
   return (
     <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-      <h4 className="mb-3 text-base font-semibold">{title}</h4>
+      <h4 className="mb-3 text-base font-semibold">{heading}</h4>
       {tsMsg ? <div className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{tsMsg}</div> : null}
       {timesheets.length === 0 ? (
         <p className="text-sm text-slate-500">{l("ts.noTimesheets")}</p>
@@ -88,37 +175,53 @@ export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }:
                 <th className="pb-2 pr-2">{l("table.project")}</th>
                 <th className="pb-2 pr-2 text-right">{l("table.netto")}</th>
                 <th className="pb-2 pr-2">{l("table.status")}</th>
-                <th className="pb-2 pr-2">{l("table.signed")}</th>
+                <th className="pb-2 pr-2">{l("ts.signaturesColumn")}</th>
                 <th className="pb-2">{l("table.actions")}</th>
               </tr>
             </thead>
             <tbody>
-              {timesheets.map((ts) => (
-                <tr key={ts.id} className="border-b border-black/5 dark:border-white/5">
-                  <td className="py-2 pr-2 font-mono text-xs">{ts.weekNumber}/{ts.weekYear}</td>
-                  <td className="py-2 pr-2 text-xs">{ts.worker ? `${ts.worker.firstName} ${ts.worker.lastName}` : "-"}</td>
-                  <td className="py-2 pr-2 text-xs">{ts.project.projectNumber}</td>
-                  <td className="py-2 pr-2 text-right font-mono text-xs">{Math.floor(ts.totalMinutesNet / 60)}h {ts.totalMinutesNet % 60}m</td>
-                  <td className="py-2 pr-2 text-xs">
-                    <span className={cx("inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold", statusColor(ts.status))}>
-                      {statusLabel(ts.status)}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-2 text-xs">{ts.signatures.length > 0 ? `${ts.signatures.length}x` : "-"}</td>
-                  <td className="py-2 text-xs">
-                    <div className="flex flex-wrap gap-1">
-                      <button type="button" onClick={() => void downloadPdf(ts.id)} className="rounded border border-black/10 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 dark:border-white/10">PDF</button>
-                      <button type="button" onClick={() => { setEmailTsId(ts.id); setEmailRecipient(""); }} className="rounded border border-blue-300 px-1.5 py-0.5 text-[10px] text-blue-700 hover:bg-blue-50 dark:border-blue-500/30 dark:text-blue-400">Mail</button>
-                      {(ts.status === "COMPLETED" || ts.status === "CUSTOMER_SIGNED") ? (
-                        <button type="button" onClick={() => void approveTs(ts.id)} className="rounded border border-green-300 px-1.5 py-0.5 text-[10px] text-green-700 hover:bg-green-50 dark:border-green-500/30 dark:text-green-400">Freigeben</button>
-                      ) : null}
-                      {ts.status === "APPROVED" ? (
-                        <button type="button" onClick={() => void markBilledTs(ts.id)} className="rounded border border-purple-300 px-1.5 py-0.5 text-[10px] text-purple-700 hover:bg-purple-50 dark:border-purple-500/30 dark:text-purple-400">Abgerechnet</button>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {timesheets.map((ts) => {
+                const pending = isWorkWeekPendingRow(ts);
+                return (
+                  <tr key={ts.id} className="border-b border-black/5 dark:border-white/5">
+                    <td className="py-2 pr-2 font-mono text-xs">{ts.weekNumber}/{ts.weekYear}</td>
+                    <td className="py-2 pr-2 text-xs">{ts.worker ? `${ts.worker.firstName} ${ts.worker.lastName}` : "-"}</td>
+                    <td className="py-2 pr-2 text-xs">{ts.project.projectNumber}</td>
+                    <td className="py-2 pr-2 text-right font-mono text-xs">{pending ? "–" : `${Math.floor(ts.totalMinutesNet / 60)}h ${ts.totalMinutesNet % 60}m`}</td>
+                    <td className="py-2 pr-2 text-xs">
+                      <span className={cx("inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold", statusColor(pending ? "NO_TIMESHEET" : ts.status))}>
+                        {statusLabel(pending ? "NO_TIMESHEET" : ts.status)}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-2 align-top text-xs">{formatSignatureCell(ts)}</td>
+                    <td className="py-2 text-xs">
+                      <div className="flex flex-wrap gap-1">
+                        {pending ? (
+                          <button
+                            type="button"
+                            disabled={generatingId === ts.id}
+                            onClick={() => void generatePending(ts)}
+                            className="rounded border border-amber-400 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-60 dark:border-amber-500/40 dark:text-amber-200 dark:hover:bg-amber-500/10"
+                          >
+                            {generatingId === ts.id ? l("ts.generating") : l("ts.generate")}
+                          </button>
+                        ) : (
+                          <>
+                            <button type="button" onClick={() => void downloadPdf(ts.id)} className="rounded border border-black/10 px-1.5 py-0.5 text-[10px] hover:bg-slate-50 dark:border-white/10">{l("ts.pdf")}</button>
+                            <button type="button" onClick={() => { setEmailTsId(ts.id); setEmailRecipient(""); }} className="rounded border border-blue-300 px-1.5 py-0.5 text-[10px] text-blue-700 hover:bg-blue-50 dark:border-blue-500/30 dark:text-blue-400">{l("ts.email")}</button>
+                            {(ts.status === "COMPLETED" || ts.status === "CUSTOMER_SIGNED") ? (
+                              <button type="button" onClick={() => void approveTs(ts.id)} className="rounded border border-green-300 px-1.5 py-0.5 text-[10px] text-green-700 hover:bg-green-50 dark:border-green-500/30 dark:text-green-400">{l("ts.approveAction")}</button>
+                            ) : null}
+                            {ts.status === "APPROVED" ? (
+                              <button type="button" onClick={() => void markBilledTs(ts.id)} className="rounded border border-purple-300 px-1.5 py-0.5 text-[10px] text-purple-700 hover:bg-purple-50 dark:border-purple-500/30 dark:text-purple-400">{l("ts.billedAction")}</button>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -137,7 +240,3 @@ export function TimesheetList({ timesheets, apiFetch, title = "Stundenzettel" }:
     </div>
   );
 }
-
-
-// WorkerTimesheetSection moved to ./crm-app/worker/
-

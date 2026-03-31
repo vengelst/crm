@@ -1,9 +1,8 @@
 "use client";
 import { useI18n } from "../../../i18n-context";
 
-import Image from "next/image";
 import { type ChangeEvent, type Dispatch, type SetStateAction, useEffect, useState } from "react";
-import type { DocumentItem, DocumentFormState, DocumentPreviewState } from "../types";
+import type { DocumentItem, DocumentFormState } from "../types";
 import { API_ROOT } from "../types";
 import { cx, SecondaryButton, Field, TextArea } from "../shared";
 import { DocumentThumbnail } from "./DocumentThumbnail";
@@ -24,6 +23,7 @@ export function DocumentPanel({
   onApproveDocument,
   onRejectDocument,
   onSubmitDocument,
+  hideInlineUpload = false,
 }: {
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
@@ -39,6 +39,8 @@ export function DocumentPanel({
   onApproveDocument?: (documentId: string) => void;
   onRejectDocument?: (documentId: string) => void;
   onSubmitDocument?: (documentId: string) => void;
+  /** Hochladefelder ausblenden (z. B. separates Popup fuer Upload) */
+  hideInlineUpload?: boolean;
 }) {
   const { t: l } = useI18n();
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
@@ -127,7 +129,7 @@ export function DocumentPanel({
       cancelled = true;
       createdUrls.forEach((url) => window.URL.revokeObjectURL(url));
     };
-  }, [authToken, documents]);
+  }, [authToken, documents, l]);
 
   return (
     <div className="grid gap-4">
@@ -239,59 +241,8 @@ export function DocumentPanel({
           })
         )}
       </div>
-      <div className="grid gap-3 rounded-2xl border border-black/10 p-3 dark:border-white/10">
-        <Field
-          label={l("doc.title")}
-          value={documentForm.title}
-          onChange={(event) =>
-            setDocumentForm((current) => ({
-              ...current,
-              title: event.target.value,
-            }))
-          }
-        />
-        <Field
-          label={l("doc.type")}
-          value={documentForm.documentType}
-          onChange={(event) =>
-            setDocumentForm((current) => ({
-              ...current,
-              documentType: event.target.value,
-            }))
-          }
-        />
-        <TextArea
-          label={l("doc.description")}
-          value={documentForm.description}
-          onChange={(event) =>
-            setDocumentForm((current) => ({
-              ...current,
-              description: event.target.value,
-            }))
-          }
-        />
-        <div className="grid gap-2">
-          <label className="text-sm font-medium">{l("doc.fileOrImage")}</label>
-          <input
-            type="file"
-            accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
-            capture="environment"
-            onChange={(event: ChangeEvent<HTMLInputElement>) =>
-              setDocumentForm((current) => ({
-                ...current,
-                file: event.target.files?.[0] ?? null,
-              }))
-            }
-            className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900"
-          />
-          <p className="text-xs text-slate-500">
-            {l("doc.cameraHint")}
-          </p>
-        </div>
-        <div>
-          <SecondaryButton onClick={onUpload}>{uploadLabel || l("doc.upload")}</SecondaryButton>
-        </div>
-        <div>
+      {hideInlineUpload ? (
+        <div className="flex flex-wrap gap-2">
           <SecondaryButton
             onClick={() =>
               setDrawingDraft({
@@ -303,7 +254,73 @@ export function DocumentPanel({
             {l("doc.createDrawing")}
           </SecondaryButton>
         </div>
-      </div>
+      ) : (
+        <div className="grid gap-3 rounded-2xl border border-black/10 p-3 dark:border-white/10">
+          <Field
+            label={l("doc.title")}
+            value={documentForm.title}
+            onChange={(event) =>
+              setDocumentForm((current) => ({
+                ...current,
+                title: event.target.value,
+              }))
+            }
+          />
+          <Field
+            label={l("doc.type")}
+            value={documentForm.documentType}
+            onChange={(event) =>
+              setDocumentForm((current) => ({
+                ...current,
+                documentType: event.target.value,
+              }))
+            }
+          />
+          <TextArea
+            label={l("doc.description")}
+            value={documentForm.description}
+            onChange={(event) =>
+              setDocumentForm((current) => ({
+                ...current,
+                description: event.target.value,
+              }))
+            }
+          />
+          <div className="grid gap-2">
+            <label className="text-sm font-medium">{l("doc.fileOrImage")}</label>
+            <input
+              type="file"
+              accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt"
+              capture="environment"
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                setDocumentForm((current) => ({
+                  ...current,
+                  file: event.target.files?.[0] ?? null,
+                }))
+              }
+              className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900"
+            />
+            <p className="text-xs text-slate-500">
+              {l("doc.cameraHint")}
+            </p>
+          </div>
+          <div>
+            <SecondaryButton onClick={onUpload}>{uploadLabel || l("doc.upload")}</SecondaryButton>
+          </div>
+          <div>
+            <SecondaryButton
+              onClick={() =>
+                setDrawingDraft({
+                  title: l("doc.newDrawing"),
+                  description: l("doc.freehandDrawing"),
+                })
+              }
+            >
+              {l("doc.createDrawing")}
+            </SecondaryButton>
+          </div>
+        </div>
+      )}
       {drawingDraft ? (
         <DrawingEditorModal
           title={drawingDraft.title}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../../i18n-context";
 import type { OfficeReminderItem, ReminderConfig, ReminderReferenceData } from "../types";
 import { API_ROOT, AUTH_STORAGE_KEY } from "../types";
@@ -98,7 +98,7 @@ export function ReminderSettings({
   const [savingItem, setSavingItem] = useState(false);
   const [running, setRunning] = useState(false);
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [nextConfig, nextRefs, nextItems] = await Promise.all([
@@ -114,11 +114,11 @@ export function ReminderSettings({
     } finally {
       setLoading(false);
     }
-  }
+  }, [apiFetch, l, setPanelError, statusFilter]);
 
   useEffect(() => {
     void loadData();
-  }, [statusFilter]);
+  }, [loadData]);
 
   useEffect(() => {
     if (!form.assignedUserId && references.users.length > 0) {

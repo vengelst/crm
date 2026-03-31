@@ -4,7 +4,7 @@ import Link from "next/link";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../../i18n-context";
 import type { Worker, Project, DocumentItem, DocumentFormState, WorkerTimeStatus } from "../types";
-import { cx, formatAddress, mapsUrlFromParts, SectionCard, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow, MessageBar } from "../shared";
+import { formatAddress, mapsUrlFromParts, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow, MessageBar } from "../shared";
 import { DocumentPanel } from "../documents";
 import { WorkerElapsedTime } from "./WorkerElapsedTime";
 import { formatMinutes } from "./format-minutes";
@@ -39,7 +39,7 @@ export function WorkerDetailCard({
   onDataChanged: () => Promise<void> | void;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
-  const { t: l, locale } = useI18n();
+  const { t: l } = useI18n();
   const [timeStatus, setTimeStatus] = useState<WorkerTimeStatus | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [assignmentSaving, setAssignmentSaving] = useState(false);

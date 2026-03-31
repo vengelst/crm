@@ -65,17 +65,16 @@ export class RemindersController {
   }
 
   @Post('items')
-  createItem(@Body() dto: Record<string, unknown>, @Req() request: RequestWithUser) {
+  createItem(
+    @Body() dto: Record<string, unknown>,
+    @Req() request: RequestWithUser,
+  ) {
     return this.remindersService.createOfficeReminder(dto, request.user!.sub);
   }
 
   @Patch('items/:id')
-  updateItem(
-    @Param('id') id: string,
-    @Body() dto: Record<string, unknown>,
-    @Req() request: RequestWithUser,
-  ) {
-    return this.remindersService.updateOfficeReminder(id, dto, request.user!.sub);
+  updateItem(@Param('id') id: string, @Body() dto: Record<string, unknown>) {
+    return this.remindersService.updateOfficeReminder(id, dto);
   }
 
   @Post('items/:id/complete')
@@ -94,10 +93,7 @@ export class RemindersController {
   }
 
   @Get('items/:id/calendar.ics')
-  async downloadCalendar(
-    @Param('id') id: string,
-    @Res() response: Response,
-  ) {
+  async downloadCalendar(@Param('id') id: string, @Res() response: Response) {
     const file = await this.remindersService.getOfficeReminderCalendarFile(id);
     response.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     response.setHeader(
