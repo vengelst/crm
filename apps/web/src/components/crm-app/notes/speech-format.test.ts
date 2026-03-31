@@ -32,6 +32,19 @@ function run() {
     "Hinweis **Das ist wichtig**",
   );
 
+  let splitBold = appendSpeechTranscript("", "fett Das ist", "de");
+  splitBold = appendSpeechTranscript(splitBold, "wichtig fett", "de");
+  assert.equal(splitBold, "**Das ist wichtig**");
+
+  let splitHeading = appendSpeechTranscript("", "Ueberschrift", "de");
+  splitHeading = appendSpeechTranscript(splitHeading, "Baustellenbericht", "de");
+  assert.equal(splitHeading, "## Baustellenbericht");
+
+  assert.equal(
+    appendSpeechTranscript("", "ich rede nur ueber eine ueberschrift und nicht ueber einen echten befehl", "de"),
+    "ich rede nur ueber eine ueberschrift und nicht ueber einen echten befehl",
+  );
+
   assert.equal(
     appendSpeechTranscript("Aufgaben", "Checkbox Material bestellt", "de"),
     "Aufgaben\n- [ ] Material bestellt",

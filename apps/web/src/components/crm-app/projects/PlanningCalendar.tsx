@@ -1,6 +1,6 @@
 "use client";
 
-import { type Dispatch, type SetStateAction, useMemo, useState } from "react";
+import { type Dispatch, type SetStateAction, useMemo, useRef, useState } from "react";
 import type { Project, Worker, TeamItem } from "../types";
 import { cx, SectionCard, SecondaryButton, MessageBar, FormRow, Field, SelectField } from "../shared";
 import { useI18n } from "../../../i18n-context";
@@ -14,6 +14,8 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
   const [planSaving, setPlanSaving] = useState(false);
   const [planMsg, setPlanMsg] = useState<string | null>(null);
   const [planErr, setPlanErr] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const wheelLockUntilRef = useRef(0);
 
   function openPlanForm(p: Project) {
     const focusDate = p.plannedStartDate ?? p.plannedEndDate;
@@ -33,7 +35,13 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
     setPlanConflicts([]);
     setPlanMsg(null);
     setPlanErr(null);
+    setSelectedDay(null);
     setSelectedProject(p);
+  }
+
+  function changeMonth(direction: -1 | 1) {
+    const d = new Date(year, month - 1 + direction, 1);
+    setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }
 
   function checkConflicts() {
@@ -194,6 +202,7 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
 
   const conflicts = getConflicts();
   const conflictDays = new Set(conflicts.map((c) => c.day));
+  const selectedDayProjects = selectedDay ? plannable.filter((p) => projectInDay(p, selectedDay)) : [];
 
   const statusColor = (s?: string) => {
     switch (s) {
@@ -208,15 +217,9 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
     <div className="grid gap-6">
       {/* Monatsnavigation */}
       <div className="flex items-center gap-4">
-        <SecondaryButton onClick={() => {
-          const d = new Date(year, month - 2, 1);
-          setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-        }}>&#8592;</SecondaryButton>
+        <SecondaryButton onClick={() => changeMonth(-1)}>&#8592;</SecondaryButton>
         <h2 className="text-xl font-semibold">{new Date(year, month - 1).toLocaleDateString(locale, { month: "long", year: "numeric" })}</h2>
-        <SecondaryButton onClick={() => {
-          const d = new Date(year, month, 1);
-          setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-        }}>&#8594;</SecondaryButton>
+        <SecondaryButton onClick={() => changeMonth(1)}>&#8594;</SecondaryButton>
       </div>
 
       {/* Projekt einplanen */}
@@ -245,6 +248,15 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
 
       {/* Kalender-Grid mit Drag-Support */}
       <div className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
+        onWheel={(event) => {
+          event.preventDefault();
+          const now = Date.now();
+          if (now < wheelLockUntilRef.current || event.deltaY === 0) {
+            return;
+          }
+          wheelLockUntilRef.current = now + 250;
+          changeMonth(event.deltaY > 0 ? 1 : -1);
+        }}
         onPointerUp={() => {
           if (dragState) { void handleDragEnd(); return; }
           if (drawState) {
@@ -267,14 +279,17 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
             const hasConflict = conflictDays.has(day);
             const isWeekend = ((firstDayOfWeek + i) % 7) >= 5;
             const isDragOver = dragState && dragState.currentDay === day;
+            const isSelectedDay = selectedDay === day;
             return (
               <div key={day}
+                onClick={() => setSelectedDay(day)}
                 onPointerEnter={() => { handleDragOver(day); if (drawState) setDrawState((s) => s ? { ...s, currentDay: day } : null); }}
                 onPointerDown={(e) => { if (dayProjects.length === 0 && !dragState) { e.preventDefault(); setDrawState({ startDay: day, currentDay: day }); } }}
                 className={cx(
                   "min-h-[80px] rounded-lg border p-1 transition-colors",
                   (drawState && day >= Math.min(drawState.startDay, drawState.currentDay) && day <= Math.max(drawState.startDay, drawState.currentDay)) ? "border-blue-400 bg-blue-100/50 dark:border-blue-500/50 dark:bg-blue-500/15" :
                   isDragOver ? "border-blue-400 bg-blue-50/50 dark:border-blue-500/50 dark:bg-blue-500/10" :
+                  isSelectedDay ? "border-sky-400 bg-sky-50/70 dark:border-sky-500/50 dark:bg-sky-500/10" :
                   hasConflict ? "border-red-300 bg-red-50/50 dark:border-red-500/30 dark:bg-red-500/5" :
                   isWeekend ? "border-black/5 bg-slate-50/30 dark:border-white/5 dark:bg-slate-950/30" :
                   "border-black/5 dark:border-white/5",
@@ -283,10 +298,10 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
                 {dayProjects.slice(0, 3).map((p) => (
                   <div key={p.id} className={cx("group relative mb-0.5 flex w-full items-center rounded text-left text-[10px] font-medium", statusColor(p.status))}>
                     <button type="button"
-                      onClick={() => openPlanForm(p)}
-                      onPointerDown={(e) => { e.preventDefault(); handleDragStart(p.id, day, "move"); }}
-                      className="flex-1 truncate px-1 py-0.5 cursor-grab active:cursor-grabbing">
-                      {p.projectNumber}
+                      onClick={(e) => { e.stopPropagation(); openPlanForm(p); }}
+                      onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); handleDragStart(p.id, day, "move"); }}
+                      className="flex-1 px-1 py-0.5 text-left leading-tight cursor-grab active:cursor-grabbing">
+                      <span className="line-clamp-2 break-words">{p.projectNumber} - {p.title}</span>
                     </button>
                     <button type="button"
                       onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); handleDragStart(p.id, day, "resize-end"); }}
@@ -306,6 +321,75 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
           {l("plan.newDate")} Tag {Math.min(drawState.startDay, drawState.currentDay)} – {Math.max(drawState.startDay, drawState.currentDay)}
         </div> : null}
       </div>
+
+      {selectedDay ? (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setSelectedDay(null)}
+        >
+          <div
+            className="w-full max-w-3xl rounded-3xl border border-black/10 bg-white p-5 shadow-xl dark:border-white/10 dark:bg-slate-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold">{l("plan.dayDetails")}</h3>
+                <p className="text-sm text-slate-500">
+                  {new Date(year, month - 1, selectedDay).toLocaleDateString(locale, { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
+                </p>
+              </div>
+              <SecondaryButton onClick={() => setSelectedDay(null)}>{l("common.close")}</SecondaryButton>
+            </div>
+            {selectedDayProjects.length === 0 ? (
+              <p className="text-sm text-slate-500">{l("plan.noProjectsForDay")}</p>
+            ) : (
+              <div className="grid gap-3">
+                {selectedDayProjects.map((project) => (
+                  <button
+                    key={project.id}
+                    type="button"
+                    onClick={() => openPlanForm(project)}
+                    className="rounded-xl border border-black/10 bg-white/70 p-3 text-left transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900/60 dark:hover:bg-slate-800/60"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            {project.projectNumber}
+                          </span>
+                          <div className="font-semibold">{project.title}</div>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                            {l("table.customer")}: {project.customer?.companyName ?? "-"}
+                          </span>
+                          <span className={cx("rounded-full px-2 py-0.5 font-medium", statusColor(project.status))}>
+                            {l("table.status")}: {project.status ?? "-"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-slate-500">
+                      <div className="grid gap-1">
+                        <div className="font-medium text-slate-600 dark:text-slate-300">{l("table.period")}</div>
+                        <div>{project.plannedStartDate?.slice(0, 10) ?? "-"} - {project.plannedEndDate?.slice(0, 10) ?? l("worker.open")}</div>
+                      </div>
+                      <div className="grid gap-1">
+                        <div className="font-medium text-slate-600 dark:text-slate-300">{l("plan.workers")}</div>
+                        <div>
+                        {(project.assignments ?? []).length > 0
+                          ? (project.assignments ?? []).map((assignment) => `${assignment.worker.firstName} ${assignment.worker.lastName}`).join(", ")
+                          : l("plan.noWorkers")}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* Aufgezogenen Termin einem Projekt zuweisen */}
       {drawProjectPicker ? (

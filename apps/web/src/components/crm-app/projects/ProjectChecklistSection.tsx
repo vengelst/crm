@@ -148,7 +148,7 @@ export function ProjectChecklistSection({ projectId, apiFetch, isAdmin, workerNa
                       disabled={!isAdmin && item.completed}
                       onChange={() => {
                         if (!item.completed) {
-                          const comment = window.prompt("Optionaler Kommentar:");
+                          const comment = window.prompt(l("checklist.optionalComment"));
                           void toggleItem(item.id, true, comment ?? undefined);
                         } else if (isAdmin) {
                           void toggleItem(item.id, false);
@@ -159,8 +159,9 @@ export function ProjectChecklistSection({ projectId, apiFetch, isAdmin, workerNa
                     <div className="min-w-0 flex-1">
                       {editingItem === item.id ? (
                         <div className="grid gap-1">
-                          <input type="text" value={editItemForm.title} onChange={(e) => setEditItemForm((c) => ({ ...c, title: e.target.value }))}
-                            className="rounded border border-black/10 px-2 py-0.5 text-sm dark:border-white/10 dark:bg-slate-900" />
+                          <textarea value={editItemForm.title} onChange={(e) => setEditItemForm((c) => ({ ...c, title: e.target.value }))}
+                            rows={3}
+                            className="rounded border border-black/10 px-2 py-1 text-sm dark:border-white/10 dark:bg-slate-900" />
                           <input type="text" placeholder={l("checklist.description")} value={editItemForm.description} onChange={(e) => setEditItemForm((c) => ({ ...c, description: e.target.value }))}
                             className="rounded border border-black/10 px-2 py-0.5 text-xs dark:border-white/10 dark:bg-slate-900" />
                           <div className="flex items-center gap-2">
@@ -173,7 +174,7 @@ export function ProjectChecklistSection({ projectId, apiFetch, isAdmin, workerNa
                         </div>
                       ) : (
                         <>
-                          <div className={item.completed ? "line-through text-slate-400" : ""}>{item.title}</div>
+                          <div className={cx("whitespace-pre-wrap", item.completed ? "line-through text-slate-400" : "")}>{item.title}</div>
                           {item.description ? <div className="text-xs text-slate-400">{item.description}</div> : null}
                           {item.completed && item.completedByName ? (
                             <div className="text-[11px] text-emerald-600 dark:text-emerald-400">
@@ -195,9 +196,9 @@ export function ProjectChecklistSection({ projectId, apiFetch, isAdmin, workerNa
               </div>
               {isAdmin ? (
                 <div className="mt-2 flex gap-2">
-                  <input type="text" placeholder="Neuer Punkt..." value={newItemTitle[cl.id] ?? ""}
+                  <textarea placeholder={l("checklist.newItem")} value={newItemTitle[cl.id] ?? ""}
+                    rows={3}
                     onChange={(e) => setNewItemTitle((c) => ({ ...c, [cl.id]: e.target.value }))}
-                    onKeyDown={(e) => { if (e.key === "Enter") void addItem(cl.id); }}
                     className="flex-1 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-slate-900"
                   />
                   <SecondaryButton onClick={() => void addItem(cl.id)}>{l("checklist.addItem")}</SecondaryButton>

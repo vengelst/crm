@@ -113,6 +113,7 @@ const de: Record<string, string> = {
   "common.success": "Erfolgreich",
   "common.confirm": "Bestaetigen",
   "common.backToList": "Zurueck zur Liste",
+  "common.relogin": "Bitte neu anmelden.",
   "common.active": "Aktiv",
   "common.inactive": "Inaktiv",
   "common.status": "Status",
@@ -137,6 +138,7 @@ const de: Record<string, string> = {
   "checklist.optionalComment": "Optionaler Kommentar:",
   "checklist.sortOrder": "Reihenfolge:",
   "checklist.description": "Beschreibung",
+  "checklist.itemText": "Punkttext",
   // ── Documents ──────────────────────────────────
   "doc.show": "Anzeigen",
   "doc.print": "Drucken",
@@ -280,7 +282,7 @@ const de: Record<string, string> = {
   "notes.speechActive": "Diktat aktiv",
   "notes.speechHelpTitle": "Sprachbefehle",
   "notes.speechHelpUsageTitle": "So benutzt du die Spracheingabe",
-  "notes.speechHelpUsageText": "Einfach normal sprechen. Fuer Formatierung sprichst du das Kommando genau an der Stelle mit, an der es eingefuegt werden soll.",
+  "notes.speechHelpUsageText": "Einfach normal sprechen. Fuer Formatierung sprichst du den Befehl am besten als eigenen kurzen Satz, genau an der Stelle, an der er eingefuegt werden soll.",
   "notes.speechHelpExampleTitle": "Beispiele",
   "notes.speechHelpExampleLineBreak": "Sage einfach: Zeilenumbruch",
   "notes.speechHelpExampleBold": "Sage fuer fett: fett Dies ist wichtiger Text fett",
@@ -595,6 +597,8 @@ const de: Record<string, string> = {
   "work.editSub": "Monteure melden sich ausschliesslich per PIN im Kiosk an. PIN leer lassen = bestehende PIN bleibt erhalten. Neuer Wert = PIN wird ersetzt.",
   "work.save": "Monteur speichern",
   "work.number": "Nummer",
+  "work.numberAuto": "Nummer wird automatisch vergeben",
+  "work.numberAutoHint": "Neue Monteure erhalten automatisch die naechste Monteursnummer.",
   "work.firstName": "Vorname",
   "work.lastName": "Nachname",
   "work.kioskPin": "Kiosk-PIN",
@@ -834,12 +838,18 @@ const de: Record<string, string> = {
   "plan.projectsWithPeriod": "Projekte mit Zeitraum",
   "plan.planningLabel": "Planung:",
   "plan.assignTeam": "Team zuordnen",
+  "plan.dayDetails": "Projekte am ausgewaehlten Tag",
+  "plan.noProjectsForDay": "Keine Projekte an diesem Tag.",
   // ── Additional common ────────────────────────
   "common.noneOption": "- Kein -",
   // ── Additional customer ──────────────────────
   "cust.contactsSub": "Kontaktpersonen des Kunden",
   "cust.noBranchesYet": "Noch keine Niederlassungen angelegt.",
   "cust.noContactsYet": "Noch keine Ansprechpartner angelegt.",
+  "cust.newCustomer": "Neuer Kunde",
+  "cust.createTitle": "Neuen Kunden anlegen",
+  "cust.masterData": "Stammdaten und Adresse",
+  "cust.createdOpen": "Kunde wurde angelegt und wird geoeffnet.",
 };
 
 const en: Record<string, string> = {
@@ -953,6 +963,7 @@ const en: Record<string, string> = {
   "common.success": "Success",
   "common.confirm": "Confirm",
   "common.backToList": "Back to list",
+  "common.relogin": "Please sign in again.",
   "common.active": "Active",
   "common.inactive": "Inactive",
   "common.status": "Status",
@@ -977,6 +988,7 @@ const en: Record<string, string> = {
   "checklist.optionalComment": "Optional comment:",
   "checklist.sortOrder": "Sort order:",
   "checklist.description": "Description",
+  "checklist.itemText": "Item text",
   // ── Documents ──────────────────────────────────
   "doc.show": "View",
   "doc.print": "Print",
@@ -1120,7 +1132,7 @@ const en: Record<string, string> = {
   "notes.speechActive": "Dictation active",
   "notes.speechHelpTitle": "Voice commands",
   "notes.speechHelpUsageTitle": "How to use dictation",
-  "notes.speechHelpUsageText": "Just speak normally. For formatting, say the command exactly where it should be inserted.",
+  "notes.speechHelpUsageText": "Just speak normally. For formatting, it works best if you say the command as its own short phrase exactly where it should be inserted.",
   "notes.speechHelpExampleTitle": "Examples",
   "notes.speechHelpExampleLineBreak": "Just say: line break",
   "notes.speechHelpExampleBold": "For bold say: bold This is important text bold",
@@ -1435,6 +1447,8 @@ const en: Record<string, string> = {
   "work.editSub": "Technicians log in exclusively via PIN at the kiosk. Leave PIN empty = existing PIN stays. New value = PIN is replaced.",
   "work.save": "Save technician",
   "work.number": "Number",
+  "work.numberAuto": "Number is assigned automatically",
+  "work.numberAutoHint": "New technicians automatically receive the next technician number.",
   "work.firstName": "First name",
   "work.lastName": "Last name",
   "work.kioskPin": "Kiosk PIN",
@@ -1674,12 +1688,18 @@ const en: Record<string, string> = {
   "plan.projectsWithPeriod": "Projects with period",
   "plan.planningLabel": "Planning:",
   "plan.assignTeam": "Assign team",
+  "plan.dayDetails": "Projects on selected day",
+  "plan.noProjectsForDay": "No projects on this day.",
   // ── Additional common ────────────────────────
   "common.noneOption": "- None -",
   // ── Additional customer ──────────────────────
   "cust.contactsSub": "Contact persons of this customer",
   "cust.noBranchesYet": "No branches created yet.",
   "cust.noContactsYet": "No contacts created yet.",
+  "cust.newCustomer": "New Customer",
+  "cust.createTitle": "Create new customer",
+  "cust.masterData": "Master data and address",
+  "cust.createdOpen": "Customer created and opened.",
 };
 
 const translations: Record<string, Record<string, string>> = { de, en };

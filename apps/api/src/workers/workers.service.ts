@@ -11,6 +11,49 @@ import { SaveWorkerDto } from './dto/save-worker.dto';
 export class WorkersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async nextWorkerNumber(
+    tx: Parameters<Parameters<typeof this.prisma.$transaction>[0]>[0],
+  ): Promise<string> {
+    const existingWorkers = await tx.worker.findMany({
+      select: { workerNumber: true },
+    });
+    const maxExisting = existingWorkers.reduce((max, worker) => {
+      const match = /^M-(\d+)$/.exec(worker.workerNumber);
+      return match ? Math.max(max, Number(match[1])) : max;
+    }, 101);
+
+    const counter = await tx.counter.upsert({
+      where: { id: 'WORKER' },
+      update: {},
+      create: {
+        id: 'WORKER',
+        prefix: 'M-',
+        current: maxExisting,
+      },
+      select: { current: true, prefix: true },
+    });
+
+    if (counter.current < maxExisting || counter.prefix !== 'M-') {
+      await tx.counter.update({
+        where: { id: 'WORKER' },
+        data: {
+          prefix: 'M-',
+          current: Math.max(counter.current, maxExisting),
+        },
+      });
+    }
+
+    const result = await tx.$queryRawUnsafe<
+      { prefix: string; current: number }[]
+    >(
+      `UPDATE "Counter" SET "current" = "current" + 1, "prefix" = 'M-' WHERE "id" = 'WORKER' RETURNING "prefix", "current"`,
+    );
+    if (!result.length) {
+      throw new BadRequestException('Counter WORKER nicht gefunden.');
+    }
+    return `${result[0].prefix}${result[0].current}`;
+  }
+
   list() {
     return this.prisma.worker.findMany({
       include: {
@@ -70,56 +113,87 @@ export class WorkersService {
   }
 
   async create(dto: SaveWorkerDto) {
-    if (!dto.workerNumber || !dto.firstName || !dto.lastName || !dto.pin) {
+    if (!dto.firstName || !dto.lastName || !dto.pin) {
       throw new BadRequestException(
-        'workerNumber, firstName, lastName und pin sind Pflichtfelder.',
+        'firstName, lastName und pin sind Pflichtfelder.',
       );
     }
+    const firstName = dto.firstName;
+    const lastName = dto.lastName;
+    const pin = dto.pin;
 
-    const existing = await this.prisma.worker.findUnique({
-      where: { workerNumber: dto.workerNumber },
-    });
-    if (existing) {
-      throw new BadRequestException('Monteurnummer bereits vergeben.');
+    if (dto.workerNumber?.trim()) {
+      const existing = await this.prisma.worker.findUnique({
+        where: { workerNumber: dto.workerNumber.trim() },
+      });
+      if (existing) {
+        throw new BadRequestException('Monteurnummer bereits vergeben.');
+      }
     }
 
-    await this.ensureActivePinIsUnique(dto.pin);
+    await this.ensureActivePinIsUnique(pin);
 
-    const pinHash = await hash(dto.pin, 10);
+    const pinHash = await hash(pin, 10);
+    const MAX_RETRIES = 3;
 
-    return this.prisma.worker.create({
-      data: {
-        workerNumber: dto.workerNumber,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        email: dto.email,
-        phone: dto.phone,
-        phoneMobile: dto.phoneMobile ?? dto.phone,
-        phoneOffice: dto.phoneOffice,
-        addressLine1: dto.addressLine1,
-        addressLine2: dto.addressLine2,
-        postalCode: dto.postalCode,
-        city: dto.city,
-        country: dto.country,
-        active: dto.active ?? true,
-        internalHourlyRate: dto.internalHourlyRate,
-        languageCode: dto.languageCode,
-        notes: dto.notes,
-        pins: {
-          create: {
-            pinHash,
-          },
-        },
-      },
-      include: {
-        pins: {
-          where: {
-            isActive: true,
-          },
-          take: 1,
-        },
-      },
-    });
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const workerNumber =
+            dto.workerNumber?.trim() || (await this.nextWorkerNumber(tx));
+
+          return tx.worker.create({
+            data: {
+              workerNumber,
+              firstName,
+              lastName,
+              email: dto.email,
+              phone: dto.phone,
+              phoneMobile: dto.phoneMobile ?? dto.phone,
+              phoneOffice: dto.phoneOffice,
+              addressLine1: dto.addressLine1,
+              addressLine2: dto.addressLine2,
+              postalCode: dto.postalCode,
+              city: dto.city,
+              country: dto.country,
+              active: dto.active ?? true,
+              internalHourlyRate: dto.internalHourlyRate,
+              languageCode: dto.languageCode,
+              notes: dto.notes,
+              pins: {
+                create: {
+                  pinHash,
+                },
+              },
+            },
+            include: {
+              pins: {
+                where: {
+                  isActive: true,
+                },
+                take: 1,
+              },
+            },
+          });
+        });
+      } catch (e: unknown) {
+        const isPrismaUnique =
+          e &&
+          typeof e === 'object' &&
+          'code' in e &&
+          (e as { code: string }).code === 'P2002';
+        if (
+          isPrismaUnique &&
+          attempt < MAX_RETRIES - 1 &&
+          !dto.workerNumber?.trim()
+        ) {
+          continue;
+        }
+        throw e;
+      }
+    }
+
+    throw new BadRequestException('Monteurnummer konnte nicht vergeben werden.');
   }
 
   async update(id: string, dto: SaveWorkerDto) {

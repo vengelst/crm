@@ -7,6 +7,7 @@ import { SecondaryButton, TextArea, Field } from "../shared";
 import { NoteDetailModal } from "./NoteDetailModal";
 import { SpeechButton } from "./SpeechButton";
 import { appendSpeechTranscript } from "./speech-format";
+import { MarkdownContent } from "./MarkdownContent";
 
 /**
  * Reusable inline notes section that can be embedded in any detail view.
@@ -171,9 +172,7 @@ export function InlineNotesSection({
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
                   {note.title ? <div className="text-sm font-semibold">{note.title}</div> : null}
-                  <div className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
-                    {note.content}
-                  </div>
+                  <MarkdownContent content={note.content} className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2" clamp />
                   <div className="mt-1 flex gap-3 text-xs text-slate-400">
                     <span>{new Date(note.createdAt).toLocaleDateString(locale)}</span>
                     {note.createdBy ? <span>{note.createdBy.displayName}</span> : null}
@@ -195,6 +194,7 @@ export function InlineNotesSection({
         <NoteDetailModal
           note={selectedNote}
           availableProjects={availableProjects}
+          apiFetch={apiFetch}
           onClose={() => setSelectedNote(null)}
           onSave={updateNote}
           onDelete={deleteNote}

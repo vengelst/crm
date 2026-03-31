@@ -46,8 +46,8 @@ import {
 } from "./crm-app/shared";
 import { KioskLoginScreen } from "./crm-app/login";
 import { WorkerTimeView, WorkerDetailCard, KioskUserView, getDeviceUuid, getDeviceInfo } from "./crm-app/worker";
-import { CustomerDetailCard } from "./crm-app/customers";
-import { NoteDetailModal, SpeechButton } from "./crm-app/notes";
+import { CustomerDetailCard, CreateCustomerModal } from "./crm-app/customers";
+import { NoteDetailModal, SpeechButton, MarkdownContent } from "./crm-app/notes";
 import { appendSpeechTranscript } from "./crm-app/notes/speech-format";
 import { SettingsPanel } from "./crm-app/settings";
 import { DocumentPanel, DocumentPreviewModal } from "./crm-app/documents";
@@ -139,6 +139,21 @@ const emptyDocumentForm = (): DocumentFormState => ({
   file: null,
 });
 
+type ApiError = Error & { status?: number };
+
+function createApiError(message: string, status: number): ApiError {
+  const error = new Error(message) as ApiError;
+  error.status = status;
+  return error;
+}
+
+function isUnauthorizedError(error: unknown) {
+  return !!error
+    && typeof error === "object"
+    && "status" in error
+    && ((error as ApiError).status === 401 || (error as ApiError).status === 403);
+}
+
 export function CrmApp({ section, entityId }: CrmAppProps) {
   const { setTheme } = useTheme();
   const router = useRouter();
@@ -182,6 +197,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [projectFinancials, setProjectFinancials] = useState<ProjectFinancials | null>(null);
   const [projectTimesheets, setProjectTimesheets] = useState<TimesheetItem[]>([]);
   const [customerFinancials, setCustomerFinancials] = useState<CustomerFinancials | null>(null);
+  const [showCreateCustomer, setShowCreateCustomer] = useState(false);
 
   const canManageSettings = hasRole(auth, ["SUPERADMIN", "OFFICE"]);
   const canManageUsers = hasRole(auth, ["SUPERADMIN"]);
@@ -238,7 +254,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
           }
         }
 
-        throw new Error(message);
+        throw createApiError(message, response.status);
       }
 
       if (response.status === 204) {
@@ -302,8 +318,8 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     } catch (loadError) {
       const message =
         loadError instanceof Error ? loadError.message : l("common.error");
-      if (message.includes("401") || message.includes("403")) {
-        logout();
+      if (isUnauthorizedError(loadError) || message.includes("401") || message.includes("403")) {
+        logout(l("common.relogin"));
       } else {
         setError(message);
       }
@@ -482,7 +498,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     }
   }
 
-  function logout() {
+  function logout(nextError?: string | null) {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(AUTH_STORAGE_KEY);
     }
@@ -496,7 +512,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     setSettings(null);
     setSummary(null);
     setSuccess(null);
-    setError(null);
+    setError(nextError ?? null);
   }
 
   async function handleCustomerSubmit(event: FormEvent<HTMLFormElement>) {
@@ -613,7 +629,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     event.preventDefault();
     await runMutation(async () => {
       const payload = sanitizeForApi({
-        workerNumber: workerForm.workerNumber,
+        workerNumber: workerForm.id ? workerForm.workerNumber : undefined,
         firstName: workerForm.firstName,
         lastName: workerForm.lastName,
         email: workerForm.email,
@@ -888,7 +904,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
           message = rawBody;
         }
       }
-      throw new Error(message);
+      throw createApiError(message, response.status);
     }
 
     return response.blob();
@@ -902,9 +918,13 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     try {
       await work();
     } catch (mutationError) {
-      setError(
-        mutationError instanceof Error ? mutationError.message : l("common.error"),
-      );
+      if (isUnauthorizedError(mutationError)) {
+        logout(l("common.relogin"));
+      } else {
+        setError(
+          mutationError instanceof Error ? mutationError.message : l("common.error"),
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -1021,7 +1041,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
             ) : null}
             <NotificationBell apiFetch={apiFetch} />
             <ThemeToggle />
-            <SecondaryButton onClick={logout}>{l("nav.logout")}</SecondaryButton>
+            <SecondaryButton onClick={() => logout()}>{l("nav.logout")}</SecondaryButton>
           </div>
         </div>
 
@@ -1067,19 +1087,43 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   />
                 </>
               ) : (
-                <SectionCard title={l("cust.list")} subtitle={l("cust.listSub")} bordered={false}>
-                  <EntityList
-                    items={customers}
-                    title={(item) => item.companyName}
-                    subtitle={(item) => item.customerNumber}
-                    href={(item) => `/customers/${item.id}`}
-                    editLabel={l("common.edit")}
-                    deleteLabel={l("common.delete")}
-                    onOpen={(item) => router.push(`/customers/${item.id}`)}
-                    onEdit={(item) => router.push(`/customers/${item.id}`)}
-                    onDelete={(item) => void handleDelete(`/customers/${item.id}`, l("nav.customers"), true)}
-                  />
-                </SectionCard>
+                <>
+                  <SectionCard title={l("cust.list")} subtitle={l("cust.listSub")} bordered={false}>
+                    <div className="mb-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateCustomer(true)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                          <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                        </svg>
+                        {l("cust.newCustomer")}
+                      </button>
+                    </div>
+                    <EntityList
+                      items={customers}
+                      title={(item) => item.companyName}
+                      subtitle={(item) => item.customerNumber}
+                      href={(item) => `/customers/${item.id}`}
+                      editLabel={l("common.edit")}
+                      deleteLabel={l("common.delete")}
+                      onOpen={(item) => router.push(`/customers/${item.id}`)}
+                      onEdit={(item) => router.push(`/customers/${item.id}`)}
+                      onDelete={(item) => void handleDelete(`/customers/${item.id}`, l("nav.customers"), true)}
+                    />
+                  </SectionCard>
+                  {showCreateCustomer ? (
+                    <CreateCustomerModal
+                      apiFetch={apiFetch}
+                      onClose={() => setShowCreateCustomer(false)}
+                      onCreated={(id) => {
+                        setShowCreateCustomer(false);
+                        void loadData().then(() => router.push(`/customers/${id}`));
+                      }}
+                    />
+                  ) : null}
+                </>
               )}
             </div>
             <form className="grid gap-5" onSubmit={handleCustomerSubmit}>
@@ -1089,7 +1133,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   <h2 className="text-xl font-semibold">
                     {l(customerForm.id ? "cust.edit" : "cust.create")}
                   </h2>
-                  <p className="text-sm text-slate-500">Stammdaten und Adresse</p>
+                  <p className="text-sm text-slate-500">{l("cust.masterData")}</p>
                 </div>
                 <div className="grid gap-4">
                   <FormRow>
@@ -1237,7 +1281,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                       }))
                     }
                   >
-                    Hinzufuegen
+                    {l("common.add")}
                   </SecondaryButton>
                 </div>
                 <div className="grid gap-3">
@@ -1315,7 +1359,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                         </FormRow>
                         <div className="flex justify-end">
                           <SecondaryButton onClick={() => removeBranch(index)}>
-                            Entfernen
+                            {l("common.remove")}
                           </SecondaryButton>
                         </div>
                       </div>
@@ -1342,7 +1386,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                       }))
                     }
                   >
-                    Hinzufuegen
+                    {l("common.add")}
                   </SecondaryButton>
                 </div>
                 <div className="grid gap-3">
@@ -1438,7 +1482,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                         </FormRow>
                         <div className="flex justify-end">
                           <SecondaryButton onClick={() => removeContact(index)}>
-                            Entfernen
+                            {l("common.remove")}
                           </SecondaryButton>
                         </div>
                       </div>
@@ -1452,7 +1496,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   {submitting ? l("common.saving") : l("cust.save")}
                 </PrimaryButton>
                 <SecondaryButton onClick={() => setCustomerForm(emptyCustomerForm())}>
-                  Zuruecksetzen
+                  {l("common.reset")}
                 </SecondaryButton>
               </div>
             </form>
@@ -1787,16 +1831,29 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
             >
               <form className="grid gap-4" onSubmit={handleWorkerSubmit}>
                 <FormRow>
-                  <Field
-                    label={l("work.number")}
-                    value={workerForm.workerNumber}
-                    onChange={(event) =>
-                      setWorkerForm((current) => ({
-                        ...current,
-                        workerNumber: event.target.value,
-                      }))
-                    }
-                  />
+                  {workerForm.id ? (
+                    <Field
+                      label={l("work.number")}
+                      value={workerForm.workerNumber}
+                      onChange={(event) =>
+                        setWorkerForm((current) => ({
+                          ...current,
+                          workerNumber: event.target.value,
+                        }))
+                      }
+                    />
+                  ) : (
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium">{l("work.number")}</label>
+                      <input
+                        type="text"
+                        value={l("work.numberAuto")}
+                        readOnly
+                        className="w-full rounded-xl border border-black/10 bg-slate-100 px-3 py-2 text-sm text-slate-500 shadow-sm dark:border-white/10 dark:bg-slate-800 dark:text-slate-400"
+                      />
+                      <p className="text-xs text-slate-500">{l("work.numberAutoHint")}</p>
+                    </div>
+                  )}
                   <Field
                     label={l("work.firstName")}
                     value={workerForm.firstName}
@@ -1823,7 +1880,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     <label className="text-sm font-medium">{l("work.kioskPin")}</label>
                     {workerForm.id && workers.find((item) => item.id === workerForm.id)?.pins?.length ? (
                       <div className="mb-1 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
-                        PIN ist gesetzt. Neuen Wert eingeben um zu aendern.
+                        {l("work.pinSet")}
                       </div>
                     ) : null}
                     <input
@@ -2407,7 +2464,7 @@ function NotesSection({ customers, projects, apiFetch, auth }: {
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
                     {note.title ? <div className="font-semibold">{note.title}</div> : null}
-                    <div className="mt-1 text-sm text-slate-600 dark:text-slate-400 line-clamp-2">{note.content}</div>
+                    <MarkdownContent content={note.content} className="mt-1 text-sm text-slate-600 dark:text-slate-400 line-clamp-2" clamp />
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                       <span>{new Date(note.createdAt).toLocaleString(notesLocale)}</span>
                       {note.customer ? <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400">{l("notes.customer")}: {note.customer.companyName}</span> : null}
@@ -2432,6 +2489,7 @@ function NotesSection({ customers, projects, apiFetch, auth }: {
         <NoteDetailModal
           note={selectedNote}
           availableProjects={selectedNote.customerId ? projects.filter((project) => project.customerId === selectedNote.customerId) : projects}
+          apiFetch={apiFetch}
           onClose={() => setSelectedNote(null)}
           onSave={updateNote}
           onDelete={deleteNote}

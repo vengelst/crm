@@ -3,19 +3,42 @@
 import { useI18n } from "../../../i18n-context";
 import { useState } from "react";
 import type { NoteItem } from "../types";
-import { SecondaryButton, TextArea, Field, MessageBar } from "../shared";
+import { SecondaryButton, TextArea, Field, MessageBar, PrintButton, openPrintWindow, formatAddress } from "../shared";
 import { SpeechButton } from "./SpeechButton";
 import { appendSpeechTranscript } from "./speech-format";
+import { MarkdownContent, markdownToHtml } from "./MarkdownContent";
+
+type CompanyInfo = {
+  name: string;
+  street: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  phone: string;
+  email: string;
+  website: string;
+};
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 export function NoteDetailModal({
   note,
   availableProjects,
+  apiFetch,
   onClose,
   onSave,
   onDelete,
 }: {
   note: NoteItem;
   availableProjects?: { id: string; projectNumber: string; title: string }[];
+  apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   onClose: () => void;
   onSave: (id: string, data: { title?: string; content: string; isPhoneNote?: boolean; projectId?: string | null }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -28,6 +51,7 @@ export function NoteDetailModal({
   const [editProjectId, setEditProjectId] = useState(note.projectId ?? "");
   const [editIsPhone, setEditIsPhone] = useState(note.isPhoneNote ?? false);
   const [saving, setSaving] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
@@ -53,6 +77,53 @@ export function NoteDetailModal({
     if (!window.confirm(l("common.confirm"))) return;
     await onDelete(note.id);
     onClose();
+  }
+
+  async function handlePrint() {
+    setPrinting(true);
+    setError(null);
+    try {
+      const company = await apiFetch<CompanyInfo>("/settings/company").catch(() => ({
+        name: "",
+        street: "",
+        postalCode: "",
+        city: "",
+        country: "",
+        phone: "",
+        email: "",
+        website: "",
+      }));
+      const companyAddress = formatAddress([company.street, company.postalCode, company.city, company.country]);
+      const customerName = note.customer?.companyName ?? note.contact?.customer?.companyName ?? "-";
+      const projectLabel = note.project ? `${note.project.projectNumber} ${note.project.title}` : "-";
+      const noteTitle = note.title?.trim() || l("notes.detail");
+      openPrintWindow(`${l("print.notes")} ${noteTitle}`, `
+        <h1>${escapeHtml(noteTitle)}</h1>
+        <p class="meta">${escapeHtml(new Date(note.createdAt).toLocaleString(locale))}</p>
+        <h2>${escapeHtml(l("settings.companyInfoTitle"))}</h2>
+        <div class="grid">
+          <span class="label">${escapeHtml(l("settings.companyName"))}</span><span>${escapeHtml(company.name || "-")}</span>
+          <span class="label">${escapeHtml(l("print.address"))}</span><span>${escapeHtml(companyAddress || "-")}</span>
+          <span class="label">${escapeHtml(l("print.phone"))}</span><span>${escapeHtml(company.phone || "-")}</span>
+          <span class="label">${escapeHtml(l("print.email"))}</span><span>${escapeHtml(company.email || "-")}</span>
+          <span class="label">${escapeHtml(l("print.website"))}</span><span>${escapeHtml(company.website || "-")}</span>
+        </div>
+        <h2>${escapeHtml(l("notes.detail"))}</h2>
+        <div class="grid">
+          <span class="label">${escapeHtml(l("print.customer"))}</span><span>${escapeHtml(customerName)}</span>
+          <span class="label">${escapeHtml(l("notes.contact"))}</span><span>${escapeHtml(note.contact ? `${note.contact.firstName} ${note.contact.lastName}` : "-")}</span>
+          <span class="label">${escapeHtml(l("print.project"))}</span><span>${escapeHtml(projectLabel)}</span>
+          <span class="label">${escapeHtml(l("notes.createdBy"))}</span><span>${escapeHtml(note.createdBy?.displayName || "-")}</span>
+          <span class="label">${escapeHtml(l("notes.phoneNote"))}</span><span>${escapeHtml(note.isPhoneNote ? l("common.yes") : l("common.no"))}</span>
+        </div>
+        <h2>${escapeHtml(l("print.notes"))}</h2>
+        <div>${markdownToHtml(note.content)}</div>
+      `);
+    } catch (printError) {
+      setError(printError instanceof Error ? printError.message : l("common.error"));
+    } finally {
+      setPrinting(false);
+    }
   }
 
   return (
@@ -135,10 +206,9 @@ export function NoteDetailModal({
         ) : (
           <div>
             {note.title ? <h4 className="mb-2 text-base font-semibold">{editing ? editTitle : note.title}</h4> : null}
-            <div className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400">
-              {note.content}
-            </div>
+            <MarkdownContent content={note.content} className="text-sm text-slate-600 dark:text-slate-400 space-y-1.5" />
             <div className="mt-4 flex gap-2">
+              <PrintButton onClick={() => void handlePrint()} label={printing ? "..." : l("common.print")} />
               <SecondaryButton onClick={() => setEditing(true)}>{l("notes.edit")}</SecondaryButton>
               <button type="button" onClick={() => void handleDelete()} className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:bg-slate-900 dark:text-red-400 dark:hover:bg-red-500/10">
                 {l("notes.delete")}

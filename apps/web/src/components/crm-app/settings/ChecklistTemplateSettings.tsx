@@ -116,8 +116,9 @@ export function ChecklistTemplateSettings({ apiFetch, setPanelSuccess, setPanelE
                     <div key={item.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-2 py-1 text-sm dark:bg-slate-800">
                       {editTplItem === item.id ? (
                         <div className="flex flex-1 gap-2">
-                          <input type="text" value={editTplItemForm.title} onChange={(e) => setEditTplItemForm((c) => ({ ...c, title: e.target.value }))}
-                            className="flex-1 rounded border border-black/10 px-1 py-0.5 text-sm dark:border-white/10 dark:bg-slate-900" />
+                          <textarea value={editTplItemForm.title} onChange={(e) => setEditTplItemForm((c) => ({ ...c, title: e.target.value }))}
+                            rows={3}
+                            className="flex-1 rounded border border-black/10 px-2 py-1 text-sm dark:border-white/10 dark:bg-slate-900" />
                           <input type="number" value={editTplItemForm.sortOrder} onChange={(e) => setEditTplItemForm((c) => ({ ...c, sortOrder: Number(e.target.value) }))}
                             className="w-12 rounded border border-black/10 px-1 py-0.5 text-xs dark:border-white/10 dark:bg-slate-900" />
                           <button type="button" onClick={() => void saveTplItem(item.id)} className="text-xs text-emerald-600">{l("common.ok")}</button>
@@ -125,7 +126,7 @@ export function ChecklistTemplateSettings({ apiFetch, setPanelSuccess, setPanelE
                         </div>
                       ) : (
                         <>
-                          <span>{idx + 1}. {item.title}</span>
+                          <span className="whitespace-pre-wrap">{idx + 1}. {item.title}</span>
                           <div className="flex gap-1">
                             <button type="button" onClick={() => { setEditTplItem(item.id); setEditTplItemForm({ title: item.title, description: item.description ?? "", sortOrder: item.sortOrder }); }} className="text-xs text-blue-400">{l("common.edit")}</button>
                             <button type="button" onClick={() => void removeItem(item.id)} className="text-xs text-red-400 hover:text-red-600">x</button>
@@ -136,9 +137,11 @@ export function ChecklistTemplateSettings({ apiFetch, setPanelSuccess, setPanelE
                   ))}
                 </div>
                 <div className="mt-2 flex gap-2">
-                  <input type="text" placeholder="Neuer Punkt..." value={newItemTitle[t.id] ?? ""}
+                  <textarea
+                    placeholder={l("checklist.newItem")}
+                    value={newItemTitle[t.id] ?? ""}
+                    rows={3}
                     onChange={(e) => setNewItemTitle((c) => ({ ...c, [t.id]: e.target.value }))}
-                    onKeyDown={(e) => { if (e.key === "Enter") void addItem(t.id); }}
                     className="flex-1 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-slate-900"
                   />
                   <SecondaryButton onClick={() => void addItem(t.id)}>{l("checklist.addItem")}</SecondaryButton>
