@@ -4,6 +4,10 @@
 
 Der komplette Dev-Stack (Web, API, Postgres, MinIO) laeuft in Docker mit Hot-Reload.
 
+Umgebungen:
+- `.env` = lokale Dev-Umgebung
+- `.env.server` = Werte fuer den TEST-/Server-Deploy
+
 ### Starten und Stoppen
 
 ```powershell
@@ -36,5 +40,7 @@ pnpm dev                 # Web + API nativ starten (Postgres + MinIO muessen lau
 ```powershell
 .\abgleich\crm-deploy.ps1 -Command deploy
 ```
+
+Der Deploy verwendet bewusst `.env.server` und nicht `.env`, damit Dev- und Server-Konfiguration getrennt bleiben.
 
 Oder ueber das interaktive Menue: `.\abgleich\crm-deploy.ps1`

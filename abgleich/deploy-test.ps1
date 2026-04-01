@@ -127,7 +127,7 @@ if (-not $SkipGitPush) {
 
 $tmpDump = Join-Path $env:TEMP "crm_test_deploy_dump.sql"
 $tmpStorage = Join-Path $env:TEMP "crm_test_storage.zip"
-$localEnvFile = Join-Path $repoRoot ".env"
+$localEnvFile = Join-Path $repoRoot ".env.server"
 $tmpEnvFile = Join-Path $env:TEMP "crm_test.env"
 $tmpRemoteScript = Join-Path $env:TEMP "crm_test_remote_deploy.sh"
 
@@ -159,7 +159,7 @@ if ($Mode -eq "full") {
 }
 
 if (Test-Path $localEnvFile) {
-    Info "Erzeuge TEST-.env mit Produktions-API-URL..."
+    Info "Erzeuge TEST-.env aus .env.server ..."
     $envContent = Get-Content $localEnvFile
     $hasApiUrl = $false
     $envContent = $envContent | ForEach-Object {
@@ -179,7 +179,7 @@ if (Test-Path $localEnvFile) {
     scp $tmpEnvFile "${Server}:/tmp/crm.env"
     if ($LASTEXITCODE -ne 0) { Err "SCP fuer .env fehlgeschlagen." }
 } else {
-    Warn "Lokale .env wurde nicht gefunden. Remote-Build koennte daran scheitern."
+    Err ".env.server wurde nicht gefunden. Deploy abgebrochen."
 }
 
 $remoteScript = @'
