@@ -23,9 +23,9 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioad
-      MINIO_ROOT_PASSWORD: Vivahome%2026
-      MINIO_BROWSER_REDIRECT_URL: https://s3.vivahome.de
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-https://s3.vivahome.de}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -46,13 +46,13 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/crm_monteur
       JWT_SECRET: change-me
       API_PORT: 3801
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: 9000
-      MINIO_ROOT_USER: minioad
-      MINIO_ROOT_PASSWORD: Vivahome%2026
-      MINIO_BUCKET: crm-documents
-      MINIO_USE_SSL: "false"
-      STORAGE_LOCAL_FALLBACK: "true"
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PORT: ${MINIO_PORT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      STORAGE_LOCAL_FALLBACK: ${STORAGE_LOCAL_FALLBACK}
       SMTP_HOST: localhost
       SMTP_PORT: 1025
       SMTP_FROM: crm@example.local
