@@ -243,9 +243,11 @@ export class StorageService implements OnModuleInit {
     const inMinio = await this.objectExists(objectKey);
     if (inMinio) {
       const stream = await this.client.getObject(this.bucket, objectKey);
-      const chunks: Buffer[] = [];
+      const chunks: Uint8Array[] = [];
       for await (const chunk of stream) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        chunks.push(
+          chunk instanceof Uint8Array ? chunk : Buffer.from(String(chunk)),
+        );
       }
       return Buffer.concat(chunks);
     }

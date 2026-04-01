@@ -182,7 +182,7 @@ export function InlineNotesSection({
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-2">
                   <Link
-                    href={`/settings?tab=reminders&kind=FOLLOW_UP&customerId=${encodeURIComponent(note.customer?.id ?? customerId)}${contactId ? `&contactId=${encodeURIComponent(contactId)}` : ""}${note.project?.id ? `&projectId=${encodeURIComponent(note.project.id)}` : ""}&noteId=${encodeURIComponent(note.id)}&title=${encodeURIComponent(`Wiedervorlage ${note.title || note.content.slice(0, 24)}`)}`}
+                    href={`/settings?tab=reminders&kind=FOLLOW_UP&customerId=${encodeURIComponent(note.customer?.id ?? customerId)}${contactId ? `&contactId=${encodeURIComponent(contactId)}` : ""}${note.project?.id ? `&projectId=${encodeURIComponent(note.project.id)}` : ""}&noteId=${encodeURIComponent(note.id)}&title=${encodeURIComponent(`${l("reminder.prefixFollowUp")} ${note.title || note.content.slice(0, 24)}`)}`}
                     className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
                   >
                     {l("settings.remindersQuickCreate")}

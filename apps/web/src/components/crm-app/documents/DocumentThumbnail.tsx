@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Image from "next/image";
 import type { DocumentItem } from "../types";
 import { cx } from "../shared";
+import { useI18n } from "../../../i18n-context";
 
 export function DocumentThumbnail({
   document,
@@ -14,6 +15,7 @@ export function DocumentThumbnail({
   thumbnailUrl?: string;
   hasError?: boolean;
 }) {
+  const { t: l } = useI18n();
   const isImage = document.mimeType.startsWith("image/");
   const isPdf = document.mimeType === "application/pdf";
   const isSpreadsheet = /spreadsheet|excel|\.xls/i.test(document.mimeType);
@@ -27,7 +29,7 @@ export function DocumentThumbnail({
         <svg className="h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <span className="text-[9px] font-medium text-amber-600 dark:text-amber-400">fehlt</span>
+        <span className="text-[9px] font-medium text-amber-600 dark:text-amber-400">{l("doc.fileMissingBadge")}</span>
       </div>
     );
   }
@@ -59,7 +61,6 @@ export function DocumentThumbnail({
     );
   }
 
-  // Platzhalter fuer verschiedene Dateitypen
   let icon: ReactNode;
   let label: string;
   let bgClass: string;
@@ -73,7 +74,7 @@ export function DocumentThumbnail({
       </svg>
     );
   } else if (isImage) {
-    label = ext || "Bild";
+    label = ext || l("doc.imageLabel");
     bgClass = "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-500/30";
     icon = (
       <svg className="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -97,7 +98,7 @@ export function DocumentThumbnail({
       </svg>
     );
   } else {
-    label = ext || "Datei";
+    label = ext || l("doc.fileLabel");
     bgClass = "bg-slate-50 dark:bg-slate-950 border-black/10 dark:border-white/10";
     icon = (
       <svg className="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

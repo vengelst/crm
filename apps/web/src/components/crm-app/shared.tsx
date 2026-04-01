@@ -3,6 +3,7 @@
 import { MapPinned } from "lucide-react";
 import Link from "next/link";
 import { type ChangeEvent, type MouseEventHandler, type ReactNode, useState } from "react";
+import { useI18n } from "../../i18n-context";
 
 // ── Utility-Funktionen ──────────────────────────────────────
 
@@ -288,12 +289,15 @@ export function SelectField({
   value,
   onChange,
   options,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
   options: { value: string; label: string }[];
+  placeholder?: string;
 }) {
+  const { t } = useI18n();
   return (
     <div className="grid gap-2">
       <label className="text-sm font-medium">{label}</label>
@@ -302,7 +306,7 @@ export function SelectField({
         onChange={onChange}
         className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
       >
-        <option value="">Bitte waehlen</option>
+        <option value="">{placeholder ?? t("common.selectPlaceholder")}</option>
         {options.map((option) => (
           <option key={`${option.value}-${option.label}`} value={option.value}>
             {option.label}
@@ -337,7 +341,9 @@ export function TextArea({
 
 // ── Druckfunktion ───────────────────────────────────
 
-export function PrintButton({ onClick, label = "Drucken" }: { onClick: () => void; label?: string }) {
+export function PrintButton({ onClick, label }: { onClick: () => void; label?: string }) {
+  const { t: tShared } = useI18n();
+  const resolvedLabel = label ?? tShared("common.print");
   return (
     <button
       type="button"
@@ -347,7 +353,7 @@ export function PrintButton({ onClick, label = "Drucken" }: { onClick: () => voi
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
       </svg>
-      {label}
+      {resolvedLabel}
     </button>
   );
 }

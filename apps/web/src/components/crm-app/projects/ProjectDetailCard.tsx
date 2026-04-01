@@ -63,7 +63,7 @@ export function ProjectDetailCard({
   ]);
 
   const hasPricing = project.weeklyFlatRate != null || project.hourlyRateUpTo40h != null || project.includedHoursPerWeek != null || project.overtimeRate != null;
-  const projectReminderHref = `/settings?tab=reminders&kind=TODO&customerId=${encodeURIComponent(project.customerId)}&projectId=${encodeURIComponent(project.id)}&title=${encodeURIComponent(`To-do ${project.projectNumber} ${project.title}`)}`;
+  const projectReminderHref = `/settings?tab=reminders&kind=TODO&customerId=${encodeURIComponent(project.customerId)}&projectId=${encodeURIComponent(project.id)}&title=${encodeURIComponent(`${l("reminder.prefixTodo")} ${project.projectNumber} ${project.title}`)}`;
 
   const fmt = (value?: number | null) => value != null ? `${value.toFixed(2)} EUR` : "-";
 

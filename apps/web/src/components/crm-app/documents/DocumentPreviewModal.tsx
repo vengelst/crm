@@ -3,6 +3,7 @@
 import Image from "next/image";
 import type { DocumentPreviewState } from "../types";
 import { SecondaryButton } from "../shared";
+import { useI18n } from "../../../i18n-context";
 
 export function DocumentPreviewModal({
   preview,
@@ -13,6 +14,7 @@ export function DocumentPreviewModal({
   onPrint: () => void;
   onClose: () => void;
 }) {
+  const { t: l } = useI18n();
   const isImage = preview.mimeType.startsWith("image/");
   const isPdf = preview.mimeType === "application/pdf";
 
@@ -25,8 +27,8 @@ export function DocumentPreviewModal({
             <p className="text-sm text-slate-500">{preview.mimeType}</p>
           </div>
           <div className="flex gap-2">
-            <SecondaryButton onClick={onPrint}>Drucken</SecondaryButton>
-            <SecondaryButton onClick={onClose}>Schliessen</SecondaryButton>
+            <SecondaryButton onClick={onPrint}>{l("common.print")}</SecondaryButton>
+            <SecondaryButton onClick={onClose}>{l("common.close")}</SecondaryButton>
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-black/10 bg-slate-50 p-2 dark:border-white/10 dark:bg-slate-950">
@@ -53,7 +55,7 @@ export function DocumentPreviewModal({
                 rel="noreferrer"
                 className="rounded-xl border border-black/10 px-4 py-2 text-sm font-medium hover:bg-slate-100 dark:border-white/10 dark:hover:bg-slate-800"
               >
-                Dokument in neuem Tab oeffnen
+                {l("doc.openInNewTab")}
               </a>
             </div>
           )}

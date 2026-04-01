@@ -74,10 +74,23 @@ export class DocumentsController {
     if (request.user?.type === 'worker') {
       if (dto.entityType !== 'PROJECT' || !dto.entityId) {
         throw new BadRequestException(
-          'Monteure duerfen nur Projektdokumente hochladen.',
+          'Workers may only upload project documents.',
         );
       }
       await this.documentsService.assertProjectAssignment(
+        request.user.sub,
+        dto.entityId,
+      );
+    }
+
+    // kiosk-user: nur Projekt-Dokumente fuer verwaltete Projekte
+    if (request.user?.type === 'kiosk-user') {
+      if (dto.entityType !== 'PROJECT' || !dto.entityId) {
+        throw new BadRequestException(
+          'Kiosk users may only upload project documents.',
+        );
+      }
+      await this.documentsService.assertKioskProjectAccess(
         request.user.sub,
         dto.entityId,
       );
@@ -143,7 +156,7 @@ export class DocumentsController {
     @Req() request: RequestWithUser,
   ) {
     if (!file) {
-      throw new BadRequestException('Datei fehlt.');
+      throw new BadRequestException('File is missing.');
     }
 
     // Scope-Pruefung fuer Worker und kiosk-user

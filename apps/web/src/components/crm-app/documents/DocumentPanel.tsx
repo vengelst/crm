@@ -58,6 +58,12 @@ export function DocumentPanel({
   const filteredDocuments = documentTypeFilter
     ? documents.filter((document) => document.documentType === documentTypeFilter)
     : documents;
+  const formatDocumentDate = (value: string) =>
+    new Date(value).toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
 
   async function handleUpload() {
     setUploading(true);
@@ -172,107 +178,150 @@ export function DocumentPanel({
         {filteredDocuments.length === 0 ? (
           <p className="text-sm text-slate-500">{l("doc.none")}</p>
         ) : (
-          filteredDocuments.map((document) => {
-            const fileError = thumbnailErrors[document.id];
-            const uploaderLabel = document.uploadedByWorker
-              ? `${document.uploadedByWorker.firstName} ${document.uploadedByWorker.lastName} (${document.uploadedByWorker.workerNumber})`
-              : document.uploadedBy?.displayName || document.uploadedBy?.email || null;
-            return (
-              <div
-                key={document.id}
-                className={cx(
-                  "flex flex-col gap-2 rounded-2xl border p-3 lg:flex-row lg:items-center lg:justify-between",
-                  fileError
-                    ? "border-amber-300 bg-amber-50/50 dark:border-amber-500/40 dark:bg-amber-500/5"
-                    : "border-black/10 dark:border-white/10",
-                )}
-              >
-                <div className="flex items-start gap-3">
-                  <DocumentThumbnail
-                    document={document}
-                    thumbnailUrl={thumbnailUrls[document.id]}
-                    hasError={Boolean(fileError)}
-                  />
-                  <div className="min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => onOpenDocument(document)}
-                      className="text-left font-medium hover:underline"
+          <div className="overflow-x-auto rounded-2xl border border-black/10 dark:border-white/10">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead className="bg-slate-50/80 dark:bg-slate-900/80">
+                <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
+                  <th className="px-3 py-2">{l("doc.title")}</th>
+                  <th className="px-3 py-2">{l("doc.type")}</th>
+                  <th className="px-3 py-2">{l("doc.fileOrImage")}</th>
+                  <th className="px-3 py-2">{l("doc.uploadedBy")}</th>
+                  <th className="px-3 py-2">{l("table.date")}</th>
+                  <th className="px-3 py-2">{l("table.status")}</th>
+                  <th className="px-3 py-2 text-right">{l("common.actions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDocuments.map((document) => {
+                  const fileError = thumbnailErrors[document.id];
+                  const uploaderLabel = document.uploadedByWorker
+                    ? `${document.uploadedByWorker.firstName} ${document.uploadedByWorker.lastName} (${document.uploadedByWorker.workerNumber})`
+                    : document.uploadedBy?.displayName || document.uploadedBy?.email || "-";
+                  const statusLabel = document.approvalStatus === "SUBMITTED"
+                    ? l("doc.submitted")
+                    : document.approvalStatus === "APPROVED"
+                      ? l("doc.approved")
+                      : document.approvalStatus === "REJECTED"
+                        ? l("doc.rejected")
+                        : document.approvalStatus === "ARCHIVED"
+                          ? l("doc.archived")
+                          : l("doc.draft");
+                  const statusClass = document.approvalStatus === "SUBMITTED"
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400"
+                    : document.approvalStatus === "APPROVED"
+                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
+                      : document.approvalStatus === "REJECTED"
+                        ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
+                        : document.approvalStatus === "ARCHIVED"
+                          ? "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400"
+                          : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300";
+                  return (
+                    <tr
+                      key={document.id}
+                      className={cx(
+                        "border-b border-black/5 align-top last:border-0 dark:border-white/5",
+                        fileError ? "bg-amber-50/40 dark:bg-amber-500/5" : "",
+                      )}
                     >
-                      {document.title || document.originalFilename}
-                    </button>
-                    <div className="text-sm text-slate-500">
-                      {getDocumentTypeLabel(document.documentType, l)} · {document.mimeType}
-                    </div>
-                    {uploaderLabel ? (
-                      <div className="text-xs text-slate-500">
-                        {l("doc.uploadedBy")} {uploaderLabel}
-                      </div>
-                    ) : null}
-                    {document.approvalStatus && document.approvalStatus !== "DRAFT" ? (
-                      <span className={cx("mt-0.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold",
-                        document.approvalStatus === "SUBMITTED" ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400" :
-                        document.approvalStatus === "APPROVED" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" :
-                        document.approvalStatus === "REJECTED" ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400" :
-                        document.approvalStatus === "ARCHIVED" ? "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400" :
-                        "bg-slate-100 text-slate-600"
-                      )}>
-                        {document.approvalStatus === "SUBMITTED" ? l("doc.submitted") :
-                         document.approvalStatus === "APPROVED" ? l("doc.approved") :
-                         document.approvalStatus === "REJECTED" ? l("doc.rejected") :
-                         document.approvalStatus === "ARCHIVED" ? l("doc.archived") :
-                         document.approvalStatus}
-                      </span>
-                    ) : null}
-                    {fileError ? (
-                      <div className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
-                        {fileError}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <SecondaryButton onClick={() => onOpenDocument(document)}>
-                    {l("doc.show")}
-                  </SecondaryButton>
-                  <SecondaryButton onClick={() => onPrintDocument(document)}>{l("doc.print")}</SecondaryButton>
-                  <SecondaryButton
-                    onClick={() => onDownload(document.id, document.originalFilename)}
-                  >
-                    {l("doc.download")}
-                  </SecondaryButton>
-                  {document.mimeType.startsWith("image/") && thumbnailUrls[document.id] ? (
-                    <SecondaryButton
-                      onClick={() =>
-                        setDrawingDraft({
-                          title: `${document.title || document.originalFilename} - ${l("doc.annotation")}`,
-                          sourceUrl: thumbnailUrls[document.id],
-                          sourceDocumentId: document.id,
-                          description: `${l("doc.annotationOf")} ${document.title || document.originalFilename}`,
-                        })
-                      }
-                    >
-                      {l("doc.annotate")}
-                    </SecondaryButton>
-                  ) : null}
-                  {onSubmitDocument && (!document.approvalStatus || document.approvalStatus === "DRAFT" || document.approvalStatus === "REJECTED") ? (
-                    <SecondaryButton onClick={() => onSubmitDocument(document.id)}>{l("doc.submit")}</SecondaryButton>
-                  ) : null}
-                  {onApproveDocument && document.approvalStatus === "SUBMITTED" ? (
-                    <SecondaryButton onClick={() => onApproveDocument(document.id)}>{l("doc.approve")}</SecondaryButton>
-                  ) : null}
-                  {onRejectDocument && document.approvalStatus === "SUBMITTED" ? (
-                    <SecondaryButton onClick={() => onRejectDocument(document.id)}>{l("doc.reject")}</SecondaryButton>
-                  ) : null}
-                  {allowDelete ? (
-                    <SecondaryButton onClick={() => onDeleteDocument(document.id)}>
-                      {l("common.delete")}
-                    </SecondaryButton>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })
+                      <td className="px-3 py-3">
+                        <div className="flex items-start gap-3">
+                          <DocumentThumbnail
+                            document={document}
+                            thumbnailUrl={thumbnailUrls[document.id]}
+                            hasError={Boolean(fileError)}
+                          />
+                          <div className="min-w-0">
+                            <button
+                              type="button"
+                              onClick={() => onOpenDocument(document)}
+                              className="text-left font-medium hover:underline"
+                            >
+                              {document.title || document.originalFilename}
+                            </button>
+                            <div className="text-xs text-slate-500">{document.originalFilename}</div>
+                            {document.description ? (
+                              <div className="mt-1 line-clamp-2 text-xs text-slate-500">
+                                {document.description}
+                              </div>
+                            ) : null}
+                            {fileError ? (
+                              <div className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+                                {fileError}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-slate-600 dark:text-slate-300">
+                        {getDocumentTypeLabel(document.documentType, l)}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-slate-500">
+                        <div>{document.mimeType}</div>
+                      </td>
+                      <td className="px-3 py-3 text-xs text-slate-500">
+                        {uploaderLabel}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-slate-500">
+                        {formatDocumentDate(document.createdAt)}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className={cx("inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold", statusClass)}>
+                          {statusLabel}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <SecondaryButton onClick={() => onOpenDocument(document)}>
+                            {l("doc.show")}
+                          </SecondaryButton>
+                          <SecondaryButton onClick={() => onPrintDocument(document)}>
+                            {l("doc.print")}
+                          </SecondaryButton>
+                          <SecondaryButton onClick={() => onDownload(document.id, document.originalFilename)}>
+                            {l("doc.download")}
+                          </SecondaryButton>
+                          {document.mimeType.startsWith("image/") && thumbnailUrls[document.id] ? (
+                            <SecondaryButton
+                              onClick={() =>
+                                setDrawingDraft({
+                                  title: `${document.title || document.originalFilename} - ${l("doc.annotation")}`,
+                                  sourceUrl: thumbnailUrls[document.id],
+                                  sourceDocumentId: document.id,
+                                  description: `${l("doc.annotationOf")} ${document.title || document.originalFilename}`,
+                                })
+                              }
+                            >
+                              {l("doc.annotate")}
+                            </SecondaryButton>
+                          ) : null}
+                          {onSubmitDocument && (!document.approvalStatus || document.approvalStatus === "DRAFT" || document.approvalStatus === "REJECTED") ? (
+                            <SecondaryButton onClick={() => onSubmitDocument(document.id)}>
+                              {l("doc.submit")}
+                            </SecondaryButton>
+                          ) : null}
+                          {onApproveDocument && document.approvalStatus === "SUBMITTED" ? (
+                            <SecondaryButton onClick={() => onApproveDocument(document.id)}>
+                              {l("doc.approve")}
+                            </SecondaryButton>
+                          ) : null}
+                          {onRejectDocument && document.approvalStatus === "SUBMITTED" ? (
+                            <SecondaryButton onClick={() => onRejectDocument(document.id)}>
+                              {l("doc.reject")}
+                            </SecondaryButton>
+                          ) : null}
+                          {allowDelete ? (
+                            <SecondaryButton onClick={() => onDeleteDocument(document.id)}>
+                              {l("common.delete")}
+                            </SecondaryButton>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
       {showCreateModal ? (

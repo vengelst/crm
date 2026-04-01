@@ -105,13 +105,13 @@ export function KioskProjectView({ project, timesheets, apiFetch, workerId, auth
         const url = window.URL.createObjectURL(blob);
         const win = window.open("", "_blank", "width=1000,height=800");
         if (!win) return;
-        win.document.write(`<!DOCTYPE html><html><head><title>Bild drucken</title>
+        win.document.write(`<!DOCTYPE html><html><head><title>${l("doc.printImage")}</title>
 <style>
   @page { margin: 0; }
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #fff; }
   body { display: flex; align-items: center; justify-content: center; }
   img { width: 100vw; height: 100vh; object-fit: contain; }
-</style></head><body><img src="${url}" alt="Druckbild" /></body></html>`);
+</style></head><body><img src="${url}" alt="${l("doc.printImageAlt")}" /></body></html>`);
         win.document.close();
         win.setTimeout(() => {
           win.print();

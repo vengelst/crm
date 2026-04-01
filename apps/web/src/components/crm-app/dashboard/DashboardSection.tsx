@@ -50,18 +50,18 @@ export function DashboardSection({
   function workerStatus(w: Worker): { label: string; color: string } {
     const lastEntry = w.timeEntries?.[0];
     if (lastEntry?.entryType === "CLOCK_IN") {
-      return { label: "arbeitet", color: "bg-emerald-500" };
+      return { label: l("dash.statusWorking"), color: "bg-emerald-500" };
     }
     const hasAssignment = (w.assignments ?? []).length > 0;
     if (hasAssignment) {
-      return { label: "nicht gestartet", color: "bg-red-500" };
+      return { label: l("dash.statusNotStarted"), color: "bg-red-500" };
     }
-    return { label: "kein Projekt", color: "bg-amber-500" };
+    return { label: l("dash.statusNoProject"), color: "bg-amber-500" };
   }
 
   function projectTeamHint(p: Project): string {
     const assignedWorkers = (p.assignments ?? []).map((a) => a.worker);
-    if (assignedWorkers.length === 0) return "Keine Monteure zugeordnet";
+    if (assignedWorkers.length === 0) return l("dash.noAssignment");
 
     // Pruefen ob ein Team alle zugeordneten Monteure abdeckt
     const workerIds = new Set(assignedWorkers.map((w) => w.id));
@@ -75,7 +75,7 @@ export function DashboardSection({
     if (assignedWorkers.length <= 3) {
       return assignedWorkers.map((w) => `${w.firstName} ${w.lastName}`).join(", ");
     }
-    return `${assignedWorkers.length} Monteure zugeordnet`;
+    return `${assignedWorkers.length} ${l("dash.workersAssigned")}`;
   }
 
   function workerMeta(w: Worker) {
@@ -134,14 +134,14 @@ export function DashboardSection({
     <div className="grid gap-6">
       {summary ? (
         <div className="grid gap-4 md:grid-cols-4">
-          <MiniStat title="Kunden" value={summary.customers} />
-          <MiniStat title="Projekte" value={summary.projects} />
-          <MiniStat title="Monteure" value={summary.workers} />
-          <MiniStat title="Offene Wochenzettel" value={summary.openTimesheets} />
+          <MiniStat title={l("dash.sectionCustomers")} value={summary.customers} />
+          <MiniStat title={l("dash.sectionProjects")} value={summary.projects} />
+          <MiniStat title={l("dash.sectionWorkers")} value={summary.workers} />
+          <MiniStat title={l("dash.openTimesheets")} value={summary.openTimesheets} />
         </div>
       ) : null}
 
-      <SectionCard title="Kunden">
+      <SectionCard title={l("dash.sectionCustomers")}>
         <DashboardList
           items={customers}
           href={(item) => `/customers/${item.id}`}
@@ -150,7 +150,7 @@ export function DashboardSection({
         />
       </SectionCard>
 
-      <SectionCard title="Projekte">
+      <SectionCard title={l("dash.sectionProjects")}>
         <div className="grid gap-2">
           {projects.map((p) => (
             <Link
@@ -168,7 +168,7 @@ export function DashboardSection({
         </div>
       </SectionCard>
 
-      <SectionCard title="Monteure">
+      <SectionCard title={l("dash.sectionWorkers")}>
         <div className="grid gap-2">
           {workers.filter((w) => w.active !== false).map((w) => {
             const st = workerStatus(w);

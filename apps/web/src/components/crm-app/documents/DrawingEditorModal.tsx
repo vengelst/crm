@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "../../../i18n-context";
 import { cx, SecondaryButton } from "../shared";
 
 export function DrawingEditorModal({
@@ -16,6 +17,7 @@ export function DrawingEditorModal({
   onClose: () => void;
   onSave: (file: File, mode: "copy" | "replace") => void;
 }) {
+  const { t: l } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const baseImageRef = useRef<HTMLImageElement | null>(null);
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
@@ -25,15 +27,15 @@ export function DrawingEditorModal({
   const pendingFileRef = useRef<File | null>(null);
 
   const colors = [
-    { value: "#dc2626", label: "Rot" },
-    { value: "#16a34a", label: "Gruen" },
-    { value: "#2563eb", label: "Blau" },
-    { value: "#000000", label: "Schwarz" },
+    { value: "#dc2626", label: l("draw.red") },
+    { value: "#16a34a", label: l("draw.green") },
+    { value: "#2563eb", label: l("draw.blue") },
+    { value: "#000000", label: l("draw.black") },
   ];
   const widths = [
-    { value: 2, label: "Duenn" },
-    { value: 4, label: "Mittel" },
-    { value: 8, label: "Dick" },
+    { value: 2, label: l("draw.thin") },
+    { value: 4, label: l("draw.medium") },
+    { value: 8, label: l("draw.thick") },
   ];
 
   // Refs fuer aktuelle Tool-Einstellungen (damit der Effect nicht neu bindet)
@@ -146,7 +148,6 @@ export function DrawingEditorModal({
   async function createFile(): Promise<File | null> {
     const canvas = canvasRef.current;
     if (!canvas) return null;
-    // Fuer den Export: weissen Hintergrund unter die Zeichnung legen
     const exportCanvas = window.document.createElement("canvas");
     exportCanvas.width = canvas.width;
     exportCanvas.height = canvas.height;
@@ -167,11 +168,9 @@ export function DrawingEditorModal({
     const file = await createFile();
     if (!file) return;
     if (sourceDocumentId) {
-      // Bild-Anmerkung: Dialog zeigen
       pendingFileRef.current = file;
       setShowSaveDialog(true);
     } else {
-      // Freie Zeichnung: direkt als Kopie
       onSave(file, "copy");
     }
   }
@@ -198,27 +197,25 @@ export function DrawingEditorModal({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="truncate text-lg font-semibold">{title}</h3>
-            <p className="text-xs text-slate-500">Mit Maus oder Finger zeichnen.</p>
+            <p className="text-xs text-slate-500">{l("draw.drawHint")}</p>
           </div>
           <div className="flex shrink-0 gap-2">
-            <button type="button" onClick={() => void handleSave()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500">Speichern</button>
-            <SecondaryButton onClick={onClose}>Abbrechen</SecondaryButton>
+            <button type="button" onClick={() => void handleSave()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500">{l("draw.save")}</button>
+            <SecondaryButton onClick={onClose}>{l("draw.cancel")}</SecondaryButton>
           </div>
         </div>
 
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-black/10 bg-slate-50 px-3 py-2 dark:border-white/10 dark:bg-slate-950">
-          {/* Werkzeuge */}
-          <button type="button" onClick={() => setTool("pen")} className={toolBtn(tool === "pen")} title="Stift">
+          <button type="button" onClick={() => setTool("pen")} className={toolBtn(tool === "pen")} title={l("draw.pen")}>
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
           </button>
-          <button type="button" onClick={() => setTool("eraser")} className={toolBtn(tool === "eraser")} title="Radierer">
+          <button type="button" onClick={() => setTool("eraser")} className={toolBtn(tool === "eraser")} title={l("draw.eraser")}>
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
           </button>
 
           <div className="mx-1 h-6 w-px bg-black/10 dark:bg-white/10" />
 
-          {/* Farben */}
           {colors.map((c) => (
             <button key={c.value} type="button" onClick={() => { setColor(c.value); setTool("pen"); }} title={c.label}
               className={cx("h-8 w-8 rounded-full border-2 transition", color === c.value && tool === "pen" ? "border-slate-900 ring-2 ring-slate-900/30 dark:border-white dark:ring-white/30" : "border-black/20 dark:border-white/20")}
@@ -228,7 +225,6 @@ export function DrawingEditorModal({
 
           <div className="mx-1 h-6 w-px bg-black/10 dark:bg-white/10" />
 
-          {/* Strichstaerke */}
           {widths.map((w) => (
             <button key={w.value} type="button" onClick={() => setLineWidth(w.value)} title={w.label}
               className={toolBtn(lineWidth === w.value)}>
@@ -238,7 +234,7 @@ export function DrawingEditorModal({
 
           <div className="mx-1 h-6 w-px bg-black/10 dark:bg-white/10" />
 
-          <button type="button" onClick={clearDrawing} className={toolBtn(false)} title="Zuruecksetzen">
+          <button type="button" onClick={clearDrawing} className={toolBtn(false)} title={l("draw.clear")}>
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
           </button>
         </div>
@@ -255,24 +251,23 @@ export function DrawingEditorModal({
         </div>
       </div>
 
-      {/* Speicherdialog bei Bild-Anmerkung */}
       {showSaveDialog ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
-            <h3 className="mb-2 text-lg font-semibold">Anmerkung speichern</h3>
-            <p className="mb-5 text-sm text-slate-500">Soll das bestehende Bild mit der Anmerkung aktualisiert werden, oder soll eine Kopie angelegt werden?</p>
+            <h3 className="mb-2 text-lg font-semibold">{l("draw.saveDialogTitle")}</h3>
+            <p className="mb-5 text-sm text-slate-500">{l("draw.saveDialogText")}</p>
             <div className="grid gap-3">
               <button type="button" onClick={() => confirmSave("replace")}
                 className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200">
-                Original aktualisieren
+                {l("draw.updateOriginalBtn")}
               </button>
               <button type="button" onClick={() => confirmSave("copy")}
                 className="rounded-xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:hover:bg-slate-700">
-                Als Kopie speichern
+                {l("draw.saveAsCopyBtn")}
               </button>
               <button type="button" onClick={() => setShowSaveDialog(false)}
                 className="rounded-xl px-4 py-2 text-sm text-slate-500 transition hover:text-slate-700 dark:hover:text-slate-300">
-                Abbrechen
+                {l("draw.cancel")}
               </button>
             </div>
           </div>

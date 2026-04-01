@@ -762,13 +762,13 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         const url = window.URL.createObjectURL(blob);
         const win = window.open("", "_blank", "width=1000,height=800");
         if (!win) return;
-        win.document.write(`<!DOCTYPE html><html><head><title>Bild drucken</title>
+        win.document.write(`<!DOCTYPE html><html><head><title>${l("doc.printImage")}</title>
 <style>
   @page { margin: 0; }
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #fff; }
   body { display: flex; align-items: center; justify-content: center; }
   img { width: 100vw; height: 100vh; object-fit: contain; }
-</style></head><body><img src="${url}" alt="Druckbild" /></body></html>`);
+</style></head><body><img src="${url}" alt="${l("doc.printImageAlt")}" /></body></html>`);
         win.document.close();
         win.setTimeout(() => {
           win.print();
@@ -1058,7 +1058,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     <Link href="/projects" className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800">
                       {l("common.backToList")}
                     </Link>
-                    <h2 className="text-xl font-semibold">{l("proj.title")} Detail</h2>
+                    <h2 className="text-xl font-semibold">{l("proj.detailHeading")}</h2>
                   </div>
                   <ProjectDetailCard
                     project={selectedProject}
@@ -1205,10 +1205,10 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                       }))
                     }
                     options={[
-                      { value: "VIDEO", label: "Video" },
-                      { value: "ELECTRICAL", label: l("proj.serviceType") === "Service type" ? "Electrical" : "Elektrik" },
-                      { value: "SERVICE", label: "Service" },
-                      { value: "OTHER", label: activeLang === "en" ? "Other" : "Sonstiges" },
+                      { value: "VIDEO", label: l("proj.serviceVideo") },
+                      { value: "ELECTRICAL", label: l("proj.serviceElectrical") },
+                      { value: "SERVICE", label: l("proj.serviceService") },
+                      { value: "OTHER", label: l("proj.serviceOther") },
                     ]}
                   />
                 </FormRow>

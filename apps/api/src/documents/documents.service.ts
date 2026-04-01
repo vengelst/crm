@@ -134,7 +134,7 @@ export class DocumentsService {
     uploadedByWorkerId?: string,
   ) {
     if (!file) {
-      throw new BadRequestException('Datei fehlt.');
+      throw new BadRequestException('File is missing.');
     }
 
     const storageKey = this.buildStorageKey(file.originalname);
@@ -190,9 +190,18 @@ export class DocumentsService {
       where: { workerId, projectId, active: true },
     });
     if (!assignment) {
-      throw new BadRequestException(
-        'Keine Zuordnung zu diesem Projekt vorhanden.',
-      );
+      throw new BadRequestException('No assignment to this project.');
+    }
+  }
+
+  /** Check that a kiosk-user manages the given project (for upload scope). */
+  async assertKioskProjectAccess(userId: string, projectId: string) {
+    const managedProjects = await this.prisma.project.findMany({
+      where: { deletedAt: null, internalProjectManagerUserId: userId },
+      select: { id: true },
+    });
+    if (!managedProjects.some((p) => p.id === projectId)) {
+      throw new BadRequestException('No access to this project.');
     }
   }
 
@@ -214,7 +223,7 @@ export class DocumentsService {
           link.entityType === 'PROJECT' && allowedProjectIds.has(link.entityId),
       );
       if (!hasAccess) {
-        throw new NotFoundException('Dokument nicht gefunden.');
+        throw new NotFoundException('Document not found.');
       }
     } else if (userType === 'kiosk-user') {
       // kiosk-user: nur Dokumente von Projekten, die diesem Benutzer zugeordnet sind
@@ -231,7 +240,7 @@ export class DocumentsService {
           link.entityType === 'PROJECT' && managedIds.has(link.entityId),
       );
       if (!hasAccess) {
-        throw new NotFoundException('Dokument nicht gefunden.');
+        throw new NotFoundException('Document not found.');
       }
     }
   }
@@ -248,7 +257,7 @@ export class DocumentsService {
     const status = document.approvalStatus as string;
     if (status !== 'DRAFT' && status !== 'REJECTED') {
       throw new BadRequestException(
-        'Dokument kann nach Einreichung/Freigabe nicht mehr ersetzt werden.',
+        'Document cannot be replaced after submission or approval.',
       );
     }
 
@@ -289,7 +298,7 @@ export class DocumentsService {
     };
     if (!(allowed[current] ?? []).includes(next)) {
       throw new BadRequestException(
-        `Statuswechsel von ${current} nach ${next} ist nicht erlaubt.`,
+        `Status transition from ${current} to ${next} is not allowed.`,
       );
     }
   }
@@ -336,7 +345,7 @@ export class DocumentsService {
     });
 
     if (!document) {
-      throw new NotFoundException('Dokument nicht gefunden.');
+      throw new NotFoundException('Document not found.');
     }
 
     return document;
@@ -374,9 +383,7 @@ export class DocumentsService {
       return { stream, document };
     }
 
-    throw new NotFoundException(
-      'Datei weder in MinIO noch im lokalen Storage vorhanden.',
-    );
+    throw new NotFoundException('File not found in storage.');
   }
 
   /**

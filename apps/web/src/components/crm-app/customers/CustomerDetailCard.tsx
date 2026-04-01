@@ -82,7 +82,7 @@ export function CustomerDetailCard({
     }
   };
 
-  const customerReminderHref = `/settings?tab=reminders&kind=FOLLOW_UP&customerId=${encodeURIComponent(customer.id)}&title=${encodeURIComponent(`Wiedervorlage ${customer.companyName}`)}`;
+  const customerReminderHref = `/settings?tab=reminders&kind=FOLLOW_UP&customerId=${encodeURIComponent(customer.id)}&title=${encodeURIComponent(`${l("reminder.prefixFollowUp")} ${customer.companyName}`)}`;
 
   function printCustomer() {
     const addr = formatAddress([customer.addressLine1, customer.addressLine2, customer.postalCode, customer.city, customer.country]);
@@ -349,7 +349,7 @@ function ContactCardWithNotes({
   const { t: l } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const reminderHref = contact.id
-    ? `/settings?tab=reminders&kind=CALLBACK&customerId=${encodeURIComponent(customerId)}&contactId=${encodeURIComponent(contact.id)}&title=${encodeURIComponent(`Rueckruf ${contact.firstName} ${contact.lastName}`)}`
+    ? `/settings?tab=reminders&kind=CALLBACK&customerId=${encodeURIComponent(customerId)}&contactId=${encodeURIComponent(contact.id)}&title=${encodeURIComponent(`${l("reminder.prefixCallback")} ${contact.firstName} ${contact.lastName}`)}`
     : "";
 
   return (
