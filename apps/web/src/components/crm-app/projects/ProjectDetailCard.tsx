@@ -7,7 +7,7 @@ import type {
   Project, ProjectFinancials, TimesheetItem, DocumentItem, Worker,
   DocumentFormState,
 } from "../types";
-import { cx, formatAddress, mapsUrlFromParts, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow, MessageBar } from "../shared";
+import { CollapsibleContent, CollapseIndicator, cx, formatAddress, mapsUrlFromParts, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow, MessageBar } from "../shared";
 import { DocumentPanel } from "../documents";
 import { TimesheetList } from "./TimesheetList";
 import { ProjectWorkRecordsModal } from "./ProjectWorkRecordsModal";
@@ -240,13 +240,13 @@ export function ProjectDetailCard({
           <button
             type="button"
             onClick={() => setFinancialsOpen((current) => !current)}
-            className="flex w-full items-center justify-between gap-3 text-left"
+            className="flex w-full items-center justify-between gap-3 rounded-xl border-2 border-emerald-500 bg-emerald-50/70 px-4 py-3 text-left transition hover:bg-emerald-100/70 dark:border-emerald-400/70 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20"
           >
             <h4 className="text-base font-semibold">{l("proj.financials")}</h4>
-            <span className="text-sm font-medium text-slate-500">{financialsOpen ? "▲" : "▼"}</span>
+            <CollapseIndicator open={financialsOpen} />
           </button>
-          {financialsOpen ? (
-            <div className="mt-3 grid gap-4">
+          <CollapsibleContent open={financialsOpen}>
+            <div className="grid gap-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <FinancialKpi label={l("kpi.totalHours")} value={`${financials.totalHours} h`} />
                 <FinancialKpi label={l("kpi.overtime")} value={`${financials.overtimeHours} h`} />
@@ -317,7 +317,7 @@ export function ProjectDetailCard({
                 </div>
               ) : null}
             </div>
-          ) : null}
+          </CollapsibleContent>
         </div>
       ) : null}
 

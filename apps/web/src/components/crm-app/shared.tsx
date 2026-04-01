@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPinned } from "lucide-react";
+import { ChevronDown, MapPinned } from "lucide-react";
 import Link from "next/link";
 import { type ChangeEvent, type MouseEventHandler, type ReactNode, useState } from "react";
 import { useI18n } from "../../i18n-context";
@@ -223,6 +223,40 @@ export function MapLinkButton({ href, children }: { href: string; children: Reac
       <MapPinned className="h-4 w-4" />
       {children}
     </a>
+  );
+}
+
+export function CollapseIndicator({ open }: { open: boolean }) {
+  return (
+    <ChevronDown
+      className={cx(
+        "h-7 w-7 shrink-0 stroke-[3] text-emerald-600 transition-transform dark:text-emerald-400",
+        open ? "rotate-180" : "rotate-0",
+      )}
+    />
+  );
+}
+
+export function CollapsibleContent({
+  open,
+  children,
+  className,
+}: {
+  open: boolean;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cx(
+        "grid transition-all duration-300 ease-out",
+        open ? "mt-3 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+      )}
+    >
+      <div className={cx("min-h-0 overflow-hidden", className)}>
+        {children}
+      </div>
+    </div>
   );
 }
 

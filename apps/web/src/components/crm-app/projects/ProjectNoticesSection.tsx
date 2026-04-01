@@ -3,7 +3,7 @@ import { useI18n } from "../../../i18n-context";
 
 import { useCallback, useEffect, useState } from "react";
 import type { ProjectNotice } from "../types";
-import { cx, SecondaryButton, Field, TextArea } from "../shared";
+import { CollapsibleContent, CollapseIndicator, cx, SecondaryButton, Field, TextArea } from "../shared";
 
 export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }: {
   projectId: string;
@@ -95,13 +95,13 @@ export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }
       <button
         type="button"
         onClick={() => setExpanded((current) => !current)}
-        className="flex w-full items-center justify-between gap-3 text-left"
+        className="flex w-full items-center justify-between gap-3 rounded-xl border-2 border-emerald-500 bg-emerald-50/70 px-4 py-3 text-left transition hover:bg-emerald-100/70 dark:border-emerald-400/70 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20"
       >
         <h4 className="text-base font-semibold">{l("notice.siteNotices")}</h4>
-        <span className="text-sm font-medium text-slate-500">{expanded ? "▲" : "▼"}</span>
+        <CollapseIndicator open={expanded} />
       </button>
-      {expanded ? (
-        <div className="mt-3">
+      <CollapsibleContent open={expanded}>
+        <div>
           {msg ? <div className="mb-2 text-xs text-red-600">{msg}</div> : null}
 
           {notices.length === 0 ? (
@@ -194,7 +194,7 @@ export function ProjectNoticesSection({ projectId, apiFetch, isAdmin, workerId }
             </div>
           ) : null}
         </div>
-      ) : null}
+      </CollapsibleContent>
     </div>
   );
 }

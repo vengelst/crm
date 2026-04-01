@@ -7,7 +7,7 @@ import type {
   Customer, Project, CustomerFinancials, DocumentItem,
   DocumentFormState, TimesheetItem,
 } from "../types";
-import { cx, formatAddress, mapsUrlFromParts, MapLinkButton, PrintButton, openPrintWindow } from "../shared";
+import { CollapsibleContent, CollapseIndicator, cx, formatAddress, mapsUrlFromParts, MapLinkButton, PrintButton, openPrintWindow } from "../shared";
 import { DocumentPanel } from "../documents";
 import { TimesheetList, FinancialKpi } from "../projects";
 import { InlineNotesSection } from "../notes";
@@ -247,13 +247,13 @@ export function CustomerDetailCard({
           <button
             type="button"
             onClick={() => setReportsOpen((current) => !current)}
-            className="flex w-full items-center justify-between gap-3 text-left"
+            className="flex w-full items-center justify-between gap-3 rounded-xl border-2 border-emerald-500 bg-emerald-50/70 px-4 py-3 text-left transition hover:bg-emerald-100/70 dark:border-emerald-400/70 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20"
           >
             <h4 className="text-base font-semibold">{l("reports.title")}</h4>
-            <span className="text-sm font-medium text-slate-500">{reportsOpen ? "▲" : "▼"}</span>
+            <CollapseIndicator open={reportsOpen} />
           </button>
-          {reportsOpen ? (
-            <div className="mt-3 grid gap-4">
+          <CollapsibleContent open={reportsOpen}>
+            <div className="grid gap-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <FinancialKpi label={l("kpi.totalHours")} value={`${financials.totalHours} h`} />
                 <FinancialKpi label={l("kpi.overtime")} value={`${financials.overtimeHours} h`} />
@@ -309,7 +309,7 @@ export function CustomerDetailCard({
                 </div>
               ) : null}
             </div>
-          ) : null}
+          </CollapsibleContent>
         </div>
       ) : null}
 
@@ -388,24 +388,27 @@ function ContactCardWithNotes({
             <button
               type="button"
               onClick={() => setExpanded(!expanded)}
-              className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+              className="inline-flex items-center gap-2 rounded-xl border-2 border-emerald-500 bg-emerald-50/70 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100/70 dark:border-emerald-400/70 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
             >
-              {expanded ? l("notes.title") + " ▲" : l("notes.title") + " ▼"}
+              <span>{l("notes.title")}</span>
+              <CollapseIndicator open={expanded} />
             </button>
           ) : null}
         </div>
       </div>
-      {expanded && contact.id ? (
-        <div className="mt-3 border-t border-black/10 pt-3 dark:border-white/10">
-          <InlineNotesSection
-            entityType="CONTACT"
-            customerId={customerId}
-            contactId={contact.id}
-            availableProjects={availableProjects}
-            apiFetch={apiFetch}
-          />
-        </div>
-      ) : null}
+      <CollapsibleContent open={expanded && Boolean(contact.id)}>
+        {contact.id ? (
+          <div className="border-t border-black/10 pt-3 dark:border-white/10">
+            <InlineNotesSection
+              entityType="CONTACT"
+              customerId={customerId}
+              contactId={contact.id}
+              availableProjects={availableProjects}
+              apiFetch={apiFetch}
+            />
+          </div>
+        ) : null}
+      </CollapsibleContent>
     </div>
   );
 }
