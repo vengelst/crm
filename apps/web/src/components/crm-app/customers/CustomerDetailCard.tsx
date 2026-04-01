@@ -43,6 +43,7 @@ export function CustomerDetailCard({
 }) {
   const { t: l } = useI18n();
   const [customerTimesheets, setCustomerTimesheets] = useState<TimesheetItem[]>([]);
+  const [reportsOpen, setReportsOpen] = useState(false);
 
   useEffect(() => {
     async function loadTs() {
@@ -243,63 +244,72 @@ export function CustomerDetailCard({
       {/* ── Kunden-Auswertung ──────────────────────────────────── */}
       {financials ? (
         <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-          <h4 className="mb-3 text-base font-semibold">{l("reports.title")}</h4>
-          <div className="grid gap-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <FinancialKpi label={l("kpi.totalHours")} value={`${financials.totalHours} h`} />
-              <FinancialKpi label={l("kpi.overtime")} value={`${financials.overtimeHours} h`} />
-              <FinancialKpi label={l("kpi.totalRevenue")} value={`${financials.totalRevenue.toFixed(2)} EUR`} highlight />
-              <FinancialKpi label={l("kpi.workerCosts")} value={`${financials.totalCosts.toFixed(2)} EUR`} />
-              <FinancialKpi label={l("kpi.margin")} value={`${financials.margin.toFixed(2)} EUR`} highlight={financials.margin >= 0} warn={financials.margin < 0} />
-            </div>
-
-            <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
-              <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("kpi.breakdown")}</h5>
-              <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
-                <span className="text-slate-500">{l("kpi.baseRevenue")}</span>
-                <span className="text-right font-mono">{financials.baseRevenue.toFixed(2)} EUR</span>
-                <span className="text-slate-500">{l("kpi.overtimeRevenue")}</span>
-                <span className="text-right font-mono">{financials.overtimeRevenue.toFixed(2)} EUR</span>
-                <span className="text-slate-500">{l("kpi.workerCosts")}</span>
-                <span className="text-right font-mono">-{financials.totalCosts.toFixed(2)} EUR</span>
-                <span className="font-medium">{l("kpi.margin")}</span>
-                <span className={cx("text-right font-mono font-medium", financials.margin >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{financials.margin.toFixed(2)} EUR</span>
+          <button
+            type="button"
+            onClick={() => setReportsOpen((current) => !current)}
+            className="flex w-full items-center justify-between gap-3 text-left"
+          >
+            <h4 className="text-base font-semibold">{l("reports.title")}</h4>
+            <span className="text-sm font-medium text-slate-500">{reportsOpen ? "▲" : "▼"}</span>
+          </button>
+          {reportsOpen ? (
+            <div className="mt-3 grid gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <FinancialKpi label={l("kpi.totalHours")} value={`${financials.totalHours} h`} />
+                <FinancialKpi label={l("kpi.overtime")} value={`${financials.overtimeHours} h`} />
+                <FinancialKpi label={l("kpi.totalRevenue")} value={`${financials.totalRevenue.toFixed(2)} EUR`} highlight />
+                <FinancialKpi label={l("kpi.workerCosts")} value={`${financials.totalCosts.toFixed(2)} EUR`} />
+                <FinancialKpi label={l("kpi.margin")} value={`${financials.margin.toFixed(2)} EUR`} highlight={financials.margin >= 0} warn={financials.margin < 0} />
               </div>
-            </div>
 
-            {financials.projects.length > 0 ? (
               <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
-                <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("kpi.perProject")}</h5>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="text-xs text-slate-500">
-                        <th className="pb-1 pr-3">{l("kpi.project")}</th>
-                        <th className="pb-1 pr-3 text-right">{l("kpi.hours")}</th>
-                        <th className="pb-1 pr-3 text-right">{l("kpi.revenue")}</th>
-                        <th className="pb-1 pr-3 text-right">{l("kpi.costs")}</th>
-                        <th className="pb-1 text-right">{l("kpi.marginShort")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {financials.projects.map((p) => (
-                        <tr key={p.projectId} className="border-t border-black/5 dark:border-white/5">
-                          <td className="py-1 pr-3">
-                            <Link href={`/projects/${p.projectId}`} className="hover:underline">{p.projectNumber}</Link>
-                            <span className="ml-1 text-slate-400">{p.title}</span>
-                          </td>
-                          <td className="py-1 pr-3 text-right font-mono">{p.hours}</td>
-                          <td className="py-1 pr-3 text-right font-mono">{p.revenue.toFixed(2)}</td>
-                          <td className="py-1 pr-3 text-right font-mono">{p.costs.toFixed(2)}</td>
-                          <td className={cx("py-1 text-right font-mono", p.margin >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{p.margin.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("kpi.breakdown")}</h5>
+                <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+                  <span className="text-slate-500">{l("kpi.baseRevenue")}</span>
+                  <span className="text-right font-mono">{financials.baseRevenue.toFixed(2)} EUR</span>
+                  <span className="text-slate-500">{l("kpi.overtimeRevenue")}</span>
+                  <span className="text-right font-mono">{financials.overtimeRevenue.toFixed(2)} EUR</span>
+                  <span className="text-slate-500">{l("kpi.workerCosts")}</span>
+                  <span className="text-right font-mono">-{financials.totalCosts.toFixed(2)} EUR</span>
+                  <span className="font-medium">{l("kpi.margin")}</span>
+                  <span className={cx("text-right font-mono font-medium", financials.margin >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{financials.margin.toFixed(2)} EUR</span>
                 </div>
               </div>
-            ) : null}
-          </div>
+
+              {financials.projects.length > 0 ? (
+                <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
+                  <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("kpi.perProject")}</h5>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="text-xs text-slate-500">
+                          <th className="pb-1 pr-3">{l("kpi.project")}</th>
+                          <th className="pb-1 pr-3 text-right">{l("kpi.hours")}</th>
+                          <th className="pb-1 pr-3 text-right">{l("kpi.revenue")}</th>
+                          <th className="pb-1 pr-3 text-right">{l("kpi.costs")}</th>
+                          <th className="pb-1 text-right">{l("kpi.marginShort")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {financials.projects.map((p) => (
+                          <tr key={p.projectId} className="border-t border-black/5 dark:border-white/5">
+                            <td className="py-1 pr-3">
+                              <Link href={`/projects/${p.projectId}`} className="hover:underline">{p.projectNumber}</Link>
+                              <span className="ml-1 text-slate-400">{p.title}</span>
+                            </td>
+                            <td className="py-1 pr-3 text-right font-mono">{p.hours}</td>
+                            <td className="py-1 pr-3 text-right font-mono">{p.revenue.toFixed(2)}</td>
+                            <td className="py-1 pr-3 text-right font-mono">{p.costs.toFixed(2)}</td>
+                            <td className={cx("py-1 text-right font-mono", p.margin >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{p.margin.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 

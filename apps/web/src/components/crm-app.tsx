@@ -678,6 +678,13 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       if (!ok) return;
     }
 
+    if (path.startsWith("/documents/")) {
+      const ok = window.confirm(
+        `${l("doc.confirmDelete")}\n\n${l("doc.confirmDeleteHint")}`,
+      );
+      if (!ok) return;
+    }
+
     await runMutation(async () => {
       await apiFetch(path, {
         method: "DELETE",
@@ -1799,6 +1806,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               showSystemSection={false}
               showOfficeSection
               officeListFirst
+              usePopupForm
             />
           ) : (
             <InfoCard title={l("settings.noAccess")}>{l("settings.noAccess")}</InfoCard>

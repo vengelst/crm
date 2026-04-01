@@ -192,6 +192,8 @@ const de: Record<string, string> = {
   "doc.createDrawing": "Zeichnung erstellen",
   "doc.uploadedBy": "Hochgeladen von:",
   "doc.fileMissing": "Datei nicht verfuegbar",
+  "doc.confirmDelete": "Soll dieses Dokument wirklich geloescht werden?",
+  "doc.confirmDeleteHint": "Dieser Vorgang kann nicht rueckgaengig gemacht werden.",
   // ── Drawing Editor ─────────────────────────────
   "draw.title": "Zeichnung",
   "draw.hint": "Mit Maus oder Finger zeichnen.",
@@ -1175,6 +1177,8 @@ const en: Record<string, string> = {
   "doc.createDrawing": "Create drawing",
   "doc.uploadedBy": "Uploaded by:",
   "doc.fileMissing": "File not available",
+  "doc.confirmDelete": "Do you really want to delete this document?",
+  "doc.confirmDeleteHint": "This action cannot be undone.",
   // ── Drawing Editor ─────────────────────────────
   "draw.title": "Drawing",
   "draw.hint": "Draw with mouse or finger.",

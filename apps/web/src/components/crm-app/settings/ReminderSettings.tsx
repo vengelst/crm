@@ -74,6 +74,7 @@ export function ReminderSettings({
   showSystemSection = true,
   showOfficeSection = true,
   officeListFirst = false,
+  usePopupForm = false,
 }: {
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   setPanelSuccess: Dispatch<SetStateAction<string | null>>;
@@ -81,6 +82,7 @@ export function ReminderSettings({
   showSystemSection?: boolean;
   showOfficeSection?: boolean;
   officeListFirst?: boolean;
+  usePopupForm?: boolean;
 }) {
   const { t: l, locale } = useI18n();
   const searchParams = useSearchParams();
@@ -93,6 +95,7 @@ export function ReminderSettings({
   const [timeFilter, setTimeFilter] = useState("");
   const [focusedItemId, setFocusedItemId] = useState("");
   const [recentlyCompletedId, setRecentlyCompletedId] = useState("");
+  const [showOfficeForm, setShowOfficeForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
@@ -147,6 +150,9 @@ export function ReminderSettings({
     if (itemId) {
       setFocusedItemId(itemId);
     }
+    if (usePopupForm) {
+      setShowOfficeForm(true);
+    }
     setForm((current) => ({
       ...current,
       title: title || current.title,
@@ -160,7 +166,28 @@ export function ReminderSettings({
       noteId,
       assignedUserId: current.assignedUserId || references.users[0].id,
     }));
-  }, [references.users, searchParams]);
+  }, [references.users, searchParams, usePopupForm]);
+
+  const editItem = useCallback((item: OfficeReminderItem) => {
+    if (usePopupForm) {
+      setShowOfficeForm(true);
+    }
+    setForm({
+      id: item.id,
+      title: item.title,
+      description: item.description ?? "",
+      kind: item.kind,
+      assignedUserId: item.assignedUserId,
+      remindAt: toLocalInput(item.remindAt),
+      dueAt: toLocalInput(item.dueAt),
+      channels: item.channels,
+      smsNumber: item.smsNumber ?? "",
+      customerId: item.customer?.id ?? "",
+      contactId: item.contact?.id ?? "",
+      projectId: item.project?.id ?? "",
+      noteId: item.note?.id ?? "",
+    });
+  }, [usePopupForm]);
 
   useEffect(() => {
     if (!focusedItemId || items.length === 0) return;
@@ -169,7 +196,7 @@ export function ReminderSettings({
     editItem(item);
     const timer = window.setTimeout(() => setFocusedItemId(""), 3000);
     return () => window.clearTimeout(timer);
-  }, [focusedItemId, items]);
+  }, [editItem, focusedItemId, items]);
 
   useEffect(() => {
     if (!recentlyCompletedId) return;
@@ -234,6 +261,9 @@ export function ReminderSettings({
         },
       );
       setForm(emptyForm());
+      if (usePopupForm) {
+        setShowOfficeForm(false);
+      }
       setPanelSuccess(l("common.success"));
       await loadData();
     } catch (e) {
@@ -241,24 +271,6 @@ export function ReminderSettings({
     } finally {
       setSavingItem(false);
     }
-  }
-
-  function editItem(item: OfficeReminderItem) {
-    setForm({
-      id: item.id,
-      title: item.title,
-      description: item.description ?? "",
-      kind: item.kind,
-      assignedUserId: item.assignedUserId,
-      remindAt: toLocalInput(item.remindAt),
-      dueAt: toLocalInput(item.dueAt),
-      channels: item.channels,
-      smsNumber: item.smsNumber ?? "",
-      customerId: item.customer?.id ?? "",
-      contactId: item.contact?.id ?? "",
-      projectId: item.project?.id ?? "",
-      noteId: item.note?.id ?? "",
-    });
   }
 
   async function completeItem(id: string) {
@@ -399,8 +411,21 @@ export function ReminderSettings({
 
   const toggleConfig = (key: keyof ReminderConfig) => setConfig((current) => ({ ...current, [key]: !current[key] }));
 
+  function openCreateForm() {
+    setForm(emptyForm());
+    setShowOfficeForm(true);
+  }
+
+  function closeOfficeForm() {
+    setForm(emptyForm());
+    setShowOfficeForm(false);
+  }
+
   const officeFormSection = (
-    <SectionCard title={l("settings.remindersSectionOffice")} subtitle={l("settings.remindersOfficeSub")}>
+    <SectionCard
+      title={form.id ? l("settings.remindersUpdate") : l("settings.remindersCreate")}
+      subtitle={l("settings.remindersOfficeSub")}
+    >
       <div className="grid gap-4">
         <FormRow>
           <Field label={l("settings.remindersTitle")} value={form.title} onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))} />
@@ -489,6 +514,15 @@ export function ReminderSettings({
             className="rounded-xl border border-black/10 px-4 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800">
             {l("settings.remindersReset")}
           </button>
+          {usePopupForm ? (
+            <button
+              type="button"
+              onClick={closeOfficeForm}
+              className="rounded-xl border border-black/10 px-4 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
+            >
+              {l("common.close")}
+            </button>
+          ) : null}
         </div>
       </div>
     </SectionCard>
@@ -497,6 +531,17 @@ export function ReminderSettings({
   const officeListSection = (
     <SectionCard title={l("settings.remindersItems")} subtitle={l("settings.remindersOfficeSub")}>
       <div className="grid gap-4">
+        {usePopupForm ? (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={openCreateForm}
+              className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+            >
+              {l("settings.remindersCreate")}
+            </button>
+          </div>
+        ) : null}
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <button
             type="button"
@@ -719,8 +764,21 @@ export function ReminderSettings({
       ) : null}
 
       {showOfficeSection && officeListFirst ? officeListSection : null}
-      {showOfficeSection ? officeFormSection : null}
+      {showOfficeSection && !usePopupForm ? officeFormSection : null}
       {showOfficeSection && !officeListFirst ? officeListSection : null}
+      {showOfficeSection && usePopupForm && showOfficeForm ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pb-12 pt-12"
+          onClick={closeOfficeForm}
+        >
+          <div
+            className="w-full max-w-5xl rounded-3xl border-2 border-red-300 bg-white p-4 shadow-xl dark:border-red-500/40 dark:bg-slate-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {officeFormSection}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

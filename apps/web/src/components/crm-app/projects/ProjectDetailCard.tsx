@@ -54,6 +54,7 @@ export function ProjectDetailCard({
   const [assignmentSaving, setAssignmentSaving] = useState(false);
   const [assignmentMsg, setAssignmentMsg] = useState<string | null>(null);
   const [assignmentErr, setAssignmentErr] = useState<string | null>(null);
+  const [financialsOpen, setFinancialsOpen] = useState(false);
   const projectMapsUrl = mapsUrlFromParts([
     project.title,
     project.siteAddressLine1,
@@ -236,82 +237,87 @@ export function ProjectDetailCard({
       {/* ── Auswertung ──────────────────────────────────── */}
       {financials ? (
         <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-          <h4 className="mb-3 text-base font-semibold">{l("proj.financials")}</h4>
-          <div className="grid gap-4">
-            {/* Kennzahlen */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <FinancialKpi label={l("kpi.totalHours")} value={`${financials.totalHours} h`} />
-              <FinancialKpi label={l("kpi.overtime")} value={`${financials.overtimeHours} h`} />
-              <FinancialKpi label={l("kpi.totalRevenue")} value={`${financials.totalRevenue.toFixed(2)} EUR`} highlight />
-              <FinancialKpi label={l("kpi.workerCosts")} value={`${financials.totalCosts.toFixed(2)} EUR`} />
-              <FinancialKpi label={l("kpi.margin")} value={`${financials.margin.toFixed(2)} EUR`} highlight={financials.margin >= 0} warn={financials.margin < 0} />
-            </div>
-
-            {/* Aufschluesselung */}
-            <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
-              <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("kpi.revenueBreakdown")}</h5>
-              <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
-                <span className="text-slate-500">{financials.pricingModel === "WEEKLY_FLAT_RATE" ? l("kpi.weeklyFlatRates") : l("kpi.baseHours")}</span>
-                <span className="text-right font-mono">{financials.baseRevenue.toFixed(2)} EUR</span>
-                <span className="text-slate-500">{l("kpi.overtimeRevenue")}</span>
-                <span className="text-right font-mono">{financials.overtimeRevenue.toFixed(2)} EUR</span>
-                <span className="font-medium">{l("kpi.totalRevenue")}</span>
-                <span className="text-right font-mono font-medium">{financials.totalRevenue.toFixed(2)} EUR</span>
+          <button
+            type="button"
+            onClick={() => setFinancialsOpen((current) => !current)}
+            className="flex w-full items-center justify-between gap-3 text-left"
+          >
+            <h4 className="text-base font-semibold">{l("proj.financials")}</h4>
+            <span className="text-sm font-medium text-slate-500">{financialsOpen ? "▲" : "▼"}</span>
+          </button>
+          {financialsOpen ? (
+            <div className="mt-3 grid gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <FinancialKpi label={l("kpi.totalHours")} value={`${financials.totalHours} h`} />
+                <FinancialKpi label={l("kpi.overtime")} value={`${financials.overtimeHours} h`} />
+                <FinancialKpi label={l("kpi.totalRevenue")} value={`${financials.totalRevenue.toFixed(2)} EUR`} highlight />
+                <FinancialKpi label={l("kpi.workerCosts")} value={`${financials.totalCosts.toFixed(2)} EUR`} />
+                <FinancialKpi label={l("kpi.margin")} value={`${financials.margin.toFixed(2)} EUR`} highlight={financials.margin >= 0} warn={financials.margin < 0} />
               </div>
-            </div>
 
-            {/* Monteurkosten Detail */}
-            {financials.workerCosts.length > 0 ? (
               <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
-                <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("kpi.workerCosts")}</h5>
-                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 gap-y-1 text-sm">
-                  {financials.workerCosts.map((wc) => (
-                    <Fragment key={wc.workerId}>
-                      <span className="text-slate-500">{wc.name}</span>
-                      <span className="text-right font-mono text-slate-400">{wc.hours} h</span>
-                      <span className="text-right font-mono text-slate-400">{wc.rate != null ? `${wc.rate.toFixed(2)} EUR/h` : "-"}</span>
-                      <span className="text-right font-mono">{wc.cost.toFixed(2)} EUR</span>
-                    </Fragment>
-                  ))}
-                  <span className="font-medium">{l("kpi.totalCosts")}</span>
-                  <span />
-                  <span />
-                  <span className="text-right font-mono font-medium">{financials.totalCosts.toFixed(2)} EUR</span>
+                <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("kpi.revenueBreakdown")}</h5>
+                <div className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
+                  <span className="text-slate-500">{financials.pricingModel === "WEEKLY_FLAT_RATE" ? l("kpi.weeklyFlatRates") : l("kpi.baseHours")}</span>
+                  <span className="text-right font-mono">{financials.baseRevenue.toFixed(2)} EUR</span>
+                  <span className="text-slate-500">{l("kpi.overtimeRevenue")}</span>
+                  <span className="text-right font-mono">{financials.overtimeRevenue.toFixed(2)} EUR</span>
+                  <span className="font-medium">{l("kpi.totalRevenue")}</span>
+                  <span className="text-right font-mono font-medium">{financials.totalRevenue.toFixed(2)} EUR</span>
                 </div>
               </div>
-            ) : null}
 
-            {/* Wochen-Detail */}
-            {financials.weeklyBreakdown.length > 0 ? (
-              <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
-                <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("reports.weekDetail")}</h5>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="text-xs text-slate-500">
-                        <th className="pb-1 pr-3">{l("table.cw")}</th>
-                        <th className="pb-1 pr-3 text-right">{l("kpi.hours")}</th>
-                        <th className="pb-1 pr-3 text-right">{l("table.overtimeShort")}</th>
-                        <th className="pb-1 pr-3 text-right">{l("kpi.baseRevenue")}</th>
-                        <th className="pb-1 text-right">{l("table.overtimeRevShort")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {financials.weeklyBreakdown.map((w) => (
-                        <tr key={w.week} className="border-t border-black/5 dark:border-white/5">
-                          <td className="py-1 pr-3 font-mono text-xs">{w.week}</td>
-                          <td className="py-1 pr-3 text-right font-mono">{w.hours}</td>
-                          <td className="py-1 pr-3 text-right font-mono">{w.overtimeHours}</td>
-                          <td className="py-1 pr-3 text-right font-mono">{w.baseRevenue.toFixed(2)}</td>
-                          <td className="py-1 text-right font-mono">{w.overtimeRevenue.toFixed(2)}</td>
+              {financials.workerCosts.length > 0 ? (
+                <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
+                  <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("kpi.workerCosts")}</h5>
+                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 gap-y-1 text-sm">
+                    {financials.workerCosts.map((wc) => (
+                      <Fragment key={wc.workerId}>
+                        <span className="text-slate-500">{wc.name}</span>
+                        <span className="text-right font-mono text-slate-400">{wc.hours} h</span>
+                        <span className="text-right font-mono text-slate-400">{wc.rate != null ? `${wc.rate.toFixed(2)} EUR/h` : "-"}</span>
+                        <span className="text-right font-mono">{wc.cost.toFixed(2)} EUR</span>
+                      </Fragment>
+                    ))}
+                    <span className="font-medium">{l("kpi.totalCosts")}</span>
+                    <span />
+                    <span />
+                    <span className="text-right font-mono font-medium">{financials.totalCosts.toFixed(2)} EUR</span>
+                  </div>
+                </div>
+              ) : null}
+
+              {financials.weeklyBreakdown.length > 0 ? (
+                <div className="rounded-xl bg-slate-50/70 p-3 dark:bg-slate-950/40">
+                  <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("reports.weekDetail")}</h5>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="text-xs text-slate-500">
+                          <th className="pb-1 pr-3">{l("table.cw")}</th>
+                          <th className="pb-1 pr-3 text-right">{l("kpi.hours")}</th>
+                          <th className="pb-1 pr-3 text-right">{l("table.overtimeShort")}</th>
+                          <th className="pb-1 pr-3 text-right">{l("kpi.baseRevenue")}</th>
+                          <th className="pb-1 text-right">{l("table.overtimeRevShort")}</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {financials.weeklyBreakdown.map((w) => (
+                          <tr key={w.week} className="border-t border-black/5 dark:border-white/5">
+                            <td className="py-1 pr-3 font-mono text-xs">{w.week}</td>
+                            <td className="py-1 pr-3 text-right font-mono">{w.hours}</td>
+                            <td className="py-1 pr-3 text-right font-mono">{w.overtimeHours}</td>
+                            <td className="py-1 pr-3 text-right font-mono">{w.baseRevenue.toFixed(2)}</td>
+                            <td className="py-1 text-right font-mono">{w.overtimeRevenue.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            ) : null}
-          </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
