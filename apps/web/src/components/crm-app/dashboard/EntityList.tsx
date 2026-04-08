@@ -7,6 +7,8 @@ export function EntityList<T extends { id: string }>({
   items,
   title,
   subtitle,
+  titleClassName,
+  subtitleClassName,
   href,
   editLabel,
   deleteLabel,
@@ -17,6 +19,8 @@ export function EntityList<T extends { id: string }>({
   items: T[];
   title: (item: T) => string;
   subtitle: (item: T) => string;
+  titleClassName?: (item: T) => string | undefined;
+  subtitleClassName?: (item: T) => string | undefined;
   href?: (item: T) => string;
   editLabel?: string;
   deleteLabel: string;
@@ -45,13 +49,13 @@ export function EntityList<T extends { id: string }>({
         >
           <div>
             {href ? (
-              <Link href={href(item)} className="text-lg font-semibold hover:underline">
+              <Link href={href(item)} className={cx("text-lg font-semibold hover:underline", titleClassName?.(item))}>
                 {title(item)}
               </Link>
             ) : (
-              <div className="text-lg font-semibold">{title(item)}</div>
+              <div className={cx("text-lg font-semibold", titleClassName?.(item))}>{title(item)}</div>
             )}
-            <p className="text-sm text-slate-500">{subtitle(item)}</p>
+            <p className={cx("text-sm text-slate-500", subtitleClassName?.(item))}>{subtitle(item)}</p>
           </div>
           <div className="flex gap-2">
             {onEdit && editLabel ? (

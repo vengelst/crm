@@ -216,6 +216,8 @@ export function SettingsPanel({
           <SectionCard title={l("settings.users")} subtitle={l("settings.userManage")}>
             <EntityList items={users} title={(i) => i.displayName}
               subtitle={(i) => `${i.email} · ${i.roles.map((r) => r.role.name).join(", ")}${i.isActive ? "" : " (inaktiv)"}`}
+              titleClassName={(i) => i.isActive ? undefined : "line-through text-slate-400"}
+              subtitleClassName={(i) => i.isActive ? undefined : "line-through text-slate-400"}
               editLabel={l("common.edit")} deleteLabel={l("common.delete")}
               onEdit={(i) => setUserForm({ id: i.id, email: i.email, displayName: i.displayName, notes: i.notes ?? "", password: "", kioskCode: "", roleCodes: i.roles.map((r) => r.role.code), isActive: i.isActive })}
               onDelete={(i) => onDeleteUser(i.id)} />
