@@ -43,7 +43,8 @@ services:
       minio:
         condition: service_started
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/crm_monteur
+      # Aus Projekt-.env (z. B. TEST-Server); Volume-Passwort muss zur URL passen.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/crm_monteur}
       JWT_SECRET: change-me
       API_PORT: 3801
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}

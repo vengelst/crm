@@ -255,7 +255,7 @@ PY
   fi
 else
   echo "[db] APP: fuehre Prisma-Migration auf TEST-Datenbank aus..."
-  if ! docker compose run --rm --build -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/crm_monteur api sh -c "npx prisma migrate deploy --config prisma/prisma.config.ts"; then
+  if ! docker compose run --rm --build api sh -c "npx prisma migrate deploy --config prisma/prisma.config.ts"; then
     echo "" >&2
     echo "========================================" >&2
     echo "  APP-Deploy abgebrochen:" >&2

@@ -28,6 +28,8 @@ services:
     environment:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: "true"
+      # Im Stack immer Service-Hostname postgres (nicht 127.0.0.1 aus lokaler .env)
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/crm_monteur
 
   # ── Web (Next.js) im Dev-Modus ───────────────────────────────
   web:
