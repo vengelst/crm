@@ -173,7 +173,10 @@ if (Test-Path $localEnvFile) {
     if (-not $hasApiUrl) {
         $envContent += 'NEXT_PUBLIC_API_URL=/api'
     }
-    Set-Content -Path $tmpEnvFile -Value $envContent -Encoding UTF8
+    # UTF-8 ohne BOM: sonst kann die erste Zeile auf Linux als "^?DATABASE_URL=" fehlparsen
+    $envLines = @($envContent | ForEach-Object { "$_" })
+    $envText = ($envLines -join "`n") + "`n"
+    [System.IO.File]::WriteAllText($tmpEnvFile, $envText, [System.Text.UTF8Encoding]::new($false))
 
     Info "Lade TEST-.env auf den TEST-Server..."
     scp $tmpEnvFile "${Server}:/tmp/crm.env"
@@ -255,7 +258,19 @@ PY
   fi
 else
   echo "[db] APP: fuehre Prisma-Migration auf TEST-Datenbank aus..."
-  if ! docker compose run --rm --build api sh -c "npx prisma migrate deploy --config prisma/prisma.config.ts"; then
+  if [ ! -f .env ]; then
+    echo "[db] FEHLER: .env fehlt nach Deploy-Schritt (crm.env)." >&2
+    exit 1
+  fi
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+  if [ -z "${DATABASE_URL:-}" ]; then
+    echo "[db] FEHLER: DATABASE_URL ist in .env nicht gesetzt." >&2
+    exit 1
+  fi
+  if ! docker compose run --rm --build -e DATABASE_URL="$DATABASE_URL" api sh -c "npx prisma migrate deploy --config prisma/prisma.config.ts"; then
     echo "" >&2
     echo "========================================" >&2
     echo "  APP-Deploy abgebrochen:" >&2
@@ -263,6 +278,13 @@ else
     echo "  Kein Container-Rebuild durchgefuehrt." >&2
     echo "  TEST-System laeuft weiter mit altem Stand." >&2
     echo "========================================" >&2
+    echo "" >&2
+    echo "  P1000 = Postgres lehnt Zugangsdaten ab." >&2
+    echo "  DATABASE_URL in .env.server muss zum *bestehenden* Volume-Passwort passen" >&2
+    echo "  (POSTGRES_PASSWORD in compose gilt nur beim ersten Init)." >&2
+    echo "  Auf dem Server z. B. Passwort angleichen:" >&2
+    echo "    docker exec -it crm-postgres psql -U postgres -d crm_monteur -c \"ALTER USER postgres PASSWORD '...';\"" >&2
+    echo "  oder (TEST-Daten weg): docker compose down && docker volume rm <projekt>_postgres_data" >&2
     exit 1
   fi
   echo "[db] APP: Migration erfolgreich."
