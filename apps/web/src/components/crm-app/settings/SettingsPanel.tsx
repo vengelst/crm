@@ -229,6 +229,18 @@ export function SettingsPanel({
                   {l("settings.userSecretInfo")}
                 </div>
               ) : null}
+              {userForm.id && !userForm.isActive ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+                  <span>{l("settings.userInactiveHint")}</span>
+                  <button
+                    type="button"
+                    onClick={() => setUserForm((current) => ({ ...current, isActive: true }))}
+                    className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+                  >
+                    {l("settings.userReactivate")}
+                  </button>
+                </div>
+              ) : null}
               <Field label={l("settings.displayName")} value={userForm.displayName} onChange={(e) => setUserForm((c) => ({ ...c, displayName: e.target.value }))} />
               <Field label={l("common.email")} value={userForm.email} onChange={(e) => setUserForm((c) => ({ ...c, email: e.target.value }))} />
               <TextArea label={l("settings.userNotes")} value={userForm.notes} onChange={(e) => setUserForm((c) => ({ ...c, notes: e.target.value }))} />
