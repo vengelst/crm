@@ -35,7 +35,7 @@ import type {
   TimesheetItem, NoteItem,
   ProjectFinancials, CustomerFinancials,
 } from "./crm-app/types";
-import { API_ROOT, AUTH_STORAGE_KEY } from "./crm-app/types";
+import { apiUrl, AUTH_STORAGE_KEY } from "./crm-app/types";
 import {
   toDateInput, sanitizeForApi,
   NavLink, IconNavLink, PrimaryButton, SecondaryButton,
@@ -200,7 +200,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
   const apiFetch = useCallback(
     async <T,>(path: string, init?: RequestInit): Promise<T> => {
-      const response = await fetch(`${API_ROOT}/api${path}`, {
+      const response = await fetch(apiUrl(path), {
         ...init,
         headers: {
           ...(auth?.accessToken
@@ -809,7 +809,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   }
 
   async function fetchDocumentBlob(documentId: string) {
-    const response = await fetch(`${API_ROOT}/api/documents/${documentId}/download`, {
+    const response = await fetch(apiUrl(`/documents/${documentId}/download`), {
       headers: auth?.accessToken
         ? {
             Authorization: `Bearer ${auth.accessToken}`,

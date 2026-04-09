@@ -3,6 +3,7 @@ import { useI18n } from "../../../i18n-context";
 
 import { type FormEvent, useEffect, useState } from "react";
 import { SectionCard, PrimaryButton, Field } from "../shared";
+import { apiUrl } from "../types";
 
 export function GoogleCalendarSettings({ apiFetch, setPanelSuccess, setPanelError }: {
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -28,8 +29,6 @@ export function GoogleCalendarSettings({ apiFetch, setPanelSuccess, setPanelErro
     } catch (err) { setPanelError(err instanceof Error ? err.message : l("common.error")); }
     finally { setSaving(false); }
   }
-
-  const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
 
   return (
     <div className="grid gap-6">
@@ -71,7 +70,7 @@ export function GoogleCalendarSettings({ apiFetch, setPanelSuccess, setPanelErro
             }} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white">
               {syncing ? l("settings.gcalSyncing") : l("settings.gcalSyncNow")}
             </button>
-            <a href={`${apiRoot}/api/projects/export/ical`} target="_blank" rel="noreferrer"
+            <a href={apiUrl("/projects/export/ical")} target="_blank" rel="noreferrer"
               className="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800">
               iCal-Export (.ics)
             </a>

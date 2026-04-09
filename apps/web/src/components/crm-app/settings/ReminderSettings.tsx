@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../../i18n-context";
 import type { OfficeReminderItem, ReminderConfig, ReminderReferenceData } from "../types";
-import { API_ROOT, AUTH_STORAGE_KEY } from "../types";
+import { apiUrl, AUTH_STORAGE_KEY } from "../types";
 import { cx, Field, FormRow, SectionCard, SelectField, TextArea } from "../shared";
 
 type ReminderFormState = {
@@ -316,7 +316,7 @@ export function ReminderSettings({
     try {
       const rawAuth = window.localStorage.getItem(AUTH_STORAGE_KEY);
       const parsed = rawAuth ? JSON.parse(rawAuth) as { accessToken?: string } : null;
-      const response = await fetch(`${API_ROOT}/api/reminders/items/${id}/calendar.ics`, {
+      const response = await fetch(apiUrl(`/reminders/items/${id}/calendar.ics`), {
         headers: parsed?.accessToken ? { Authorization: `Bearer ${parsed.accessToken}` } : undefined,
       });
       if (!response.ok) {

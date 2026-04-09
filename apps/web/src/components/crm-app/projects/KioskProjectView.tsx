@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Project, TimesheetItem, DocumentItem, DocumentFormState, DocumentPreviewState } from "../types";
+import { apiUrl, type Project, type TimesheetItem, type DocumentItem, type DocumentFormState, type DocumentPreviewState } from "../types";
 import { t, type SupportedLang } from "../../../i18n";
 import { formatAddress } from "../shared";
 import { DocumentPanel, DocumentPreviewModal } from "../documents";
@@ -55,10 +55,8 @@ export function KioskProjectView({ project, timesheets, apiFetch, workerId, auth
     } catch (e) { setDocMsg(e instanceof Error ? e.message : l("kiosk.uploadFailed")); }
   }
 
-  const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
-
   async function fetchDocumentBlob(documentId: string) {
-    const response = await fetch(`${apiRoot}/api/documents/${documentId}/download`, {
+    const response = await fetch(apiUrl(`/documents/${documentId}/download`), {
       headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
     });
     if (!response.ok) {

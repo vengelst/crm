@@ -599,4 +599,19 @@ export type ReminderReferenceData = {
 };
 
 export const API_ROOT = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
+
+/**
+ * Volle URL zu einem Nest-Pfad (z. B. "/auth/login"). Nest nutzt Global-Prefix "api".
+ * Endet NEXT_PUBLIC_API_URL bereits mit "/api" (z. B. "/api" hinter Reverse-Proxy),
+ * wird kein zweites Segment eingefügt — vermeidet /api/api/...
+ */
+export function apiUrl(path: string): string {
+  const base = API_ROOT;
+  const p = path.startsWith("/") ? path : `/${path}`;
+  if (base.endsWith("/api")) {
+    return `${base}${p}`;
+  }
+  return `${base}/api${p}`;
+}
+
 export const AUTH_STORAGE_KEY = "crm-admin-auth";

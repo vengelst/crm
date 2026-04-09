@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { TimesheetItem } from "../types";
+import { apiUrl, type TimesheetItem } from "../types";
 import { cx, SecondaryButton, Field } from "../shared";
 import { useI18n } from "../../../i18n-context";
 
@@ -49,9 +49,8 @@ export function TimesheetList({
   async function downloadPdf(tsId: string) {
     if (tsId.startsWith("work-week:")) return;
     try {
-      const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
       const token = typeof window !== "undefined" ? (JSON.parse(window.localStorage.getItem("crm-admin-auth") ?? "{}") as { accessToken?: string }).accessToken ?? "" : "";
-      const response = await fetch(`${apiRoot}/api/timesheets/${tsId}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetch(apiUrl(`/timesheets/${tsId}/pdf`), { headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) throw new Error(l("ts.pdfError"));
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);

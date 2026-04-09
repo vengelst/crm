@@ -3,7 +3,7 @@ import { useI18n } from "../../../i18n-context";
 
 import { type ChangeEvent, type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import type { DocumentItem, DocumentFormState } from "../types";
-import { API_ROOT } from "../types";
+import { apiUrl } from "../types";
 import { cx, SecondaryButton, Field, SelectField, TextArea } from "../shared";
 import { DocumentThumbnail } from "./DocumentThumbnail";
 import { DrawingEditorModal } from "./DrawingEditorModal";
@@ -97,7 +97,7 @@ export function DocumentPanel({
           const isPreviewable =
             document.mimeType.startsWith("image/") || document.mimeType === "application/pdf";
           try {
-            const response = await fetch(`${API_ROOT}/api/documents/${document.id}/download`, {
+            const response = await fetch(apiUrl(`/documents/${document.id}/download`), {
               headers: authToken
                 ? { Authorization: `Bearer ${authToken}` }
                 : undefined,
@@ -420,7 +420,7 @@ export function DocumentPanel({
               // Original ersetzen: per fetch direkt an Backend
               const fd = new FormData();
               fd.append("file", file);
-              void fetch(`${API_ROOT}/api/documents/${drawingDraft.sourceDocumentId}/replace`, {
+              void fetch(apiUrl(`/documents/${drawingDraft.sourceDocumentId}/replace`), {
                 method: "PUT",
                 headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
                 body: fd,

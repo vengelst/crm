@@ -4,6 +4,7 @@ import Image from "next/image";
 import { type Dispatch, type FormEvent, type SetStateAction, useEffect, useState } from "react";
 import { SectionCard, SecondaryButton, PrimaryButton, FormRow, Field } from "../shared";
 import { useI18n } from "../../../i18n-context";
+import { apiUrl } from "../types";
 
 export function CompanySettingsTab({ companyForm, setCompanyForm, onSave, submitting, apiFetch, setPanelSuccess, setPanelError }: {
   companyForm: { name: string; street: string; postalCode: string; city: string; country: string; phone: string; email: string; website: string };
@@ -42,8 +43,6 @@ export function CompanySettingsTab({ companyForm, setCompanyForm, onSave, submit
     } catch (e) { setPanelError(e instanceof Error ? e.message : l("settings.logoError")); }
   }
 
-  const apiRoot = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3801").replace(/\/$/, "");
-
   return (
     <div className="grid gap-6">
       <SectionCard title={l("settings.companyInfoTitle")} subtitle={l("settings.companyInfoSub")}>
@@ -69,7 +68,7 @@ export function CompanySettingsTab({ companyForm, setCompanyForm, onSave, submit
           {logoPath ? (
             <div className="flex items-center gap-4">
               <Image
-                src={`${apiRoot}/api/settings/logo/file?t=${Date.now()}`}
+                src={`${apiUrl("/settings/logo/file")}?t=${Date.now()}`}
                 alt="Logo"
                 width={128}
                 height={64}
