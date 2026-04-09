@@ -6,7 +6,8 @@ services:
     environment:
       POSTGRES_DB: crm_monteur
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      # Nur beim ersten Anlegen des Volumes; danach Passwort per ALTER USER oder Volume-Reset.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "55432:5432"
     volumes:

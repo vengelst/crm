@@ -109,6 +109,100 @@ export class TimeService {
     });
   }
 
+  /**
+   * Bueromodus: je zugeordnetem Monteur Status/Zeit **auf diesem Projekt** (heute, Server-Lokalzeit).
+   */
+  async getProjectAssignmentTimeSummary(projectId: string) {
+    const assignments = await this.prisma.projectAssignment.findMany({
+      where: { projectId, active: true },
+      select: { workerId: true },
+    });
+    const workerIds = [...new Set(assignments.map((a) => a.workerId))];
+
+    const now = new Date();
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
+    const todayStartMs = todayStart.getTime();
+    const nowMs = now.getTime();
+    const yesterday = new Date(todayStartMs - 24 * 3600_000);
+
+    const rows: Array<{
+      workerId: string;
+      workingOnProjectNow: boolean;
+      openClockInStartedAt: string | null;
+      todayFirstClockInOnProjectAt: string | null;
+      todayMinutesOnProject: number;
+    }> = [];
+
+    for (const workerId of workerIds) {
+      const openEntry = await this.findOpenClockIn(workerId);
+      const workingOnProjectNow =
+        !!openEntry && openEntry.projectId === projectId;
+
+      const entries = await this.prisma.timeEntry.findMany({
+        where: {
+          workerId,
+          projectId,
+          occurredAtClient: { gte: yesterday },
+        },
+        orderBy: { occurredAtClient: 'asc' },
+      });
+
+      let todayFirstClockInOnProjectAt: string | null = null;
+      for (const e of entries) {
+        if (
+          e.entryType === 'CLOCK_IN' &&
+          e.occurredAtClient.getTime() >= todayStartMs
+        ) {
+          todayFirstClockInOnProjectAt = e.occurredAtClient.toISOString();
+          break;
+        }
+      }
+
+      let completedMinutes = 0;
+      let pendingClockIn: Date | null = null;
+      for (const entry of entries) {
+        if (entry.entryType === 'CLOCK_IN') {
+          pendingClockIn = entry.occurredAtClient;
+        } else if (entry.entryType === 'CLOCK_OUT' && pendingClockIn) {
+          const blockStart = Math.max(pendingClockIn.getTime(), todayStartMs);
+          const blockEnd = entry.occurredAtClient.getTime();
+          if (blockEnd > todayStartMs) {
+            const ms = blockEnd - blockStart;
+            if (ms > 0) {
+              completedMinutes += ms / 60_000;
+            }
+          }
+          pendingClockIn = null;
+        }
+      }
+
+      let openSinceMinutes = 0;
+      if (pendingClockIn) {
+        const blockStart = Math.max(pendingClockIn.getTime(), todayStartMs);
+        openSinceMinutes = (nowMs - blockStart) / 60_000;
+      }
+
+      rows.push({
+        workerId,
+        workingOnProjectNow,
+        openClockInStartedAt:
+          workingOnProjectNow && openEntry
+            ? openEntry.occurredAtClient.toISOString()
+            : null,
+        todayFirstClockInOnProjectAt,
+        todayMinutesOnProject: Math.round(
+          completedMinutes + openSinceMinutes,
+        ),
+      });
+    }
+
+    return rows;
+  }
+
   async getTodayStats(workerId: string) {
     const now = new Date();
     const todayStart = new Date(

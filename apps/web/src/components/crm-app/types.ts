@@ -149,6 +149,15 @@ export type Project = {
   assignments?: ProjectAssignment[];
 };
 
+/** Live-Zeiten je Monteur auf einem Projekt (API assignment-time-summary) */
+export type ProjectAssignmentTimeSummary = {
+  workerId: string;
+  workingOnProjectNow: boolean;
+  openClockInStartedAt: string | null;
+  todayFirstClockInOnProjectAt: string | null;
+  todayMinutesOnProject: number;
+};
+
 export type Worker = {
   id: string;
   workerNumber: string;

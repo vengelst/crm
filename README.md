@@ -6,7 +6,7 @@ Der komplette Dev-Stack (Web, API, Postgres, MinIO) laeuft in Docker mit Hot-Rel
 
 Umgebungen:
 - `.env` = lokale Dev-Umgebung
-- `.env.server` = Werte fuer den TEST-/Server-Deploy
+- `.env.server` = Werte fuer den TEST-/Server-Deploy (lokal aus `.env.server.example` anlegen, **nicht** committen)
 
 ### Starten und Stoppen
 

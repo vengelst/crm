@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Project, Worker, TeamItem } from "../types";
 import { cx, SectionCard, SecondaryButton, MessageBar, FormRow, Field, SelectField } from "../shared";
 import { useI18n } from "../../../i18n-context";
@@ -16,6 +16,29 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
   const [planErr, setPlanErr] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const wheelLockUntilRef = useRef(0);
+  const calendarWheelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = calendarWheelRef.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const now = Date.now();
+      if (now < wheelLockUntilRef.current || event.deltaY === 0) {
+        return;
+      }
+      wheelLockUntilRef.current = now + 250;
+      const dir = event.deltaY > 0 ? 1 : -1;
+      setViewMonth((vm) => {
+        const y = Number(vm.slice(0, 4));
+        const m = Number(vm.slice(5, 7));
+        const d = new Date(y, m - 1 + dir, 1);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   function openPlanForm(p: Project) {
     const focusDate = p.plannedStartDate ?? p.plannedEndDate;
@@ -247,16 +270,9 @@ export function PlanningCalendar({ projects, workers, teams, apiFetch, onDataCha
       ) : null}
 
       {/* Kalender-Grid mit Drag-Support */}
-      <div className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
-        onWheel={(event) => {
-          event.preventDefault();
-          const now = Date.now();
-          if (now < wheelLockUntilRef.current || event.deltaY === 0) {
-            return;
-          }
-          wheelLockUntilRef.current = now + 250;
-          changeMonth(event.deltaY > 0 ? 1 : -1);
-        }}
+      <div
+        ref={calendarWheelRef}
+        className="rounded-3xl border border-black/10 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-slate-900/80"
         onPointerUp={() => {
           if (dragState) { void handleDragEnd(); return; }
           if (drawState) {

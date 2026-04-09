@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start -p 3800",
     "lint": "eslint",
+    "test": "node -e \"console.log('web: keine Unit-Tests; E2E: pnpm test:e2e (Stack auf 3800)');\"",
     "test:e2e": "playwright test"
   },
   "dependencies": {

@@ -182,7 +182,7 @@ if (Test-Path $localEnvFile) {
     scp $tmpEnvFile "${Server}:/tmp/crm.env"
     if ($LASTEXITCODE -ne 0) { Err "SCP fuer .env fehlgeschlagen." }
 } else {
-    Err ".env.server wurde nicht gefunden. Deploy abgebrochen."
+    Err ".env.server wurde nicht gefunden. Aus .env.server.example kopieren und anpassen. Deploy abgebrochen."
 }
 
 $remoteScript = @'

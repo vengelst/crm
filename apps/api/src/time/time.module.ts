@@ -8,5 +8,6 @@ import { DevicesModule } from '../devices/devices.module';
   imports: [PrismaModule, DevicesModule],
   controllers: [TimeController],
   providers: [TimeService],
+  exports: [TimeService],
 })
 export class TimeModule {}

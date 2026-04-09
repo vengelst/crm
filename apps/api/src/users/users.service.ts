@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { RoleCode } from '@prisma/client';
-import { hash } from 'bcryptjs';
+import { compare, hash } from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { SaveUserDto } from './dto/save-user.dto';
@@ -47,6 +47,7 @@ export class UsersService {
     }
 
     await this.validateSecrets(dto.password, dto.kioskCode);
+    await this.ensureKioskCodeGloballyUnique(dto.kioskCode);
 
     const passwordHash = await hash(dto.password, 10);
     const kioskCodeHash = await hash(dto.kioskCode, 10);
@@ -81,6 +82,10 @@ export class UsersService {
 
     if (dto.password || dto.kioskCode) {
       await this.validateSecrets(dto.password, dto.kioskCode);
+    }
+
+    if (dto.kioskCode) {
+      await this.ensureKioskCodeGloballyUnique(dto.kioskCode, id);
     }
 
     const roles = await this.resolveRoles(dto.roleCodes);
@@ -174,6 +179,62 @@ export class UsersService {
       throw new BadRequestException(
         `Kiosk-Code muss genau ${settings.kioskCodeLength} Zeichen lang sein.`,
       );
+    }
+  }
+
+  /**
+   * Kiosk-Login: PIN darf nicht mehrdeutig sein — keine Kollision mit Monteur-PINs
+   * oder anderen Benutzer-Kiosk-Codes.
+   */
+  private async ensureKioskCodeGloballyUnique(
+    code: string,
+    excludeUserId?: string,
+  ) {
+    const workers = await this.prisma.worker.findMany({
+      where: { active: true },
+      include: {
+        pins: {
+          where: { isActive: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    for (const worker of workers) {
+      const [activePin] = worker.pins;
+      if (!activePin) {
+        continue;
+      }
+      if (await compare(code, activePin.pinHash)) {
+        throw new BadRequestException(
+          'Kiosk-Code kollidiert mit einem Monteur-PIN. Bitte anderen Code waehlen.',
+        );
+      }
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        kioskCodeHash: { not: null },
+        ...(excludeUserId
+          ? {
+              NOT: { id: excludeUserId },
+            }
+          : {}),
+      },
+      select: { kioskCodeHash: true },
+    });
+
+    for (const user of users) {
+      if (!user.kioskCodeHash) {
+        continue;
+      }
+      if (await compare(code, user.kioskCodeHash)) {
+        throw new BadRequestException(
+          'Kiosk-Code bereits von einem anderen Benutzer vergeben.',
+        );
+      }
     }
   }
 }

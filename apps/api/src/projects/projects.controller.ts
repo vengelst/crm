@@ -17,6 +17,7 @@ import { KioskAllowed } from '../common/decorators/kiosk-allowed.decorator';
 import { AssignWorkerDto } from './dto/assign-worker.dto';
 import { SaveProjectDto } from './dto/save-project.dto';
 import { ProjectsService } from './projects.service';
+import { TimeService } from '../time/time.service';
 
 type RequestWithUser = Request & {
   user?: {
@@ -28,7 +29,10 @@ type RequestWithUser = Request & {
 @Controller('projects')
 @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER)
 export class ProjectsController {
-  constructor(private readonly projectsService: ProjectsService) {}
+  constructor(
+    private readonly projectsService: ProjectsService,
+    private readonly timeService: TimeService,
+  ) {}
 
   @Get()
   @Roles(
@@ -76,6 +80,12 @@ export class ProjectsController {
   @Get(':id/financials')
   getFinancials(@Param('id') id: string) {
     return this.projectsService.getFinancials(id);
+  }
+
+  /** Live-Zeiterfassung je zugeordnetem Monteur (Bueromodus). */
+  @Get(':id/assignment-time-summary')
+  getAssignmentTimeSummary(@Param('id') id: string) {
+    return this.timeService.getProjectAssignmentTimeSummary(id);
   }
 
   @Post(':id/assignments')

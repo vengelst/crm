@@ -54,6 +54,26 @@
 
 ## Aenderungshistorie
 
+## 2026-04-09
+
+### Projekt: Live-Status zugeordneter Monteure
+
+- API `GET /projects/:id/assignment-time-summary` (Buerorollen): je Monteur offene Arbeit auf diesem Projekt, erste heutige CLOCK_IN auf dem Projekt, Minuten heute auf dem Projekt.
+- Projektkarte: Abschnitt Zugeordnete Monteure zeigt diese Daten; Hinweis auf Arbeitsprotokoll fuer Details.
+
+### Kiosk-PIN / Standort Zeiterfassung
+
+- Neuer Monteur-PIN und PIN-Reset: Pruefung gegen aktive Monteur-PINs **und** aktive Benutzer-`kioskCodeHash` (keine Kollision mit Kiosk-Login).
+- Benutzer anlegen/aktualisieren mit Kiosk-Code: Pruefung gegen alle Monteur-PINs und andere Benutzer-Kiosk-Codes.
+- Kiosk Zeiterfassung: Standort zuerst aus Projekt-Baustelle bzw. Cache; Live-GPS nur wenn noetig — kein zusaetzlicher In-App-Dialog zur Speicher-Erlaubnis.
+
+### CI, Tests, Server-Secrets
+
+- `pnpm test`: API mit `jest --passWithNoTests` bis echte Specs existieren; Web mit Platzhalter-Script (E2E weiter `pnpm test:e2e`).
+- GitHub Actions: Schritt **Test** nach Lint.
+- `.env.server` aus dem Repository-Tracking entfernt (nur lokal, Vorlage `.env.server.example`); `.gitignore` ergaenzt.
+- README: Hinweis, `.env.server` aus der Example-Datei anzulegen.
+
 ## 2026-03-24
 
 ### Prozessschaerfung Dev-Docker

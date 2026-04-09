@@ -79,29 +79,50 @@ export function WorkerTimeView({
   const lastKnownRef = useRef<{ latitude: number; longitude: number; accuracy?: number; timestamp: number } | null>(null);
   const LAST_KNOWN_MAX_AGE_MS = 10 * 60 * 1000;
 
+  /**
+   * Standort fuer Zeiterfassung: kein zusaetzlicher In-App-Abfragedialog.
+   * Reihenfolge: Projekt-Baustelle (ohne Browser-Dialog) → juengster Cache → Live-GPS (Browser darf fragen).
+   */
   function getLocation(projectId?: string): Promise<LocationResult> {
+    const fromProject = projectId ? getProjectFallback(projectId) : ({ locationSource: "none" } as LocationResult);
+    if (fromProject.latitude != null && fromProject.longitude != null) {
+      return Promise.resolve(fromProject);
+    }
+
+    const lk = lastKnownRef.current;
+    if (lk && Date.now() - lk.timestamp < LAST_KNOWN_MAX_AGE_MS) {
+      return Promise.resolve({
+        latitude: lk.latitude,
+        longitude: lk.longitude,
+        accuracy: lk.accuracy,
+        locationSource: "last_known",
+      });
+    }
+
     return new Promise((resolve) => {
       if (typeof navigator !== "undefined" && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            lastKnownRef.current = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, timestamp: Date.now() };
-            resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy, locationSource: "live" });
+            lastKnownRef.current = {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+              timestamp: Date.now(),
+            };
+            resolve({
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+              locationSource: "live",
+            });
           },
-          () => resolve(getLastKnownOrFallback(projectId)),
+          () => resolve(projectId ? getProjectFallback(projectId) : { locationSource: "none" }),
           { timeout: 8000, enableHighAccuracy: true },
         );
         return;
       }
-      resolve(getLastKnownOrFallback(projectId));
+      resolve(projectId ? getProjectFallback(projectId) : { locationSource: "none" });
     });
-  }
-
-  function getLastKnownOrFallback(projectId?: string): LocationResult {
-    const lk = lastKnownRef.current;
-    if (lk && Date.now() - lk.timestamp < LAST_KNOWN_MAX_AGE_MS) {
-      return { latitude: lk.latitude, longitude: lk.longitude, accuracy: lk.accuracy, locationSource: "last_known" };
-    }
-    return getProjectFallback(projectId);
   }
 
   function getProjectFallback(projectId?: string): LocationResult {

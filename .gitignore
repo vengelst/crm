@@ -4,6 +4,7 @@ node_modules
 dist
 coverage
 .env
+.env.server
 .env.local
 .env.*.local
 apps/web/node_modules

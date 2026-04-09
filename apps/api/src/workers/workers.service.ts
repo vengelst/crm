@@ -334,5 +334,24 @@ export class WorkersService {
         );
       }
     }
+
+    const kioskUsers = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        kioskCodeHash: { not: null },
+      },
+      select: { kioskCodeHash: true },
+    });
+
+    for (const user of kioskUsers) {
+      if (!user.kioskCodeHash) {
+        continue;
+      }
+      if (await compare(pin, user.kioskCodeHash)) {
+        throw new BadRequestException(
+          'PIN kollidiert mit einem Benutzer-Kiosk-Code. Bitte anderen PIN waehlen.',
+        );
+      }
+    }
   }
 }

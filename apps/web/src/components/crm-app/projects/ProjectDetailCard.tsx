@@ -2,10 +2,11 @@
 import { useI18n } from "../../../i18n-context";
 
 import Link from "next/link";
-import { type Dispatch, type SetStateAction, Fragment, useEffect, useState } from "react";
+import { type Dispatch, type SetStateAction, Fragment, useEffect, useMemo, useState } from "react";
 import type {
   Project, ProjectFinancials, TimesheetItem, DocumentItem, Worker,
   DocumentFormState,
+  ProjectAssignmentTimeSummary,
 } from "../types";
 import { CollapsibleContent, CollapseIndicator, cx, formatAddress, mapsUrlFromParts, SecondaryButton, MapLinkButton, PrintButton, openPrintWindow, MessageBar } from "../shared";
 import { DocumentPanel } from "../documents";
@@ -55,6 +56,9 @@ export function ProjectDetailCard({
   const [assignmentMsg, setAssignmentMsg] = useState<string | null>(null);
   const [assignmentErr, setAssignmentErr] = useState<string | null>(null);
   const [financialsOpen, setFinancialsOpen] = useState(false);
+  const [assignmentTimeSummary, setAssignmentTimeSummary] = useState<ProjectAssignmentTimeSummary[] | null>(null);
+  const [assignmentTimeLoadErr, setAssignmentTimeLoadErr] = useState<string | null>(null);
+
   const projectMapsUrl = mapsUrlFromParts([
     project.title,
     project.siteAddressLine1,
@@ -68,9 +72,42 @@ export function ProjectDetailCard({
 
   const fmt = (value?: number | null) => value != null ? `${value.toFixed(2)} EUR` : "-";
 
+  const assignmentWorkerKey = useMemo(
+    () =>
+      [...(project.assignments ?? []).map((a) => a.worker.id)].sort().join(","),
+    [project.assignments],
+  );
+
   useEffect(() => {
     setSelectedWorkerIds((project.assignments ?? []).map((assignment) => assignment.worker.id));
   }, [project.assignments]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAssignmentTimeLoadErr(null);
+    void apiFetch<ProjectAssignmentTimeSummary[]>(`/projects/${project.id}/assignment-time-summary`)
+      .then((rows) => {
+        if (!cancelled) setAssignmentTimeSummary(rows);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAssignmentTimeSummary(null);
+          setAssignmentTimeLoadErr(l("proj.assignmentTimeLoadError"));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, assignmentWorkerKey, apiFetch, l]);
+
+  function formatTodayMinutes(totalMin: number): string {
+    if (totalMin <= 0) return `0 ${l("proj.assignmentTimeMinShort")}`;
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h === 0) return `${m} ${l("proj.assignmentTimeMinShort")}`;
+    if (m === 0) return `${h} ${l("proj.assignmentTimeHourShort")}`;
+    return `${h} ${l("proj.assignmentTimeHourShort")} ${m} ${l("proj.assignmentTimeMinShort")}`;
+  }
 
   async function saveAssignments() {
     setAssignmentSaving(true);
@@ -173,28 +210,68 @@ export function ProjectDetailCard({
 
       {/* ── Eingeteilte Monteure mit Stundensatz ────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-        <h4 className="mb-3 text-base font-semibold">{l("proj.assignments")}</h4>
+        <h4 className="mb-1 text-base font-semibold">{l("proj.assignments")}</h4>
+        <p className="mb-3 text-xs text-slate-500">{l("proj.assignmentTimeHint")}</p>
+        {assignmentTimeLoadErr ? (
+          <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">{assignmentTimeLoadErr}</p>
+        ) : null}
         {(project.assignments ?? []).length === 0 ? (
           <p className="text-sm text-slate-500">{l("proj.noAssignments")}</p>
         ) : (
           <div className="grid gap-2">
-            {(project.assignments ?? []).map((assignment) => (
-              <Link
-                key={assignment.id}
-                href={`/workers/${assignment.worker.id}`}
-                className="flex items-center justify-between rounded-xl border border-black/10 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800"
-              >
-                <div>
-                  <div className="font-medium">{assignment.worker.firstName} {assignment.worker.lastName}</div>
-                  <div className="text-slate-500">{assignment.worker.workerNumber}</div>
-                </div>
-                <div className="text-right font-mono text-xs text-slate-500">
-                  {assignment.worker.internalHourlyRate != null
-                    ? `${assignment.worker.internalHourlyRate.toFixed(2)} ${l("proj.internalPerHour")}`
-                    : l("proj.noHourlyRate")}
-                </div>
-              </Link>
-            ))}
+            {(project.assignments ?? []).map((assignment) => {
+              const live = assignmentTimeSummary?.find((r) => r.workerId === assignment.worker.id);
+              return (
+                <Link
+                  key={assignment.id}
+                  href={`/workers/${assignment.worker.id}`}
+                  className="flex flex-col gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{assignment.worker.firstName} {assignment.worker.lastName}</div>
+                    <div className="text-slate-500">{assignment.worker.workerNumber}</div>
+                    {live ? (
+                      <div className="mt-2 grid gap-1 text-xs text-slate-600 dark:text-slate-400">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={live.workingOnProjectNow
+                              ? "inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                              : "inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"}
+                          >
+                            {live.workingOnProjectNow ? l("proj.assignmentLiveWorking") : l("proj.assignmentLiveIdle")}
+                          </span>
+                          {live.workingOnProjectNow && live.openClockInStartedAt ? (
+                            <span className="text-slate-500">
+                              {l("proj.assignmentSince")}{" "}
+                              {new Date(live.openClockInStartedAt).toLocaleString(locale)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div>
+                          {l("proj.assignmentTodayFirst")}{" "}
+                          {live.todayFirstClockInOnProjectAt
+                            ? new Date(live.todayFirstClockInOnProjectAt).toLocaleString(locale)
+                            : l("proj.assignmentTodayFirstNone")}
+                        </div>
+                        <div>
+                          {l("proj.assignmentTodayOnProject")}{" "}
+                          <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
+                            {formatTodayMinutes(live.todayMinutesOnProject)}
+                          </span>
+                        </div>
+                      </div>
+                    ) : assignmentTimeSummary === null && !assignmentTimeLoadErr ? (
+                      <div className="mt-1 text-xs text-slate-400">{l("common.loading")}</div>
+                    ) : null}
+                  </div>
+                  <div className="shrink-0 text-right font-mono text-xs text-slate-500 sm:pt-0.5">
+                    {assignment.worker.internalHourlyRate != null
+                      ? `${assignment.worker.internalHourlyRate.toFixed(2)} ${l("proj.internalPerHour")}`
+                      : l("proj.noHourlyRate")}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>
