@@ -1390,6 +1390,10 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     authToken={auth.accessToken}
                     onUpload={() => handleDocumentUpload("WORKER", selectedWorker.id)}
                     onDataChanged={loadData}
+                    onEdit={() => {
+                      setWorkerForm(mapWorkerToForm(selectedWorker));
+                      setShowCreateWorker(true);
+                    }}
                     apiFetch={apiFetch}
                   />
                 </>

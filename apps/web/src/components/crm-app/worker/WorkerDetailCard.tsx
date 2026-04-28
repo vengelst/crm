@@ -23,6 +23,7 @@ export function WorkerDetailCard({
   authToken,
   onUpload,
   onDataChanged,
+  onEdit,
   apiFetch,
 }: {
   worker: Worker;
@@ -37,6 +38,7 @@ export function WorkerDetailCard({
   authToken: string;
   onUpload: () => void | Promise<void>;
   onDataChanged: () => Promise<void> | void;
+  onEdit: () => void;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
 }) {
   const { t: l } = useI18n();
@@ -183,7 +185,17 @@ export function WorkerDetailCard({
             </h3>
             <p className="text-sm text-slate-500">{worker.workerNumber}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onEdit}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-.879.515l-3.536.94.94-3.536a2 2 0 01.515-.879z" />
+              </svg>
+              {l("common.edit")}
+            </button>
             {workerMapsUrl ? <MapLinkButton href={workerMapsUrl}>Google Maps</MapLinkButton> : null}
             <PrintButton onClick={printWorker} label="Monteur drucken" />
           </div>

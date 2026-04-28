@@ -54,6 +54,27 @@
 
 ## Aenderungshistorie
 
+## 2026-04-28
+
+### TEST-Server Loginfehler nach DB-Uebertragung (Codex, read-only Diagnose)
+
+- Ausgangslage:
+  - Lokal auf der Dev-Maschine lief der CRM-Stack unter `http://localhost:3800`; Login und Kiosk-Login funktionierten.
+  - Nach Uebertragung der Datenbank auf den TEST-Server waren die CRM-Domain und die Container erreichbar, Anmeldungen auf `crm.vivahome.de` liefen jedoch in `500`-Fehler.
+
+- Pruefung durch Codex:
+  - Lokalen Dev-Docker-Stack neu gebaut und gestartet; Web, API, Postgres und MinIO liefen danach wieder sauber.
+  - Server read-only geprueft: aktive Nginx-Konfiguration, laufende Container, API-Logs, Postgres-Logs und Datenbankinhalt.
+  - In der Server-DB wurden die erwarteten Benutzer bestaetigt (`admin@example.local`, `ve@vivahome.de`); die Datenbank war also inhaltlich vorhanden.
+  - Der oeffentliche `/api`-Pfad fuer `crm.vivahome.de` war aktiv; der verbleibende Fehler lag nicht primaer im Proxy.
+  - API-Logs zeigten fuer `POST /api/auth/login` und `POST /api/auth/kiosk-login` konsistent `P1000` / `password authentication failed for user "postgres"`.
+  - Ursache eingegrenzt: Der Datenbanktransfer hatte Inhalte und Schema uebertragen, aber nicht automatisch die zur Laufzeit benoetigte Postgres-Rollen-Authentifizierung fuer Netzwerkzugriffe zwischen `crm-api` und `crm-postgres`.
+
+- Ergebnis / Entscheidung:
+  - Der Serverfehler war kein Produktivcode- oder UI-Problem, sondern ein Betriebs-/Credentials-Thema zwischen API und Postgres.
+  - Nach Angleichen des Postgres-Rollenpassworts an die erwartete Laufzeitkonfiguration funktionierte der Server-Login wieder.
+  - Fuer kuenftige TEST-Deploys gilt: Nach DB-Transfer immer nicht nur Daten und Containerstatus, sondern auch die effektive DB-Authentifizierung zwischen `crm-api` und `crm-postgres` pruefen.
+
 ## 2026-04-09
 
 ### Ressourcen- und Deploy-Anpassungen (Claude)
