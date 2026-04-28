@@ -209,7 +209,7 @@ else
 fi
 git reset --hard origin/{{BRANCH}}
 
-docker compose up -d postgres minio
+docker compose -f docker-compose.yml up -d postgres minio
 
 for i in $(seq 1 30); do
   if docker exec crm-postgres pg_isready -U postgres -d crm_monteur >/dev/null 2>&1; then
@@ -270,7 +270,7 @@ else
     echo "[db] FEHLER: DATABASE_URL ist in .env nicht gesetzt." >&2
     exit 1
   fi
-  if ! docker compose run --rm --build -e DATABASE_URL="$DATABASE_URL" api sh -c "npx prisma migrate deploy --config prisma/prisma.config.ts"; then
+  if ! docker compose -f docker-compose.yml run --rm --build -e DATABASE_URL="$DATABASE_URL" api sh -c "npx prisma migrate deploy --config prisma/prisma.config.ts"; then
     echo "" >&2
     echo "========================================" >&2
     echo "  APP-Deploy abgebrochen:" >&2
@@ -291,7 +291,7 @@ else
 fi
 
 echo "[docker] rebuilding stack"
-docker compose up -d --build
+docker compose -f docker-compose.yml up -d --build
 '@
 
 $remoteScript = $remoteScript.

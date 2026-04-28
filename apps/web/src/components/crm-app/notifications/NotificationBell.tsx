@@ -22,10 +22,23 @@ export function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, ini
     const timer = window.setTimeout(() => {
       void loadCount();
     }, 0);
-    const interval = setInterval(() => void loadCount(), 60000);
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
+      void loadCount();
+    };
+    const interval = setInterval(tick, 180_000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        void loadCount();
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
     return () => {
       window.clearTimeout(timer);
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, [loadCount]);
 

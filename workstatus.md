@@ -56,6 +56,75 @@
 
 ## 2026-04-09
 
+### Ressourcen- und Deploy-Anpassungen (Claude)
+
+- **`getProjectAssignmentTimeSummary`** (`apps/api/src/time/time.service.ts`): Statt N+1 pro Monteur zwei gebündelte Queries (Projekt-Einträge ab gestern, IN/OUT mit Lookback 366 Tage) plus In-Memory-Auswertung; Hilfsmethode `findOpenClockInFromInOutSequence`.
+- **Office-Reminder-Queue** (`apps/api/src/reminders/reminders.service.ts`): Vor dem Dispatch werden alle `ReminderLog`-Einträge mit Status `SENT` für die betroffenen Reminder-IDs einmal geladen; pro Kanal wird ein Set genutzt statt wiederholter `findUnique`-Aufrufe. Entfernt: `wasOfficeReminderChannelSent`.
+- **Referenzdaten Reminder-UI**: `getOfficeReminderReferenceData` — `take: 500` für Kunden, Kontakte, Projekte (Notizen blieben bei 50).
+- **Dokumente** (`documents.service.ts`): `list` mit `take: 500`.
+- **Storage** (`storage.service.ts`): `getObjectBufferWithFallback` bricht Lesen ab, wenn die Gesamtgroesse 40 MiB ueberschreitet (Stream + lokale Datei per `stat`).
+- **NotificationBell**: Polling 180 s, nur bei sichtbarem Tab; bei `visibilitychange` → `visible` sofortiger Refresh.
+- **Deploy-Test-Skript** (`abgleich/deploy-test.ps1`): Remote-Aufrufe explizit `docker compose -f docker-compose.yml`.
+- **Doku**: `abgleich/SERVER-DIAGNOSE.md` — CRM-Postgres vs. fremdes MySQL, Befehle zur Lastanalyse (ohne produktive MySQL-Konfiguration zu aendern).
+
+## 2026-04-16
+
+### Produktions-Server vivahome.de (SSH, read-only)
+
+Messzeitpunkt: hohe Load (~6.3) auf ~7.7 GiB RAM, kein Swap.
+
+- **Host-MariaDB** (`/usr/sbin/mariadbd`, User `mysql`): im Moment **keine** auffaellige CPU; `SHOW FULL PROCESSLIST` zeigte nur `Sleep` (Plesk/psa) und die Diagnose-Abfrage selbst.
+- **`crm-postgres` (Docker):** `docker stats` meldete **>600 % CPU** und **~2.3 GiB RAM** — das passt **nicht** zu normalem Leerlauf-PostgreSQL.
+- **`docker top crm-postgres`:** laufender Prozess **`/tmp/mysql`** (ca. 2 MiB Binary, User `postgres`, Rechte `700`, MD5 `590b00dff7a44130ebe1350a5b4ddc97`) mit sehr hoher CPU-Zeit — **das ist nicht** die Host-Datenbank und **kein** offizielles PostgreSQL-Binary. **Eindringlich wahrscheinlich Kompromittierung oder Schadsoftware** im Container (Tarnname „mysql“).
+
+**Empfohlene Sofortmassnahmen (Betrieb, ausserhalb Repo):** Container stoppen oder Netzwerk isolieren, **Forensik** (wann angelegt, Eintrittspfad), Postgres-Volume/Images **nicht blind weiterverwenden**, Secrets (`DATABASE_URL`, API-Keys, Plesk) **rotieren**, Stack aus **vertrauenswuerdiger Quelle** neu deployen. Details und Befehle: `abgleich/SERVER-DIAGNOSE.md` (Abschnitt DB-Container).
+
+### App-Pruefung Ressourcenverbrauch (read-only, Codex/Claude-Befund)
+
+**Ist-Zustand (idle, 3 Snapshots ueber 15 s, lokal):**
+
+| Container     | CPU       | RAM     | Auffaelligkeit                          |
+|---------------|-----------|---------|----------------------------------------|
+| crm-web       | 0,0–0,8 % | 992 MiB | konstant hoch fuer idle                |
+| crm-api       | 2,1–4,1 % | 596 MiB | 3 parallele Node-Prozesse              |
+| crm-postgres  | 0,0–4,0 % | 27 MiB  | unauffaellig                           |
+| crm-minio     | 0,0–0,1 % | 78 MiB  | unauffaellig                           |
+
+- Container liefen zum Messzeitpunkt seit **8 Tagen** ohne Restart.
+- Im API-Container: **drei** Node-Prozesse gleichzeitig (`pnpm start:dev` → `nest start --watch` → `node dist/main`).
+
+**Hauptbefund (hohe Wahrscheinlichkeit):**  
+Beide CRM-Container mit `NODE_ENV=development`, `CHOKIDAR_USEPOLLING=true`, `WATCHPACK_POLLING=true`, `next dev` und `nest start --watch` — Hinweis auf **Dev-Compose-Override** (`docker-compose.dev.yml`) statt Produktions-Images. Folgen: dauerhaftes Filesystem-Polling (idle-CPU), hoher RAM durch `next dev` (HMR, groessere Bundles im Speicher), mehrfacher Node-Heap bei parallelen API-Prozessen.
+
+**Top-5 Verdachtsliste (sortiert):**
+
+1. Dev-Modus auf TEST/Prod (groesster Hebel).
+2. `reminders.service.ts` (ca. 293): `@Interval(3600000)`; ca. 334–349: N+1 bei Reminder-Unterjobs.
+3. `time.service.ts` `getProjectAssignmentTimeSummary`: Schleife pro Monteur mit `findOpenClockIn` + `findMany` — bei hauefigem Aufruf (z. B. Projekt-Dashboard) teuer.
+4. `NotificationBell.tsx` (ca. 25): `setInterval(loadCount, 60000)` pro Client → Last skaliert mit Nutzerzahl.
+5. `storage.service.ts` (ca. 244): `Buffer.concat` statt Stream bei grossen Dateien.
+
+**Priorisierte naechste Schritte:**
+
+1. Auf **TEST-Server** `docker compose`/`docker inspect crm-api` pruefen: **nur** `docker-compose.yml`, **ohne** `-f docker-compose.dev.yml`; `NODE_ENV=production` verifizieren.
+2. Reminder-Cron: Batch-Fetch statt N+1 in `runOfficeReminderQueue`.
+3. `getProjectAssignmentTimeSummary`: **eine** aggregierte Query (`workerId: { in: [...] }`) statt Schleife.
+4. NotificationBell: Intervall 180–300 s oder bei Focus/Visibility drosseln.
+5. `documents.service.ts` / `reminders.service.ts`: Pagination / `take`-Limits pruefen.
+
+**Nicht untersucht (Scope):** keine Last-Messung unter echter Nutzung; kein `pg_stat_statements`; kein Heap-Dump; Dev-Modus-Aussage auf echtem TEST-Host noch **verifizieren**.
+
+**Umsetzung:** Kein Produktivcode in dieser Pruefrunde geaendert (read-only). **Naechster Hebel:** Compose-Setup auf TEST verifizieren, bevor tiefe Code-Optimierungen.
+
+## 2026-04-09
+
+### Server-Neuaufsetzung: `neuserver-host-setup.sh` (Compose ohne apt-Paket)
+
+- Auf manchen Ubuntu-Quellen fehlt `docker-compose-plugin`; der bisherige **eine** `apt-get`-Schritt brach dann komplett ab.
+- Anpassung: zuerst `docker.io` + `nginx`, danach optional `docker-compose-plugin`; **Fallback** Compose v2 als CLI-Binary nach `/usr/local/lib/docker/cli-plugins/docker-compose` (GitHub Release, `x86_64` / `aarch64`).
+- **`neuserver-host-setup.sh` nicht im Repo-Ordner** `abgleich/server-reinstall-backups/`; Pflege nur auf dem Host unter **`/tmp/sicherung/`** (README beschreibt Ablage, kein vollständiger Skripttext im README).
+- **Ubuntu 24.04:** Paketname für Compose ist **`docker-compose-v2`**, nicht `docker-compose-plugin` (letzteres fehlt im Ubuntu-Archiv). Skript auf dem Host versucht jetzt: Plugin → **v2-Paket** → GitHub-Fallback; vivahome: `docker-compose-v2` nachinstalliert, manuelles Binary unter `/usr/local/...` entfernt, damit die Paket-Version genutzt wird.
+
 ### Projekt: Live-Status zugeordneter Monteure
 
 - API `GET /projects/:id/assignment-time-summary` (Buerorollen): je Monteur offene Arbeit auf diesem Projekt, erste heutige CLOCK_IN auf dem Projekt, Minuten heute auf dem Projekt.
@@ -527,3 +596,61 @@
   - Umsetzung durch Claude
   - anschliessende Codex-Abnahme
   - Entscheidung nach Umsetzung, ob die Hinweis-Nachweise zusaetzlich auch in PDF / Dokumenthistorie sichtbar gemacht werden sollen
+
+## 2026-04-16
+
+### App-Pruefung Ressourcenverbrauch (read-only Analyse)
+
+- Ausgangslage:
+  - Auf dem TEST-/Produktivserver wurde auffaellig hoher CPU-/RAM-Verbrauch der CRM-Container gemeldet.
+  - Pruefung sollte read-only erfolgen, ohne Produktivdaten zu gefaehrden und ohne ungefragte Refactors.
+
+- Ist-Zustand (Messung lokal, 3 Snapshots ueber 15s, idle):
+  - `crm-web`  : CPU 0,0–0,8 % | RAM **992 MiB** (konstant)
+  - `crm-api`  : CPU 2,1–4,1 % | RAM **596 MiB** (konstant)
+  - `crm-postgres`: CPU 0,0–4,0 % | RAM 27 MiB
+  - `crm-minio`: CPU 0,0–0,1 % | RAM 78 MiB
+  - API-Prozesse: **zwei parallele Node-Prozesse** im Container
+    - `pnpm --filter api start:dev` (PID 1)
+    - `nest.js start --watch` (PID 19, bereits **1h34 CPU-Zeit** bei 8 Tagen Laufzeit)
+    - `node --enable-source-maps dist/main` (PID 36)
+  - Container laufen seit 8 Tagen ohne Restart.
+
+- **Hauptbefund (hohe Wahrscheinlichkeit):**
+  Beide CRM-Container laufen mit **`NODE_ENV=development`** und den Dev-Overrides
+  (`CHOKIDAR_USEPOLLING=true`, `WATCHPACK_POLLING=true`, `next dev`, `nest start --watch`).
+  Das heisst der TEST-Server nutzt anscheinend den Dev-Compose-Override statt des Prod-Images.
+  Folgen:
+  - Filesystem-Polling (chokidar/watchpack) laeuft ununterbrochen → idle-CPU-Grundlast.
+  - Next.js im Dev-Modus behaelt HMR, Source-Maps und ungemischtes Bundle im Speicher → ~1 GB RAM nur fuer Web.
+  - API laeuft als **drei parallele Node-Instanzen** statt einem Prod-Prozess → Dreifach-Heap.
+
+- Hypothesen (sortiert nach Wahrscheinlichkeit):
+  1. **Dev-Modus auf TEST/Prod** — erklaert den Grossteil der idle-Last (Web ~1 GB, API 3× Node, dauerhaftes FS-Polling).
+  2. **Reminder-Cron `@Interval(3600000)` in `apps/api/src/reminders/reminders.service.ts:293`** —
+     stuendlicher Batch, ruft 5 Unter-Jobs; `runOfficeReminderQueue` iteriert in Schleife und ruft je Reminder weitere DB-Calls auf. Bei vielen offenen Reminders N+1.
+  3. **`TimeService.getProjectAssignmentTimeSummary` in `apps/api/src/time/time.service.ts:115` —
+     `for (const workerId of workerIds)` mit `findOpenClockIn` + `findMany(timeEntry)` pro Monteur. Dashboard-relevant, mehrfach pro Minute.
+  4. **Client-Polling `NotificationBell` in `apps/web/src/components/crm-app/notifications/NotificationBell.tsx:25`** — `setInterval(loadCount, 60000)` bei jedem angemeldeten Benutzer → lineare DB-Last mit Benutzeranzahl.
+  5. **I/O — `storage.service.ts:244` (Buffer.concat statt Stream)** — grosse Dateien (PDFs, Bilder) werden komplett in RAM geladen; vereinzelte Memory-Spikes moeglich, aber kein Dauerbefund.
+
+- Konkrete naechste Schritte (Reihenfolge nach Wirkung):
+  1. **TEST-Server Compose-Setup pruefen** — nur `docker-compose.yml` verwenden (ohne `docker-compose.dev.yml`), `NODE_ENV=production` im Prod-Image setzen, Polling-ENV entfernen. Erwartete Ersparnis: grosser Teil der idle-CPU und ~500–700 MiB RAM auf Web.
+  2. **Reminder-Cron entschaerfen** — `runOfficeReminderQueue` auf Batch-Dispatch umstellen, `wasOfficeReminderChannelSent` pro Ausfuehrung einmal sammeln statt pro Reminder abfragen. Datei: `apps/api/src/reminders/reminders.service.ts`.
+  3. **`getProjectAssignmentTimeSummary`** — eine gesammelte Query `findMany({ workerId: { in: workerIds } })` statt Schleife. Datei: `apps/api/src/time/time.service.ts:140`.
+  4. **`NotificationBell`-Polling** — Intervall von 60 s auf 180–300 s anheben, oder ueber Focus-Events drosseln. Datei: `apps/web/src/components/crm-app/notifications/NotificationBell.tsx:25`.
+  5. **`documents.service.ts:42` und `reminders.service.ts:144`** — Pagination/Limits ergaenzen.
+
+- Nicht untersucht (Scope):
+  - Keine Live-Messung unter Last (nur idle, drei Snapshots lokal).
+  - `pg_stat_statements` / Query-Profiling der Produktivdatenbank wurde nicht angefasst.
+  - Kein Heap-Dump oder Memory-Profile der Node-Prozesse.
+  - Server-Seite (echter TEST-Host) nicht direkt gemessen — Befund basiert auf lokalem Dev-Stack und Code-Analyse.
+
+- Ergebnis / Entscheidung:
+  - Analyse liegt vor; Codeaenderungen noch **nicht** umgesetzt (read-only Auftrag).
+  - Priorisierte Massnahme ist die Compose-/Umgebungs-Pruefung auf dem TEST-Server, bevor Code-Hotspots angefasst werden.
+
+- Offene Punkte:
+  - Verifizieren, welches Compose-File tatsaechlich auf dem TEST-Server laeuft (`docker inspect` auf dem Server).
+  - Nach Freigabe einzelne Code-Hotspots als separate Claude-Aufgaben formulieren.

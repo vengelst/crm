@@ -5,6 +5,7 @@ import {
   createReadStream,
   existsSync,
   readFileSync,
+  statSync,
   unlinkSync,
 } from 'node:fs';
 import { resolve } from 'node:path';
@@ -16,6 +17,9 @@ export interface StorageObjectStat {
   lastModified: Date;
   metaData: Record<string, string>;
 }
+
+/** Max. Groesse fuer Puffer-Lesevorgaenge (OOM-Schutz). */
+const MAX_OBJECT_BUFFER_BYTES = 40 * 1024 * 1024;
 
 /**
  * Central S3/MinIO storage service.
@@ -244,10 +248,18 @@ export class StorageService implements OnModuleInit {
     if (inMinio) {
       const stream = await this.client.getObject(this.bucket, objectKey);
       const chunks: Uint8Array[] = [];
+      let total = 0;
       for await (const chunk of stream) {
-        chunks.push(
-          chunk instanceof Uint8Array ? chunk : Buffer.from(String(chunk)),
-        );
+        const buf =
+          chunk instanceof Uint8Array ? chunk : Buffer.from(String(chunk));
+        total += buf.length;
+        if (total > MAX_OBJECT_BUFFER_BYTES) {
+          this.logger.warn(
+            `Object "${objectKey}" exceeds max buffer size (${MAX_OBJECT_BUFFER_BYTES} bytes); aborting read.`,
+          );
+          return null;
+        }
+        chunks.push(buf);
       }
       return Buffer.concat(chunks);
     }
@@ -256,6 +268,13 @@ export class StorageService implements OnModuleInit {
     if (this.localFallbackEnabled) {
       const localPath = resolve(this.localStorageRoot, objectKey);
       if (existsSync(localPath)) {
+        const size = statSync(localPath).size;
+        if (size > MAX_OBJECT_BUFFER_BYTES) {
+          this.logger.warn(
+            `Local file "${objectKey}" (${size} bytes) exceeds max buffer size; skipping.`,
+          );
+          return null;
+        }
         this.logger.warn(
           `[local-fallback] Reading "${objectKey}" from disk — not yet in MinIO.`,
         );

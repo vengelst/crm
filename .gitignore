@@ -14,3 +14,7 @@ apps/api/dist
 prisma/dev.db
 /storage/
 *.log
+
+# Server-Reinstall: enthaelt Host-/Plesk-Nginx (nicht ins Repo committen)
+abgleich/server-reinstall-backups/*.tar.gz
+abgleich/server-reinstall-backups/nginx-T-expanded-*.conf

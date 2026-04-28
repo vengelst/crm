@@ -45,6 +45,7 @@ export class DocumentsService {
       orderBy: {
         createdAt: 'desc',
       },
+      take: 500,
     });
 
     if (!entityType && !entityId) {

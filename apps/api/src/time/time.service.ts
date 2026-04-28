@@ -111,6 +111,7 @@ export class TimeService {
 
   /**
    * Bueromodus: je zugeordnetem Monteur Status/Zeit **auf diesem Projekt** (heute, Server-Lokalzeit).
+   * Gebündelte Queries statt N+1 pro Monteur.
    */
   async getProjectAssignmentTimeSummary(projectId: string) {
     const assignments = await this.prisma.projectAssignment.findMany({
@@ -118,16 +119,52 @@ export class TimeService {
       select: { workerId: true },
     });
     const workerIds = [...new Set(assignments.map((a) => a.workerId))];
+    if (workerIds.length === 0) {
+      return [];
+    }
 
     const now = new Date();
-    const todayStart = new Date(
+    const todayStartMs = new Date(
       now.getFullYear(),
       now.getMonth(),
       now.getDate(),
-    );
-    const todayStartMs = todayStart.getTime();
+    ).getTime();
     const nowMs = now.getTime();
     const yesterday = new Date(todayStartMs - 24 * 3600_000);
+    const inOutLookback = new Date(nowMs - 366 * 24 * 3600 * 1000);
+
+    const [allProjectEntries, allInOut] = await Promise.all([
+      this.prisma.timeEntry.findMany({
+        where: {
+          projectId,
+          workerId: { in: workerIds },
+          occurredAtClient: { gte: yesterday },
+        },
+        orderBy: [{ workerId: 'asc' }, { occurredAtClient: 'asc' }],
+      }),
+      this.prisma.timeEntry.findMany({
+        where: {
+          workerId: { in: workerIds },
+          entryType: { in: ['CLOCK_IN', 'CLOCK_OUT'] },
+          occurredAtServer: { gte: inOutLookback },
+        },
+        orderBy: [{ workerId: 'asc' }, { occurredAtServer: 'asc' }],
+      }),
+    ]);
+
+    const projectByWorker = new Map<string, typeof allProjectEntries>();
+    for (const e of allProjectEntries) {
+      const list = projectByWorker.get(e.workerId) ?? [];
+      list.push(e);
+      projectByWorker.set(e.workerId, list);
+    }
+
+    const inOutByWorker = new Map<string, typeof allInOut>();
+    for (const e of allInOut) {
+      const list = inOutByWorker.get(e.workerId) ?? [];
+      list.push(e);
+      inOutByWorker.set(e.workerId, list);
+    }
 
     const rows: Array<{
       workerId: string;
@@ -138,18 +175,12 @@ export class TimeService {
     }> = [];
 
     for (const workerId of workerIds) {
-      const openEntry = await this.findOpenClockIn(workerId);
+      const entries = projectByWorker.get(workerId) ?? [];
+      const openEntry = this.findOpenClockInFromInOutSequence(
+        inOutByWorker.get(workerId) ?? [],
+      );
       const workingOnProjectNow =
         !!openEntry && openEntry.projectId === projectId;
-
-      const entries = await this.prisma.timeEntry.findMany({
-        where: {
-          workerId,
-          projectId,
-          occurredAtClient: { gte: yesterday },
-        },
-        orderBy: { occurredAtClient: 'asc' },
-      });
 
       let todayFirstClockInOnProjectAt: string | null = null;
       for (const e of entries) {
@@ -201,6 +232,30 @@ export class TimeService {
     }
 
     return rows;
+  }
+
+  /**
+   * Letzter offener CLOCK_IN aus chronologischer IN/OUT-Folge (gleiche Logik wie findOpenClockIn, ohne DB).
+   */
+  private findOpenClockInFromInOutSequence(
+    entries: Array<{
+      entryType: string;
+      occurredAtServer: Date;
+      occurredAtClient: Date;
+      projectId: string;
+    }>,
+  ): (typeof entries)[0] | null {
+    let open: (typeof entries)[0] | null = null;
+    for (const e of entries) {
+      if (e.entryType === 'CLOCK_IN') {
+        open = e;
+      } else if (e.entryType === 'CLOCK_OUT') {
+        if (open && e.occurredAtServer > open.occurredAtServer) {
+          open = null;
+        }
+      }
+    }
+    return open;
   }
 
   async getTodayStats(workerId: string) {

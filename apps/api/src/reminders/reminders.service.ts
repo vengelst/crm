@@ -170,6 +170,7 @@ export class RemindersService {
         where: { deletedAt: null },
         select: { id: true, companyName: true, customerNumber: true },
         orderBy: { companyName: 'asc' },
+        take: 500,
       }),
       this.prisma.customerContact.findMany({
         select: {
@@ -182,6 +183,7 @@ export class RemindersService {
           },
         },
         orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+        take: 500,
       }),
       this.prisma.project.findMany({
         where: { deletedAt: null },
@@ -195,6 +197,7 @@ export class RemindersService {
           },
         },
         orderBy: { updatedAt: 'desc' },
+        take: 500,
       }),
       this.prisma.note.findMany({
         select: {
@@ -341,15 +344,42 @@ export class RemindersService {
       orderBy: { remindAt: 'asc' },
     });
 
+    if (reminders.length === 0) {
+      return 0;
+    }
+
+    const reminderIds = reminders.map((r) => r.id);
+    const existingLogs = await this.prisma.reminderLog.findMany({
+      where: {
+        type: OFFICE_REMINDER_TYPE,
+        entityId: { in: reminderIds },
+        status: 'SENT',
+      },
+    });
+    const sentChannelKeys = new Set(
+      existingLogs.map((l) =>
+        this.officeReminderDispatchKey(l.entityId, l.channel, l.recipientId),
+      ),
+    );
+
     let sentCount = 0;
     for (const reminder of reminders) {
-      sentCount += await this.dispatchOfficeReminder(reminder);
+      sentCount += await this.dispatchOfficeReminder(reminder, sentChannelKeys);
     }
     return sentCount;
   }
 
+  private officeReminderDispatchKey(
+    entityId: string,
+    channel: string,
+    recipientId: string,
+  ) {
+    return `${entityId}\x1f${channel}\x1f${recipientId}`;
+  }
+
   private async dispatchOfficeReminder(
     reminder: Awaited<ReturnType<typeof this.getOfficeReminderOrThrow>>,
+    sentChannelKeys: Set<string>,
   ) {
     const { linkType, linkId } = this.resolveReminderLink(reminder);
     const title = reminder.title;
@@ -369,10 +399,8 @@ export class RemindersService {
       }
 
       if (
-        await this.wasOfficeReminderChannelSent(
-          reminder.id,
-          channel,
-          recipientId,
+        sentChannelKeys.has(
+          this.officeReminderDispatchKey(reminder.id, channel, recipientId),
         )
       ) {
         continue;
@@ -430,6 +458,9 @@ export class RemindersService {
         delivered ? 'SENT' : 'FAILED',
       );
       if (delivered) {
+        sentChannelKeys.add(
+          this.officeReminderDispatchKey(reminder.id, channel, recipientId),
+        );
         sentCount += 1;
       }
     }
@@ -953,24 +984,6 @@ export class RemindersService {
       .replace(/\r?\n/g, '\\n')
       .replace(/,/g, '\\,')
       .replace(/;/g, '\\;');
-  }
-
-  private async wasOfficeReminderChannelSent(
-    entityId: string,
-    channel: string,
-    recipientId: string,
-  ) {
-    const existing = await this.prisma.reminderLog.findUnique({
-      where: {
-        type_entityId_channel_recipientId: {
-          type: OFFICE_REMINDER_TYPE,
-          entityId,
-          channel,
-          recipientId,
-        },
-      },
-    });
-    return existing?.status === 'SENT';
   }
 
   private async clearOfficeReminderLogs(entityId: string) {
