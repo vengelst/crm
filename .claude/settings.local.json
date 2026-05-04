@@ -5,7 +5,9 @@
       "Bash(pnpm --filter web build)",
       "Bash(pnpm lint:*)",
       "Bash(pnpm --filter api lint)",
-      "Bash(pnpm --filter web lint)"
+      "Bash(pnpm --filter web lint)",
+      "Bash(docker exec *)",
+      "Read(//c/Users/Ve/.claude/projects/c--coding-CRM/memory//**)"
     ]
   }
 }

@@ -21,6 +21,7 @@ import { RemindersModule } from './reminders/reminders.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { NotesModule } from './notes/notes.module';
 import { StorageModule } from './storage/storage.module';
+import { PrintModule } from './print/print.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { StorageModule } from './storage/storage.module';
     ScheduleModule.forRoot(),
     NotesModule,
     StorageModule,
+    PrintModule,
   ],
   controllers: [AppController],
   providers: [AppService],

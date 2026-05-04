@@ -16,6 +16,7 @@ import { TodayStatsBar } from "./TodayStatsBar";
 import { OpenWorkCard } from "./OpenWorkCard";
 import { WorkerTimesheetSection } from "./WorkerTimesheetSection";
 import { getDeviceUuid } from "./device-uuid";
+import { useWorkerPhoto } from "./use-worker-photo";
 
 /** Props fuer die Kiosk-Projektdetail-Ansicht, die per Render-Prop eingebunden wird. */
 export type KioskProjectViewProps = {
@@ -47,6 +48,8 @@ export function WorkerTimeView({
 }: WorkerTimeViewProps) {
   const lang: SupportedLang = auth.sessionLang === "en" ? "en" : "de";
   const l = (key: string) => t(key, lang);
+
+  const photoSrc = useWorkerPhoto(auth.worker?.id ?? null, auth.worker?.photoPath ?? null, auth.accessToken);
 
   const [status, setStatus] = useState<WorkerTimeStatus | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
@@ -202,10 +205,24 @@ export function WorkerTimeView({
     <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
       <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
         <div className="flex flex-col gap-4 rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-slate-500">{l("worker.platform")}</p>
-            <h1 className="text-2xl font-semibold">{l("worker.timeTracking")}</h1>
-            <p className="text-sm text-slate-500">{auth.worker?.name} · {auth.worker?.workerNumber}</p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-black/10 bg-slate-100 text-sm font-semibold text-slate-400 dark:border-white/10 dark:bg-slate-800">
+              {photoSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photoSrc} alt={auth.worker?.name ?? ""} className="h-full w-full object-cover" />
+              ) : (
+                <span>{(auth.worker?.name ?? "")
+                  .split(" ")
+                  .map((part) => part[0]?.toUpperCase() ?? "")
+                  .slice(0, 2)
+                  .join("")}</span>
+              )}
+            </div>
+            <div>
+              <p className="text-sm uppercase tracking-[0.2em] text-slate-500">{l("worker.platform")}</p>
+              <h1 className="text-2xl font-semibold">{l("worker.timeTracking")}</h1>
+              <p className="text-sm text-slate-500">{auth.worker?.name} · {auth.worker?.workerNumber}</p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />

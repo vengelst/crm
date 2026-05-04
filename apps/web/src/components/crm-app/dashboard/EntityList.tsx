@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { cx, SecondaryButton } from "../shared";
 
 export function EntityList<T extends { id: string }>({
@@ -15,6 +16,7 @@ export function EntityList<T extends { id: string }>({
   onOpen,
   onEdit,
   onDelete,
+  badges,
 }: {
   items: T[];
   title: (item: T) => string;
@@ -27,6 +29,8 @@ export function EntityList<T extends { id: string }>({
   onOpen?: (item: T) => void;
   onEdit?: (item: T) => void;
   onDelete: (item: T) => void;
+  /** Optionaler Render-Slot fuer kleine Kennzahlen / Badges neben dem Titel. */
+  badges?: (item: T) => ReactNode;
 }) {
   return (
     <div className="grid gap-3">
@@ -47,14 +51,17 @@ export function EntityList<T extends { id: string }>({
             onOpen && "cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800/70",
           )}
         >
-          <div>
-            {href ? (
-              <Link href={href(item)} className={cx("text-lg font-semibold hover:underline", titleClassName?.(item))}>
-                {title(item)}
-              </Link>
-            ) : (
-              <div className={cx("text-lg font-semibold", titleClassName?.(item))}>{title(item)}</div>
-            )}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {href ? (
+                <Link href={href(item)} className={cx("text-lg font-semibold hover:underline", titleClassName?.(item))}>
+                  {title(item)}
+                </Link>
+              ) : (
+                <div className={cx("text-lg font-semibold", titleClassName?.(item))}>{title(item)}</div>
+              )}
+              {badges ? badges(item) : null}
+            </div>
             <p className={cx("text-sm text-slate-500", subtitleClassName?.(item))}>{subtitle(item)}</p>
           </div>
           <div className="flex gap-2">

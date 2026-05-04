@@ -675,3 +675,277 @@ Beide CRM-Container mit `NODE_ENV=development`, `CHOKIDAR_USEPOLLING=true`, `WAT
 - Offene Punkte:
   - Verifizieren, welches Compose-File tatsaechlich auf dem TEST-Server laeuft (`docker inspect` auf dem Server).
   - Nach Freigabe einzelne Code-Hotspots als separate Claude-Aufgaben formulieren.
+
+## 2026-04-28
+
+### Umsetzungsstand Bearbeiten + Drucken (Pause wegen Claude-API)
+
+- Ausgangslage:
+  - Fuer Kunde/Projekt sollte zentrales Bearbeiten umgesetzt werden.
+  - Fuer Kunde/Projekt/Reports/Aufgaben sollte ein konfigurierbarer Druck inkl. PDF-Bundle folgen.
+  - Bearbeiten und Drucken sollen ueber Rechteverwaltung steuerbar sein.
+
+- Umsetzung durch Claude (laut Rueckmeldung, Stand vor API-Ausfall):
+  - Permission-Fundament umgesetzt:
+    - neue Decorators/Guards fuer Permissions (`@Permissions`, `PermissionsGuard`)
+    - `JwtAuthGuard` erweitert, laedt User-Permissions aus DB und haengt sie an `request.user`
+    - `AuthService` liefert `user.permissions` fuer User-/Kiosk-User-Login
+    - `/auth/me` liefert Rollen + Permissions
+  - Seed erweitert um neue Druck-Permissions:
+    - `customers.print`, `projects.print`, `documents.print`, `reports.print`, `tasks.print`
+  - Frontend-Auth-Pipeline erweitert:
+    - `AuthState.user.permissions` verfuegbar
+    - `hasPermission(...)`-Helper eingefuehrt
+    - Sync ueber `/auth/me` nach Auth-Restore
+  - Erstes UI-Gating umgesetzt:
+    - Bearbeiten-Button Kunde an `customers.edit` gebunden
+    - Bearbeiten-Button Projekt an `projects.edit` gebunden
+
+- Pruefung durch Codex:
+  - Kein neuer technischer Re-Check in dieser Runde (Status wurde aus Claude-Zwischenstand uebernommen).
+  - Vollstaendige Endabnahme fuer Druck-Konfigurator / Bundle / Aufgaben-Druck steht noch aus.
+
+- Ergebnis / Entscheidung:
+  - Umsetzung ist **unterbrochen**, weil die Claude-API aktuell stoert.
+  - Arbeit wird bewusst pausiert und spaeter fortgesetzt.
+
+- Naechster Wiedereinstieg (Reihenfolge bereits festgelegt):
+  1. Druck-Konfigurator + localStorage (Kunde/Projekt/Reports/Aufgaben), inkl. einheitlichem Print-Payload
+  2. `POST /print/bundle` (Basis-PDF + Merge von PDF/Bild-Dokumenten, nicht-PDF vorerst ignorieren)
+  3. Aufgabenliste + Einzelaufgabe druckbar machen (auf Bundle-Flow)
+
+- Offene Punkte fuer Wiederaufnahme:
+  - Re-Check, ob Schritt 1-4 wirklich im Repo-Stand angekommen sind (Diff + kurzer Smoke-Test).
+  - Danach direkte Fortsetzung mit dem Druck-Konfigurator.
+  - Nach Abschluss: Dev-Docker-Verifikation auf `http://localhost:3800`.
+
+## 2026-05-04
+
+### App-Pruefung Gesamtstand (Codex, read-only Pruefung)
+
+- Ausgangslage:
+  - Die App sollte umfassend gegen aktuellen Repo-Stand, lokalen Dev-Docker-Stand und vorhandene Checks geprueft werden.
+  - Im Arbeitsbaum lagen bereits laufende, nicht abgeschlossene Aenderungen vor; diese sollten nicht veraendert oder zurueckgesetzt werden.
+
+- Pruefung durch Codex:
+  - `pnpm --filter api build`: gruen.
+  - `pnpm --filter web build`: gruen.
+  - `pnpm --filter api test`: gruen, aber ohne echte Tests (`No tests found`).
+  - `pnpm --filter web test`: nur Platzhalter-Hinweis, keine Unit-Tests.
+  - `pnpm --filter web lint`: **rot**.
+    - `apps/web/src/components/crm-app/print/PrintConfiguratorModal.tsx`: `setState` direkt in `useEffect`.
+    - `apps/web/src/components/crm-app/worker/use-worker-photo.ts`: `setState` direkt in `useEffect`.
+    - `apps/web/src/components/crm-app.tsx`: Warning wegen fehlender `auth`-Dependency im `useEffect`.
+  - `pnpm --filter web test:e2e`: **5/5 rot**.
+    - Die Browser-Tests landen auf einer Next-`404` statt auf dem erwarteten Login-Screen.
+    - Der API-Login `POST /api/auth/kiosk-login` mit Seed-PIN `1234` liefert im laufenden Dev-Stack `401`.
+  - Lokaler Dev-Docker-Stand auf `localhost:3800` / `localhost:3801` laeuft, ist aber nicht gesund genug fuer eine Abnahme:
+    - `crm-web`-Logs zeigen wiederholt `Watchpack Error (initial scan): EIO: i/o error` fuer `apps/web/src/app`, Unterordner und `public`.
+    - `crm-api` startet, meldet aber beim Bucket-Check: `MinIO bucket check failed ... S3 API Requests must be made to API port.`
+  - Auffaelligkeit E2E vs. aktueller Code:
+    - `apps/web/src/app/page.tsx` leitet nach `/dashboard` um.
+    - Die Komponente `CrmApp` wuerde ohne Auth zwar den Kiosk-Login rendern, der laufende Dev-Web-Stand liefert in der Pruefung aber stattdessen eine Next-404-Seite.
+  - Hinweis zur Tooling-Nebenwirkung:
+    - `pnpm --filter api lint` lief gruen, verwendet aber `eslint --fix`; wegen des bereits schmutzigen Arbeitsbaums wurde daran nichts weiter veraendert.
+
+- Ergebnis / Entscheidung:
+  - Der Code ist aktuell **nicht abnahmefaehig**.
+  - Hauptgruende sind:
+    - Web-Lint fehlschlaegt.
+    - E2E komplett rot.
+    - Der laufende Dev-Docker-Web-Stand auf `http://localhost:3800` liefert in der Pruefung keine stabile funktionale Startseite.
+    - Seed-/Kiosk-Login-Testvoraussetzungen passen nicht zum aktuell laufenden Stack.
+
+- Priorisierte naechste Schritte:
+  1. Dev-Docker-Web-Problem zuerst beheben: Ursache der `Watchpack`-/Volume-Fehler und der Next-404 im laufenden Container klaeren.
+  2. Danach Seed-/Dev-DB gegen erwartete Testdaten pruefen, insbesondere Kiosk-PIN `1234` und Admin-Login.
+  3. Anschliessend Web-Lint-Fehler in den neuen Print-/Worker-Foto-Komponenten korrigieren.
+  4. Erst dann E2E erneut gegen `http://localhost:3800` laufen lassen.
+
+## 2026-05-04
+
+### Nachpruefung nach Claude-Reparatur des Dev-Stands (Codex, read-only Pruefung)
+
+- Ausgangslage:
+  - Claude sollte den lokalen Dev-Stand wieder abnahmefaehig machen: `localhost:3800`, Seed-Logins und Web-Lint.
+
+- Pruefung durch Codex:
+  - `pnpm --filter api build`: gruen.
+  - `pnpm --filter web build`: gruen.
+  - `pnpm --filter web lint`: gruen.
+  - `http://localhost:3800`: liefert wieder `200`.
+  - `POST /api/auth/login` mit `admin@example.local / admin12345`: erfolgreich.
+  - `POST /api/auth/kiosk-login` mit PIN `1234`: erfolgreich.
+  - `pnpm --filter web test:e2e`: **teilweise gruen** (`3/5` bestanden, `2/5` fehlgeschlagen).
+  - Verbleibende E2E-Abweichungen:
+    - Monteur-Arbeitsstart:
+      - Nach erfolgreicher Erfolgsmeldung `Arbeit gestartet.` bleibt die UI im Zustand `Arbeit beginnen`.
+      - API-Status meldet danach weiterhin `hasOpenWork: false`.
+      - Ursache eingegrenzt: Seed-Zeitdaten enthalten fuer den Testmonteur bereits `CLOCK_OUT`-Eintraege in der Zukunft derselben Woche; die Open-Work-Erkennung ueber `findOpenClockIn` wird dadurch ausgehebelt.
+    - Monteur-Stundenzettel:
+      - Im Kiosk-/Monteurfluss erscheint im Stundenzettel-Bereich `Fehlende Berechtigung.`
+      - Ursache eingegrenzt: `POST /timesheets/weekly` ist aktuell nur fuer `SUPERADMIN`, `OFFICE`, `PROJECT_MANAGER` freigegeben, nicht fuer `WORKER`.
+  - Dev-Docker-Web-Stand:
+    - Die frueheren Next-404-/Watchpack-Probleme waren in dieser Nachpruefung nicht mehr reproduzierbar.
+  - API-Log Resthinweis:
+    - MinIO-Warnung beim Bucket-Check bleibt sichtbar: `S3 API Requests must be made to API port.`
+
+- Ergebnis / Entscheidung:
+  - Der Stand ist deutlich verbessert und lokal wieder grundsaetzlich lauffaehig.
+  - Eine vollstaendige Abnahme ist aber **noch nicht gru en**, weil zwei zentrale Monteur-E2E-Faelle weiterhin fehlschlagen:
+    - Arbeit beginnen/beenden
+    - Stundenzettel erzeugen/unterschreiben
+
+- Naechste Schritte:
+  1. Seed-/Zeitdaten fuer den Testmonteur bereinigen, damit keine zukuenftigen `CLOCK_OUT`-Eintraege die Open-Work-Erkennung verfälschen.
+  2. Fachlich entscheiden und dann umsetzen, ob Monteure Stundenzettel im Kiosk selbst erzeugen duerfen; aktueller E2E-Test erwartet genau dieses Verhalten.
+  3. Danach E2E erneut komplett gegen `http://localhost:3800` laufen lassen.
+
+## 2026-05-04
+
+### Nachpruefung Projekt-UX-Vereinfachung (Codex, read-only Pruefung)
+
+- Ausgangslage:
+  - Claude hat den Bereich `Projekte` mit Fokus auf einfachere Eingabe, klarere Detailstruktur und ruhigere Priorisierung ueberarbeitet.
+  - Geprueft werden sollte, ob die Vereinfachung sichtbar ist, die i18n-Regel eingehalten wurde und keine bestehende Kernfunktion verloren ging.
+
+- Pruefung durch Codex:
+  - Geaenderte Hauptstellen gegengeprueft:
+    - `apps/web/src/components/crm-app.tsx`
+    - `apps/web/src/components/crm-app/projects/ProjectDetailCard.tsx`
+    - `apps/web/src/i18n.ts`
+  - Bestaetigt:
+    - Projektformular nutzt einen schlankeren Basisbereich und lagert Zusatzangaben in einklappbare Sektionen aus.
+    - Projektdetail zeigt einen kompakten Header mit gebuendelten Hauptaktionen.
+    - Team-/Monteurzuweisung ist als zentraler Arbeitsbereich mit Suche, aktiv/inaktiv-Trennung und klareren Zustandslisten umgesetzt.
+    - Auswertung und Preise sind weiterhin vorhanden, aber visuell nachrangiger und einklappbar platziert.
+    - Neue sichtbare Texte laufen ueber i18n in `de` und `en`; in den geprueften geaenderten Komponenten waren keine harten sichtbaren Resttexte auffaellig.
+  - Technische Checks:
+    - `pnpm --filter web lint`: gruen.
+    - `pnpm --filter web test:e2e`: gruen (`5/5 passed`).
+  - Rueckmeldung zum Dev-Stand:
+    - Der von Claude gemeldete Dev-Stack-Nachweis auf `http://localhost:3800` war konsistent mit dem geprueften Repo-Stand; in dieser Codex-Nachpruefung wurden keine Widersprueche sichtbar.
+
+- Ergebnis / Entscheidung:
+  - Fuer das Projekt-UX-Paket keine neuen Findings.
+  - Die Vereinfachungen verbessern Orientierung und Eingabe, ohne erkennbare fachliche Kernfunktion zu verlieren.
+  - Das Paket ist aus Codex-Sicht abnahmefaehig.
+
+- Resthinweis:
+  - Die Playwright-Suite deckt den neuen Projekt-Detailfluss nur indirekt ab; ein spaeterer gezielter UI-Smoke-Test fuer Team-Zuweisung und Header-Aktionen waere als Produktsicherung sinnvoll, ist aber kein aktueller Blocker.
+
+## 2026-05-04
+
+### Nachpruefung Kunden-UX-Umbau (Codex, read-only Pruefung)
+
+- Ausgangslage:
+  - Claude hat den Kundenbereich erneut und deutlich tiefgreifender ueberarbeitet, mit Fokus auf gefuehrte Neuanlage, klaren Hauptansprechpartner, Standorte als Unterstruktur und modulare Bearbeitung.
+
+- Pruefung durch Codex:
+  - Geaenderte Hauptstellen gegengeprueft:
+    - `apps/web/src/components/crm-app/customers/CustomerFormBody.tsx`
+    - `apps/web/src/components/crm-app/customers/CreateCustomerModal.tsx`
+    - `apps/web/src/components/crm-app/customers/EditCustomerModal.tsx`
+    - `apps/web/src/components/crm-app/customers/CustomerDetailCard.tsx`
+    - `apps/web/src/components/crm-app.tsx`
+    - `apps/web/src/i18n.ts`
+  - Bestaetigt:
+    - Neuanlage ist auf die zentralen Basisdaten reduziert; Standorte und Kontakte blockieren den Einstieg nicht mehr.
+    - Bearbeitung ist modular ueber Tabs fuer Stammdaten, Standorte und Ansprechpartner organisiert.
+    - Der Hauptansprechpartner ist im Detailkopf klar sichtbar und ueber Quick-Action gezielt pflegbar.
+    - Kontakte werden fachlich nachvollziehbar in zentrale und standortbezogene Kontakte getrennt dargestellt.
+    - Standorte erscheinen als optionale Unterstruktur des Kunden, nicht mehr als gleichgewichtiger Pflichtblock.
+    - Neue sichtbare Texte laufen in den geprueften Bereichen ueber i18n in `de` und `en`.
+  - Technische Checks:
+    - `pnpm --filter web lint`: gruen.
+    - `pnpm --filter web test:e2e`: gruen (`5/5 passed`).
+
+- Ergebnis / Entscheidung:
+  - Das Kundenpaket ist deutlich wirksamer als die erste, eher defensive Vereinfachungsrunde.
+  - Aus Codex-Sicht keine blockierenden technischen oder i18n-bezogenen Findings.
+  - Das Paket ist abnahmefaehig.
+
+- Fachlicher Beobachtungspunkt:
+  - Der neue `Hauptkontakt` wird ohne Schema-Aenderung ueber das bestehende Feld `isProjectContact` modelliert. Das ist fuer den aktuellen Stand funktional tragfaehig, sollte spaeter aber beobachtet werden, falls die Fachbedeutung von `Projektkontakt` und `zentraler Hauptansprechpartner` getrennt gebraucht wird.
+
+## 2026-05-04
+
+### Nachpruefung Kunden-Bearbeitung mit Reitern (Codex, read-only Pruefung)
+
+- Ausgangslage:
+  - In der Kunden-Bearbeitung sollte das bisher als zu lang empfundene Formular staerker ueber Reiter getrennt werden.
+  - Ziel war, dass Ansprechpartner, Standorte, Vereinbarungen/Finanzen und Projekte nicht mehr als ein langer Bearbeitungsfluss erscheinen.
+
+- Pruefung durch Codex:
+  - Geaenderte Hauptstellen gegengeprueft:
+    - `apps/web/src/components/crm-app/customers/CustomerFormBody.tsx`
+    - `apps/web/src/components/crm-app/customers/EditCustomerModal.tsx`
+    - `apps/web/src/components/crm-app.tsx`
+    - `apps/web/src/i18n.ts`
+  - Bestaetigt:
+    - Edit-Modal besitzt jetzt fuenf Reiter: Stammdaten, Ansprechpartner, Standorte, Vereinbarungen/Finanzen, Projekte.
+    - Pro Reiter wird nur der jeweils aktive Bereich gerendert; das Bearbeiten fuehlt sich dadurch deutlich kuerzer und fokussierter an.
+    - Status, Rechnungs-E-Mail und USt-ID liegen jetzt im eigenen Reiter `Vereinbarungen / Finanzen`.
+    - Der Projekte-Reiter ist sauber als read-only Schnellzugriff umgesetzt und mischt keine unpassende Inline-Projektbearbeitung in das Kunden-Modal.
+    - Quick-Actions aus dem Kundendetail springen in die passenden Reiter.
+    - Neue sichtbare Texte laufen in den geprueften Bereichen ueber i18n in `de` und `en`.
+  - Technische Checks:
+    - `pnpm --filter web lint`: gruen.
+    - `pnpm --filter web test:e2e`: gruen (`5/5 passed`).
+
+- Ergebnis / Entscheidung:
+  - Fuer dieses Paket keine neuen Findings.
+  - Die Kunden-Bearbeitung ist jetzt deutlich besser in fachliche Bereiche getrennt und nicht mehr als ein einziges langes Formular organisiert.
+  - Das Paket ist aus Codex-Sicht abnahmefaehig.
+
+## 2026-05-04
+
+### Nachpruefung Wiedervorlagen in Kunde und Projekt (Codex, read-only Pruefung)
+
+- Ausgangslage:
+  - Wiedervorlagen sollten fachlich als `FOLLOW_UP` sauberer behandelt, direkt in Kunden- und Projektkontexte eingebettet und in den Listen mit offenen Kennzahlen sichtbar gemacht werden.
+
+- Pruefung durch Codex:
+  - Geaenderte Hauptstellen gegengeprueft:
+    - `apps/api/src/reminders/reminders.controller.ts`
+    - `apps/api/src/reminders/reminders.service.ts`
+    - `apps/web/src/components/crm-app/reminders/EmbeddedRemindersSection.tsx`
+    - `apps/web/src/components/crm-app/projects/ProjectDetailCard.tsx`
+    - `apps/web/src/components/crm-app/customers/CustomerDetailCard.tsx`
+    - `apps/web/src/components/crm-app/dashboard/EntityList.tsx`
+    - `apps/web/src/components/crm-app.tsx`
+  - Technische Checks:
+    - `pnpm --filter web lint`: gruen.
+    - `pnpm --filter web test:e2e`: gruen (`5/5 passed`).
+  - Zusaetzlicher fachlicher Befund:
+    - Die Embedded-Sektion legt neue Eintraege korrekt als `FOLLOW_UP` an.
+    - Die Lese- und Count-Pfade filtern aktuell aber nur nach `status`, `customerId` und `projectId`, nicht nach `kind=FOLLOW_UP`.
+    - Dadurch koennen im Kunden-/Projektkontext auch `TODO`- und `CALLBACK`-Reminder in der Wiedervorlagen-Sektion und in den Kennzahlen auftauchen.
+
+- Ergebnis / Entscheidung:
+  - Das Paket ist funktional stark verbessert, aber noch **nicht fachlich ganz sauber gru en**.
+  - Offener Punkt:
+    - Reminder-Liste und Reminder-Counts muessen fuer diese Wiedervorlagen-Einbettung zusaetzlich auf `FOLLOW_UP` begrenzt werden.
+
+## 2026-05-04
+
+### Korrektur Wiedervorlagen-Filter auf FOLLOW_UP (Codex)
+
+- Ausgangslage:
+  - Die eingebetteten Wiedervorlagen und ihre Kennzahlen beruecksichtigten zwar den Kontext (Kunde/Projekt), aber noch nicht den Reminder-Typ.
+  - Dadurch konnten `TODO` und `CALLBACK` in Wiedervorlagen-Sektionen und Badges auftauchen.
+
+- Umsetzung durch Codex:
+  - `GET /reminders/items` erweitert um optionalen `kind`-Filter.
+  - `GET /reminders/counts` erweitert um optionalen `kind`-Filter.
+  - Embedded-Wiedervorlagen laden jetzt explizit mit `kind=FOLLOW_UP`.
+  - Kunden-/Projekt-Badges laden Counts jetzt explizit mit `status=OPEN&kind=FOLLOW_UP`.
+
+- Pruefung durch Codex:
+  - `pnpm --filter web lint`: gruen.
+  - `pnpm --filter web test:e2e`: gruen (`5/5 passed`).
+  - Codepfade fuer Listen und Counts bestaetigt auf `FOLLOW_UP` begrenzt.
+
+- Ergebnis / Entscheidung:
+  - Der fachliche Restpunkt ist geschlossen.
+  - Wiedervorlagen in Kunde und Projekt sind jetzt auch in Anzeige und Zaehlung sauber von `TODO` und `CALLBACK` getrennt.

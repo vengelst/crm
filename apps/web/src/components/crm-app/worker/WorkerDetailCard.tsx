@@ -9,6 +9,7 @@ import { DocumentPanel } from "../documents";
 import { WorkerElapsedTime } from "./WorkerElapsedTime";
 import { formatMinutes } from "./format-minutes";
 import { WorkerTimeLog } from "./WorkerTimeLog";
+import { useWorkerPhoto } from "./use-worker-photo";
 
 export function WorkerDetailCard({
   worker,
@@ -30,7 +31,7 @@ export function WorkerDetailCard({
   projects: Project[];
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
-  onPrintDocument: (document: DocumentItem) => void;
+  onPrintDocument?: (document: DocumentItem) => void;
   onDownload: (documentId: string, filename: string) => void;
   onDeleteDocument: (documentId: string) => void;
   documentForm: DocumentFormState;
@@ -47,6 +48,48 @@ export function WorkerDetailCard({
   const [assignmentSaving, setAssignmentSaving] = useState(false);
   const [assignmentMsg, setAssignmentMsg] = useState<string | null>(null);
   const [assignmentErr, setAssignmentErr] = useState<string | null>(null);
+  const [photoVersion, setPhotoVersion] = useState(0);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoErr, setPhotoErr] = useState<string | null>(null);
+  const photoSrc = useWorkerPhoto(
+    worker.id,
+    worker.photoPath ? `${worker.photoPath}#${photoVersion}` : null,
+    authToken,
+  );
+
+  async function uploadPhoto(file: File) {
+    setPhotoBusy(true);
+    setPhotoErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      await apiFetch(`/workers/${worker.id}/photo`, {
+        method: "POST",
+        body: fd,
+        headers: {},
+      });
+      setPhotoVersion((n) => n + 1);
+      await onDataChanged();
+    } catch (e) {
+      setPhotoErr(e instanceof Error ? e.message : l("work.photoUploadFailed"));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function deletePhoto() {
+    setPhotoBusy(true);
+    setPhotoErr(null);
+    try {
+      await apiFetch(`/workers/${worker.id}/photo`, { method: "DELETE" });
+      setPhotoVersion((n) => n + 1);
+      await onDataChanged();
+    } catch (e) {
+      setPhotoErr(e instanceof Error ? e.message : l("work.photoDeleteFailed"));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   useEffect(() => {
     void apiFetch<WorkerTimeStatus>(`/time/status?workerId=${worker.id}`)
@@ -179,11 +222,51 @@ export function WorkerDetailCard({
       {/* ── Stammdaten ──────────────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold">
-              {worker.firstName} {worker.lastName}
-            </h3>
-            <p className="text-sm text-slate-500">{worker.workerNumber}</p>
+          <div className="flex items-start gap-4">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-black/10 bg-slate-100 text-slate-400 dark:border-white/10 dark:bg-slate-800">
+              {photoSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photoSrc} alt={`${worker.firstName} ${worker.lastName}`} className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-xl font-semibold">
+                  {(worker.firstName?.[0] ?? "").toUpperCase()}
+                  {(worker.lastName?.[0] ?? "").toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold">
+                {worker.firstName} {worker.lastName}
+              </h3>
+              <p className="text-sm text-slate-500">{worker.workerNumber}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className={`inline-flex cursor-pointer items-center gap-1 rounded-xl border border-black/10 bg-white px-2.5 py-1.5 text-xs font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800 ${photoBusy ? "pointer-events-none opacity-50" : ""}`}>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    className="hidden"
+                    disabled={photoBusy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void uploadPhoto(f);
+                      e.target.value = "";
+                    }}
+                  />
+                  {worker.photoPath ? l("work.photoReplace") : l("work.photoUpload")}
+                </label>
+                {worker.photoPath ? (
+                  <button
+                    type="button"
+                    onClick={() => void deletePhoto()}
+                    disabled={photoBusy}
+                    className="rounded-xl border border-black/10 bg-white px-2.5 py-1.5 text-xs font-medium transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+                  >
+                    {l("work.photoDelete")}
+                  </button>
+                ) : null}
+              </div>
+              {photoErr ? <p className="mt-1 text-xs text-red-500">{photoErr}</p> : null}
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <button

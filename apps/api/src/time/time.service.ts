@@ -74,24 +74,33 @@ export class TimeService {
    * Gibt den aktuell offenen Arbeitsvorgang zurueck (letzter CLOCK_IN ohne
    * nachfolgendes CLOCK_OUT), oder null wenn keiner offen ist.
    *
-   * Strategie: Hole den letzten CLOCK_IN. Pruefe dann, ob danach ein
-   * CLOCK_OUT existiert. Wenn nein → offen.
+   * Strategie: Hole den letzten CLOCK_IN bis jetzt. Pruefe dann, ob danach
+   * ein CLOCK_OUT existiert (ebenfalls bis jetzt). Wenn nein → offen.
+   * Eintraege mit zukuenftigem `occurredAtServer` (z. B. fehlerhafte Seed-
+   * oder Importdaten) werden ignoriert, damit sie den Live-Status nicht
+   * verfaelschen.
    */
   async findOpenClockIn(workerId: string) {
+    const now = new Date();
     const lastClockIn = await this.prisma.timeEntry.findFirst({
-      where: { workerId, entryType: 'CLOCK_IN' },
+      where: {
+        workerId,
+        entryType: 'CLOCK_IN',
+        occurredAtServer: { lte: now },
+      },
       orderBy: { occurredAtServer: 'desc' },
       include: { project: true },
     });
 
     if (!lastClockIn) return null;
 
-    // Gibt es einen CLOCK_OUT der NACH diesem CLOCK_IN liegt?
+    // Gibt es einen CLOCK_OUT der NACH diesem CLOCK_IN, aber nicht in der
+    // Zukunft liegt?
     const laterClockOut = await this.prisma.timeEntry.findFirst({
       where: {
         workerId,
         entryType: 'CLOCK_OUT',
-        occurredAtServer: { gt: lastClockIn.occurredAtServer },
+        occurredAtServer: { gt: lastClockIn.occurredAtServer, lte: now },
       },
     });
 
@@ -225,9 +234,7 @@ export class TimeService {
             ? openEntry.occurredAtClient.toISOString()
             : null,
         todayFirstClockInOnProjectAt,
-        todayMinutesOnProject: Math.round(
-          completedMinutes + openSinceMinutes,
-        ),
+        todayMinutesOnProject: Math.round(completedMinutes + openSinceMinutes),
       });
     }
 

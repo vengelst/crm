@@ -141,13 +141,65 @@ export class RemindersService {
     return next;
   }
 
-  async listOfficeReminders(status?: string) {
+  async listOfficeReminders(
+    status?: string,
+    kind?: string,
+    filters: { customerId?: string; projectId?: string } = {},
+  ) {
     const normalizedStatus = this.parseReminderStatus(status, false);
+    const normalizedKind = this.parseReminderKindFilter(kind);
+    const where: Record<string, unknown> = {};
+    if (normalizedStatus) where.status = normalizedStatus;
+    if (normalizedKind) where.kind = normalizedKind;
+    if (filters.customerId) where.customerId = filters.customerId;
+    if (filters.projectId) where.projectId = filters.projectId;
     return this.prisma.officeReminder.findMany({
-      where: normalizedStatus ? { status: normalizedStatus } : undefined,
+      where: Object.keys(where).length ? where : undefined,
       include: this.officeReminderInclude,
       orderBy: [{ status: 'asc' }, { remindAt: 'asc' }, { createdAt: 'desc' }],
     });
+  }
+
+  /**
+   * Liefert je Kunde und je Projekt die Anzahl Reminder im gewuenschten Status
+   * (Default OPEN). Verwendet von Kunden-/Projektlisten als Badge ohne
+   * pro-Zeile-API-Calls.
+   */
+  async getReminderCounts(
+    status: string,
+    kind?: string,
+  ): Promise<{
+    byCustomer: Record<string, number>;
+    byProject: Record<string, number>;
+  }> {
+    const normalizedStatus = this.parseReminderStatus(status, false);
+    const normalizedKind = this.parseReminderKindFilter(kind);
+    const baseWhere: Record<string, unknown> = {};
+    if (normalizedStatus) baseWhere.status = normalizedStatus;
+    if (normalizedKind) baseWhere.kind = normalizedKind;
+
+    const [customerGroups, projectGroups] = await Promise.all([
+      this.prisma.officeReminder.groupBy({
+        by: ['customerId'],
+        where: { ...baseWhere, customerId: { not: null } },
+        _count: { _all: true },
+      }),
+      this.prisma.officeReminder.groupBy({
+        by: ['projectId'],
+        where: { ...baseWhere, projectId: { not: null } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const byCustomer: Record<string, number> = {};
+    for (const row of customerGroups) {
+      if (row.customerId) byCustomer[row.customerId] = row._count._all;
+    }
+    const byProject: Record<string, number> = {};
+    for (const row of projectGroups) {
+      if (row.projectId) byProject[row.projectId] = row._count._all;
+    }
+    return { byCustomer, byProject };
   }
 
   async getOfficeReminderReferenceData() {
@@ -719,6 +771,11 @@ export class RemindersService {
       return OfficeReminderKind.FOLLOW_UP;
     }
     throw new BadRequestException('Ungueltige Aufgabenart.');
+  }
+
+  private parseReminderKindFilter(value?: string) {
+    if (!value) return undefined;
+    return this.parseReminderKind(value);
   }
 
   private parseDate(value?: string | null) {

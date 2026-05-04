@@ -60,8 +60,27 @@ export class RemindersController {
   }
 
   @Get('items')
-  listItems(@Query('status') status?: string) {
-    return this.remindersService.listOfficeReminders(status);
+  listItems(
+    @Query('status') status?: string,
+    @Query('kind') kind?: string,
+    @Query('customerId') customerId?: string,
+    @Query('projectId') projectId?: string,
+  ) {
+    return this.remindersService.listOfficeReminders(status, kind, {
+      customerId,
+      projectId,
+    });
+  }
+
+  /**
+   * Aggregierte Anzahlen, damit Kunden- und Projektlisten je Eintrag eine
+   * Wiedervorlagen-Kennzahl zeigen koennen, ohne pro Zeile einen API-Call.
+   * Standardmaessig nur OPEN-Reminder, weil die Listen die offenen Punkte
+   * hervorheben sollen.
+   */
+  @Get('counts')
+  getCounts(@Query('status') status?: string, @Query('kind') kind?: string) {
+    return this.remindersService.getReminderCounts(status ?? 'OPEN', kind);
   }
 
   @Post('items')

@@ -4,21 +4,30 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "../../../i18n-context";
 import type { Project, Worker, Customer, TimesheetItem } from "../types";
-import { cx, SectionCard, MiniStat, SelectField } from "../shared";
+import { cx, SectionCard, MiniStat, SelectField, PrintButton, openPrintWindow } from "../shared";
 import { TimesheetList } from "../projects";
+import {
+  PrintConfiguratorModal,
+  composeSelectedHtml,
+  escapeHtml,
+  type PrintSelectionPayload,
+} from "../print";
 
 export function ReportsSection({
   customers,
   projects,
   workers,
   apiFetch,
+  canPrint = false,
 }: {
   customers: Customer[];
   projects: Project[];
   workers: Worker[];
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  canPrint?: boolean;
 }) {
   const { t: l } = useI18n();
+  const [showPrintConfig, setShowPrintConfig] = useState(false);
   const [customerFinancials, setCustomerFinancials] = useState<Record<string, { totalRevenue: number; totalCosts: number; margin: number; totalHours: number }>>({});
   const [loadingFinancials, setLoadingFinancials] = useState(true);
   const [allTimesheets, setAllTimesheets] = useState<TimesheetItem[]>([]);
@@ -76,8 +85,62 @@ export function ReportsSection({
 
   const workingCount = activeWorkers.filter(workerIsWorking).length;
 
+  function buildSectionRenderers(): Record<string, () => string> {
+    return {
+      kpis: () => `<h2>${escapeHtml(l("reports.title"))}</h2>
+        <div class="grid">
+          <span class="label">${escapeHtml(l("dash.activeWorkers"))}</span><span>${escapeHtml(activeWorkers.length)}</span>
+          <span class="label">${escapeHtml(l("dash.working"))}</span><span>${escapeHtml(workingCount)}</span>
+          <span class="label">${escapeHtml(l("dash.activeProjects"))}</span><span>${escapeHtml(projects.filter((p) => p.status === "ACTIVE").length)}</span>
+          <span class="label">${escapeHtml(l("dash.customers"))}</span><span>${escapeHtml(customers.length)}</span>
+        </div>`,
+      revenuePerCustomer: () => {
+        const rows = customers
+          .map((c) => {
+            const f = customerFinancials[c.id];
+            return `<tr><td>${escapeHtml(c.companyName)}</td><td>${escapeHtml(c.customerNumber)}</td><td>${escapeHtml(f ? `${f.totalHours} h` : "-")}</td><td>${escapeHtml(f ? f.totalRevenue.toFixed(2) : "-")}</td><td>${escapeHtml(f ? f.totalCosts.toFixed(2) : "-")}</td><td>${escapeHtml(f ? f.margin.toFixed(2) : "-")}</td></tr>`;
+          })
+          .join("");
+        return `<h2>${escapeHtml(l("reports.revenuePerCustomer"))}</h2><table><thead><tr><th>${escapeHtml(l("table.customer"))}</th><th>${escapeHtml(l("cust.number"))}</th><th>${escapeHtml(l("kpi.hours"))}</th><th>${escapeHtml(l("kpi.revenue"))}</th><th>${escapeHtml(l("kpi.costs"))}</th><th>${escapeHtml(l("kpi.marginShort"))}</th></tr></thead><tbody>${rows}</tbody></table>`;
+      },
+      workerStatus: () => {
+        const rows = activeWorkers
+          .map((w) => {
+            const isWorking = workerIsWorking(w);
+            const hasProject = (w.assignments ?? []).length > 0;
+            const status = isWorking ? l("reports.working") : hasProject ? l("reports.notStarted") : l("reports.noProject");
+            return `<tr><td>${escapeHtml(`${w.firstName} ${w.lastName}`)}</td><td>${escapeHtml(w.workerNumber)}</td><td>${escapeHtml(status)}</td></tr>`;
+          })
+          .join("");
+        return `<h2>${escapeHtml(l("dash.workerStatus"))}</h2><table><thead><tr><th>${escapeHtml(l("print.name"))}</th><th>${escapeHtml(l("print.number"))}</th><th>${escapeHtml(l("table.status"))}</th></tr></thead><tbody>${rows}</tbody></table>`;
+      },
+      timesheets: () => {
+        if (filteredTimesheets.length === 0) return "";
+        const rows = filteredTimesheets
+          .map((t) => `<tr><td>${escapeHtml(`${t.weekYear}-W${String(t.weekNumber).padStart(2, "0")}`)}</td><td>${escapeHtml(t.project.projectNumber)} ${escapeHtml(t.project.title)}</td><td>${escapeHtml(t.worker ? `${t.worker.firstName} ${t.worker.lastName}` : "-")}</td><td>${escapeHtml(t.status)}</td><td>${escapeHtml((t.totalMinutesNet / 60).toFixed(2))} h</td></tr>`)
+          .join("");
+        return `<h2>${escapeHtml(l("ts.title"))}</h2><table><thead><tr><th>${escapeHtml(l("table.cw"))}</th><th>${escapeHtml(l("table.project"))}</th><th>${escapeHtml(l("table.worker"))}</th><th>${escapeHtml(l("table.status"))}</th><th>${escapeHtml(l("kpi.hours"))}</th></tr></thead><tbody>${rows}</tbody></table>`;
+      },
+    };
+  }
+
+  function handleConfiguredPrint(payload: PrintSelectionPayload) {
+    const renderers = buildSectionRenderers();
+    let html = `<h1>${escapeHtml(l("reports.title"))}</h1>
+      <p class="meta">${escapeHtml(new Date().toLocaleString())}</p>`;
+    html += composeSelectedHtml(payload.sections, renderers);
+    openPrintWindow(l("reports.title"), html);
+    setShowPrintConfig(false);
+  }
+
   return (
     <div className="grid gap-6">
+      {canPrint ? (
+        <div className="flex justify-end">
+          <PrintButton onClick={() => setShowPrintConfig(true)} label={l("reports.print")} />
+        </div>
+      ) : null}
+
       {/* Kennzahlen */}
       <div className="grid gap-4 md:grid-cols-4">
         <MiniStat title={l("dash.activeWorkers")} value={activeWorkers.length} />
@@ -182,6 +245,15 @@ export function ReportsSection({
           onAfterTimesheetChange={reloadTimesheets}
         />
       </SectionCard>
+
+      {showPrintConfig ? (
+        <PrintConfiguratorModal
+          entityType="reports"
+          title={l("reports.print")}
+          onClose={() => setShowPrintConfig(false)}
+          onPrint={handleConfiguredPrint}
+        />
+      ) : null}
     </div>
   );
 }

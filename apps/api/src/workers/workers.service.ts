@@ -4,12 +4,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { compare, hash } from 'bcryptjs';
+import { extname } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { Readable } from 'stream';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { SaveWorkerDto } from './dto/save-worker.dto';
 
 @Injectable()
 export class WorkersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   private async nextWorkerNumber(
     tx: Parameters<Parameters<typeof this.prisma.$transaction>[0]>[0],
@@ -353,5 +360,83 @@ export class WorkersService {
         );
       }
     }
+  }
+
+  // ── Profilbild ──────────────────────────────────────
+  async setPhoto(id: string, file?: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Datei fehlt.');
+    }
+    if (!file.mimetype?.startsWith('image/')) {
+      throw new BadRequestException('Nur Bilddateien sind erlaubt.');
+    }
+
+    const worker = await this.prisma.worker.findUnique({ where: { id } });
+    if (!worker) {
+      throw new NotFoundException('Monteur nicht gefunden.');
+    }
+
+    if (worker.photoPath) {
+      await this.storage.deleteObjectWithFallback(worker.photoPath);
+    }
+
+    const ext = extname(file.originalname) || '.png';
+    const key = `workers/${id}/photo-${randomUUID()}${ext}`;
+
+    await this.storage.uploadObject(key, file.buffer, file.size, file.mimetype);
+
+    await this.prisma.worker.update({
+      where: { id },
+      data: { photoPath: key },
+    });
+
+    return { path: key };
+  }
+
+  async getPhotoStream(
+    id: string,
+  ): Promise<{ stream: Readable | null; contentType: string | null }> {
+    const worker = await this.prisma.worker.findUnique({
+      where: { id },
+      select: { photoPath: true },
+    });
+    if (!worker?.photoPath) {
+      return { stream: null, contentType: null };
+    }
+
+    const ext = extname(worker.photoPath).toLowerCase();
+    const contentType =
+      ext === '.png'
+        ? 'image/png'
+        : ext === '.jpg' || ext === '.jpeg'
+          ? 'image/jpeg'
+          : ext === '.webp'
+            ? 'image/webp'
+            : ext === '.gif'
+              ? 'image/gif'
+              : 'application/octet-stream';
+
+    const stream = await this.storage.getObjectStreamWithFallback(
+      worker.photoPath,
+    );
+    return { stream, contentType };
+  }
+
+  async deletePhoto(id: string) {
+    const worker = await this.prisma.worker.findUnique({
+      where: { id },
+      select: { photoPath: true },
+    });
+    if (!worker) {
+      throw new NotFoundException('Monteur nicht gefunden.');
+    }
+    if (worker.photoPath) {
+      await this.storage.deleteObjectWithFallback(worker.photoPath);
+      await this.prisma.worker.update({
+        where: { id },
+        data: { photoPath: null },
+      });
+    }
+    return { deleted: true };
   }
 }

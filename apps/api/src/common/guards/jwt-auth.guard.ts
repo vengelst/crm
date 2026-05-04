@@ -20,6 +20,8 @@ type AuthenticatedUser = {
   workerId?: string;
   roles: RoleCode[];
   type: 'user' | 'worker' | 'kiosk-user';
+  /** Populated by the guard for user/kiosk-user tokens; undefined for worker tokens. */
+  permissions?: string[];
 };
 
 type RequestWithUser = Request & {
@@ -71,7 +73,13 @@ export class JwtAuthGuard implements CanActivate {
           include: {
             roles: {
               include: {
-                role: true,
+                role: {
+                  include: {
+                    permissions: {
+                      include: { permission: true },
+                    },
+                  },
+                },
               },
             },
           },
@@ -81,8 +89,9 @@ export class JwtAuthGuard implements CanActivate {
           throw new UnauthorizedException('Benutzer nicht aktiv.');
         }
 
+        const userRoles = user.roles.map((entry) => entry.role.code);
+
         if (requiredRoles.length > 0) {
-          const userRoles = user.roles.map((entry) => entry.role.code);
           const hasRole = requiredRoles.some((role) =>
             userRoles.includes(role),
           );
@@ -107,6 +116,20 @@ export class JwtAuthGuard implements CanActivate {
             );
           }
         }
+
+        // SUPERADMIN bekommt implizit alle Permissions, unabhaengig von der
+        // expliziten Zuweisung – konsistent mit der Seed-Logik.
+        const permissions = userRoles.includes(RoleCode.SUPERADMIN)
+          ? await this.loadAllPermissionCodes()
+          : Array.from(
+              new Set(
+                user.roles.flatMap((entry) =>
+                  entry.role.permissions.map((rp) => rp.permission.code),
+                ),
+              ),
+            );
+
+        payload.permissions = permissions;
       } else if (payload.type === 'worker') {
         // Worker: JWT-Rollen gegen @Roles pruefen
         if (requiredRoles.length > 0) {
@@ -119,6 +142,9 @@ export class JwtAuthGuard implements CanActivate {
             throw new ForbiddenException('Fehlende Berechtigung.');
           }
         }
+
+        // Worker-Token tragen keine fein granularen Permissions.
+        payload.permissions = [];
       }
 
       return true;
@@ -132,5 +158,12 @@ export class JwtAuthGuard implements CanActivate {
 
       throw new UnauthorizedException('Ungueltiger oder abgelaufener Token.');
     }
+  }
+
+  private async loadAllPermissionCodes(): Promise<string[]> {
+    const rows = await this.prisma.permission.findMany({
+      select: { code: true },
+    });
+    return rows.map((r) => r.code);
   }
 }

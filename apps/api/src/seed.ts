@@ -252,7 +252,12 @@ async function main() {
     },
   });
 
+  // Demo-Zeiten in der **vorherigen** Kalenderwoche, damit Open-Work-/
+  // Status-Logik im laufenden Dev-Stand nicht durch zukuenftige Seed-CLOCK_OUTs
+  // ueberschrieben wird (sonst sieht findOpenClockIn die echten Live-Eintraege
+  // als bereits "geschlossen" an).
   const monday = getMonday(new Date());
+  monday.setDate(monday.getDate() - 7);
 
   await prisma.timeEntry.deleteMany({
     where: {
@@ -303,6 +308,7 @@ async function main() {
     { code: 'customers.create', name: 'Kunden anlegen', category: 'Kunden' },
     { code: 'customers.edit', name: 'Kunden bearbeiten', category: 'Kunden' },
     { code: 'customers.delete', name: 'Kunden loeschen', category: 'Kunden' },
+    { code: 'customers.print', name: 'Kunden drucken', category: 'Kunden' },
     { code: 'projects.view', name: 'Projekte ansehen', category: 'Projekte' },
     { code: 'projects.create', name: 'Projekte anlegen', category: 'Projekte' },
     {
@@ -313,6 +319,11 @@ async function main() {
     {
       code: 'projects.delete',
       name: 'Projekte loeschen',
+      category: 'Projekte',
+    },
+    {
+      code: 'projects.print',
+      name: 'Projekte drucken',
       category: 'Projekte',
     },
     { code: 'workers.view', name: 'Monteure ansehen', category: 'Monteure' },
@@ -333,6 +344,21 @@ async function main() {
       code: 'documents.delete',
       name: 'Dokumente loeschen',
       category: 'Dokumente',
+    },
+    {
+      code: 'documents.print',
+      name: 'Dokumente drucken',
+      category: 'Dokumente',
+    },
+    {
+      code: 'reports.print',
+      name: 'Auswertung drucken',
+      category: 'Auswertung',
+    },
+    {
+      code: 'tasks.print',
+      name: 'Aufgaben drucken',
+      category: 'Aufgaben',
     },
     { code: 'time.view', name: 'Zeiten ansehen', category: 'Zeiten' },
     { code: 'time.edit', name: 'Zeiten bearbeiten', category: 'Zeiten' },
@@ -417,14 +443,19 @@ async function main() {
     'customers.view',
     'customers.create',
     'customers.edit',
+    'customers.print',
     'projects.view',
     'projects.create',
     'projects.edit',
+    'projects.print',
     'workers.view',
     'workers.create',
     'workers.edit',
     'documents.view',
     'documents.upload',
+    'documents.print',
+    'reports.print',
+    'tasks.print',
     'time.view',
     'time.edit',
     'timesheets.create',
@@ -642,12 +673,17 @@ async function main() {
         },
       });
 
-      // Assign 2 workers
+      // Assign 2 workers (idempotent: skip wenn schon vorhanden, sonst
+      // erzeugt jedes erneute Seed-Run Doppel-Assignments und der Kiosk
+      // listet dasselbe Projekt mehrfach).
       const w1 = createdWorkers[projIdx % createdWorkers.length];
       const w2 = createdWorkers[(projIdx + 1) % createdWorkers.length];
       for (const w of [w1, w2]) {
-        await prisma.projectAssignment
-          .create({
+        const existing = await prisma.projectAssignment.findFirst({
+          where: { projectId: proj.id, workerId: w.id, active: true },
+        });
+        if (!existing) {
+          await prisma.projectAssignment.create({
             data: {
               projectId: proj.id,
               workerId: w.id,
@@ -655,8 +691,8 @@ async function main() {
               endDate: end,
               active: true,
             },
-          })
-          .catch(() => {});
+          });
+        }
       }
 
       projIdx++;

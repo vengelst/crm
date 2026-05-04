@@ -54,8 +54,18 @@ export class TimesheetsController {
   }
 
   @Post('weekly')
-  @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE, RoleCode.PROJECT_MANAGER)
-  generate(@Body() dto: GenerateTimesheetDto) {
+  generate(@Body() dto: GenerateTimesheetDto, @Req() request: RequestWithUser) {
+    this.rejectKioskUser(request);
+    // Monteur darf den eigenen Wochenzettel selbst erzeugen (Kiosk-Flow), aber
+    // nicht fuer fremde Monteure. Buero-/Admin-Rollen sehen alles.
+    if (request.user?.type === 'worker') {
+      const ownId = request.user.workerId ?? request.user.sub;
+      if (dto.workerId !== ownId) {
+        throw new ForbiddenException(
+          'Monteure duerfen nur eigene Stundenzettel erzeugen.',
+        );
+      }
+    }
     return this.timesheetsService.generate(dto);
   }
 

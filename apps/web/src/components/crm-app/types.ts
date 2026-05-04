@@ -33,12 +33,15 @@ export type AuthState = {
     email: string;
     displayName: string;
     roles: string[];
+    /** Permission codes the user holds (filled by /auth/login + /auth/me; empty for worker tokens). */
+    permissions?: string[];
   };
   worker?: {
     id: string;
     workerNumber: string;
     name: string;
     languageCode?: string;
+    photoPath?: string | null;
   };
   currentProjects?: AuthProject[];
   futureProjects?: AuthProject[];
@@ -176,6 +179,7 @@ export type Worker = {
   notes?: string | null;
   active?: boolean;
   internalHourlyRate?: number | null;
+  photoPath?: string | null;
   pins?: { id: string }[];
   timeEntries?: {
     id: string;

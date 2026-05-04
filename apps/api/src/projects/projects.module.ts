@@ -9,5 +9,6 @@ import { TimeModule } from '../time/time.module';
   imports: [PrismaModule, NotificationsModule, TimeModule],
   controllers: [ProjectsController],
   providers: [ProjectsService],
+  exports: [ProjectsService],
 })
 export class ProjectsModule {}

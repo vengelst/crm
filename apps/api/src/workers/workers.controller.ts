@@ -6,8 +6,14 @@ import {
   Param,
   Patch,
   Post,
+  Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { RoleCode } from '@prisma/client';
+import type { Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
 import { SaveWorkerDto } from './dto/save-worker.dto';
 import { WorkersService } from './workers.service';
@@ -45,5 +51,38 @@ export class WorkersController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.workersService.remove(id);
+  }
+
+  // ── Profilbild ─────────────────────────────────────
+  @Post(':id/photo')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  uploadPhoto(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+  ) {
+    return this.workersService.setPhoto(id, file);
+  }
+
+  @Delete(':id/photo')
+  deletePhoto(@Param('id') id: string) {
+    return this.workersService.deletePhoto(id);
+  }
+
+  @Get(':id/photo/file')
+  @Roles(
+    RoleCode.SUPERADMIN,
+    RoleCode.OFFICE,
+    RoleCode.PROJECT_MANAGER,
+    RoleCode.WORKER,
+  )
+  async servePhotoFile(@Param('id') id: string, @Res() res: Response) {
+    const { stream, contentType } =
+      await this.workersService.getPhotoStream(id);
+    if (!stream) {
+      res.status(404).json({ message: 'Kein Profilbild vorhanden.' });
+      return;
+    }
+    if (contentType) res.setHeader('Content-Type', contentType);
+    stream.pipe(res);
   }
 }

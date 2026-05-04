@@ -26,7 +26,7 @@ export function DocumentPanel({
 }: {
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
-  onPrintDocument: (document: DocumentItem) => void;
+  onPrintDocument?: (document: DocumentItem) => void;
   onDownload: (documentId: string, filename: string) => void;
   onDeleteDocument: (documentId: string) => void;
   documentForm: DocumentFormState;
@@ -274,9 +274,11 @@ export function DocumentPanel({
                           <SecondaryButton onClick={() => onOpenDocument(document)}>
                             {l("doc.show")}
                           </SecondaryButton>
-                          <SecondaryButton onClick={() => onPrintDocument(document)}>
-                            {l("doc.print")}
-                          </SecondaryButton>
+                          {onPrintDocument ? (
+                            <SecondaryButton onClick={() => onPrintDocument(document)}>
+                              {l("doc.print")}
+                            </SecondaryButton>
+                          ) : null}
                           <SecondaryButton onClick={() => onDownload(document.id, document.originalFilename)}>
                             {l("doc.download")}
                           </SecondaryButton>

@@ -54,7 +54,11 @@ export class AuthService {
       include: {
         roles: {
           include: {
-            role: true,
+            role: {
+              include: {
+                permissions: { include: { permission: true } },
+              },
+            },
           },
         },
       },
@@ -71,6 +75,7 @@ export class AuthService {
     }
 
     const roles = user.roles.map((entry) => entry.role.code);
+    const permissions = await this.collectPermissions(user.roles, roles);
     const accessToken = await this.jwtService.signAsync({
       sub: user.id,
       email: user.email,
@@ -85,6 +90,7 @@ export class AuthService {
         email: user.email,
         displayName: user.displayName,
         roles,
+        permissions,
       },
     };
   }
@@ -139,7 +145,15 @@ export class AuthService {
         kioskCodeHash: { not: null },
       },
       include: {
-        roles: { include: { role: true } },
+        roles: {
+          include: {
+            role: {
+              include: {
+                permissions: { include: { permission: true } },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -201,6 +215,7 @@ export class AuthService {
     );
 
     const roles = kioskUser.roles.map((entry) => entry.role.code);
+    const permissions = await this.collectPermissions(kioskUser.roles, roles);
 
     // Backend-Rollen (SUPERADMIN, OFFICE) → normaler Backend-Login
     const isBackendUser =
@@ -224,6 +239,7 @@ export class AuthService {
         email: kioskUser.email,
         displayName: kioskUser.displayName,
         roles,
+        permissions,
       },
       worker: null,
       currentProjects: [] as ReturnType<typeof Array<never>>,
@@ -231,6 +247,35 @@ export class AuthService {
       pastProjects: [] as ReturnType<typeof Array<never>>,
       deviceWarning: deviceCheck.warning ?? null,
     };
+  }
+
+  /**
+   * Compute the permission code list for a user. SUPERADMIN gets every
+   * permission in the system implicitly; other roles get exactly what is
+   * assigned via RolePermission.
+   */
+  private async collectPermissions(
+    userRoles: Array<{
+      role: {
+        code: RoleCode;
+        permissions: Array<{ permission: { code: string } }>;
+      };
+    }>,
+    roleCodes: RoleCode[],
+  ): Promise<string[]> {
+    if (roleCodes.includes(RoleCode.SUPERADMIN)) {
+      const all = await this.prisma.permission.findMany({
+        select: { code: true },
+      });
+      return all.map((p) => p.code);
+    }
+    return Array.from(
+      new Set(
+        userRoles.flatMap((entry) =>
+          entry.role.permissions.map((rp) => rp.permission.code),
+        ),
+      ),
+    );
   }
 
   private async createWorkerLoginResponse(worker: WorkerAuthData) {
@@ -286,6 +331,7 @@ export class AuthService {
         workerNumber: worker.workerNumber,
         name: `${worker.firstName} ${worker.lastName}`,
         languageCode: worker.languageCode ?? 'de',
+        photoPath: worker.photoPath ?? null,
       },
       user: null,
       currentProjects,

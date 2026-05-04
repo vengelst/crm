@@ -15,6 +15,14 @@ import { ProjectWorkRecordsModal } from "./ProjectWorkRecordsModal";
 import { ProjectChecklistSection } from "./ProjectChecklistSection";
 import { ProjectNoticesSection } from "./ProjectNoticesSection";
 import { FinancialKpi } from "./FinancialKpi";
+import {
+  PrintConfiguratorModal,
+  composeSelectedHtml,
+  escapeHtml,
+  type PrintSelectionPayload,
+  renderDocumentList,
+} from "../print";
+import { EmbeddedRemindersSection } from "../reminders";
 
 export function ProjectDetailCard({
   project,
@@ -31,7 +39,11 @@ export function ProjectDetailCard({
   authToken,
   onUpload,
   onDataChanged,
+  onEdit,
+  canPrint = true,
   apiFetch,
+  currentUserId,
+  onRemindersChanged,
 }: {
   project: Project;
   workers: Worker[];
@@ -39,7 +51,7 @@ export function ProjectDetailCard({
   timesheets: TimesheetItem[];
   documents: DocumentItem[];
   onOpenDocument: (document: DocumentItem) => void;
-  onPrintDocument: (document: DocumentItem) => void;
+  onPrintDocument?: (document: DocumentItem) => void;
   onDownload: (documentId: string, filename: string) => void;
   onDeleteDocument: (documentId: string) => void;
   documentForm: DocumentFormState;
@@ -47,7 +59,13 @@ export function ProjectDetailCard({
   authToken: string;
   onUpload: () => void | Promise<void>;
   onDataChanged: () => Promise<void> | void;
+  onEdit?: () => void;
+  canPrint?: boolean;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
+  /** Aktueller Nutzer als Default-Verantwortlicher fuer neue Wiedervorlagen. */
+  currentUserId?: string;
+  /** Wird aufgerufen, wenn sich die Reminder-Counts geaendert haben. */
+  onRemindersChanged?: () => void;
 }) {
   const { t: l, locale } = useI18n();
   const [showWorkRecords, setShowWorkRecords] = useState(false);
@@ -56,8 +74,33 @@ export function ProjectDetailCard({
   const [assignmentMsg, setAssignmentMsg] = useState<string | null>(null);
   const [assignmentErr, setAssignmentErr] = useState<string | null>(null);
   const [financialsOpen, setFinancialsOpen] = useState(false);
+  const [pricingOpen, setPricingOpen] = useState(false);
+  const [showInactiveWorkers, setShowInactiveWorkers] = useState(false);
+  const [workerSearch, setWorkerSearch] = useState("");
   const [assignmentTimeSummary, setAssignmentTimeSummary] = useState<ProjectAssignmentTimeSummary[] | null>(null);
   const [assignmentTimeLoadErr, setAssignmentTimeLoadErr] = useState<string | null>(null);
+
+  // Status-Pille (Farben analog Kunden-Detail)
+  const statusLabel = (status?: string) => {
+    if (!status) return l("proj.noStatus");
+    return l(`status.${status}`) !== `status.${status}` ? l(`status.${status}`) : status;
+  };
+  const statusColor = (status?: string) => {
+    switch (status) {
+      case "ACTIVE": return "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300";
+      case "COMPLETED": return "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300";
+      case "PAUSED": return "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300";
+      case "CANCELED": return "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300";
+      case "PLANNED": return "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300";
+      default: return "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300";
+    }
+  };
+
+  function scrollToId(id: string) {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const projectMapsUrl = mapsUrlFromParts([
     project.title,
@@ -68,7 +111,10 @@ export function ProjectDetailCard({
   ]);
 
   const hasPricing = project.weeklyFlatRate != null || project.hourlyRateUpTo40h != null || project.includedHoursPerWeek != null || project.overtimeRate != null;
-  const projectReminderHref = `/settings?tab=reminders&kind=TODO&customerId=${encodeURIComponent(project.customerId)}&projectId=${encodeURIComponent(project.id)}&title=${encodeURIComponent(`${l("reminder.prefixTodo")} ${project.projectNumber} ${project.title}`)}`;
+  // Wiedervorlagen werden im eigenen Embed-Bereich verwaltet (FOLLOW_UP).
+  // Der Header-Link bleibt als Quick-Link in das zentrale Erinnerungsmodul,
+  // ist aber jetzt fachlich korrekt als FOLLOW_UP vorbelegt.
+  const projectReminderHref = `/settings?tab=reminders&kind=FOLLOW_UP&customerId=${encodeURIComponent(project.customerId)}&projectId=${encodeURIComponent(project.id)}&title=${encodeURIComponent(`${l("reminder.prefixFollowUp")} ${project.projectNumber} ${project.title}`)}`;
 
   const fmt = (value?: number | null) => value != null ? `${value.toFixed(2)} EUR` : "-";
 
@@ -132,192 +178,354 @@ export function ProjectDetailCard({
     }
   }
 
-  function printProject() {
-    const addr = formatAddress([project.siteAddressLine1, project.sitePostalCode, project.siteCity, project.siteCountry]);
-    const workers = (project.assignments ?? []).map((a) => `<tr><td>${a.worker.firstName} ${a.worker.lastName}</td><td>${a.worker.workerNumber}</td></tr>`).join("");
-    openPrintWindow(`${l("print.project")} ${project.projectNumber}`, `
-      <h1>${project.title}</h1>
-      <p class="meta">${project.projectNumber} · ${project.customer?.companyName ?? "-"} · ${project.status ?? "-"}</p>
-      <h2>${l("print.projectData")}</h2>
-      <div class="grid">
-        <span class="label">${l("print.customer")}</span><span>${project.customer?.companyName ?? "-"}</span>
-        <span class="label">${l("print.site")}</span><span>${addr || "-"}</span>
-        <span class="label">${l("print.status")}</span><span>${project.status ?? "-"}</span>
-        <span class="label">${l("print.serviceType")}</span><span>${project.serviceType ?? "-"}</span>
-        ${project.description ? `<span class="label">${l("print.description")}</span><span>${project.description}</span>` : ""}
-      </div>
-      ${hasPricing ? `<h2>${l("print.prices")}</h2><div class="grid">
-        <span class="label">${l("print.weeklyFlat")}</span><span>${fmt(project.weeklyFlatRate)}</span>
-        <span class="label">${l("print.includedHours")}</span><span>${project.includedHoursPerWeek != null ? project.includedHoursPerWeek + " h" : "-"}</span>
-        <span class="label">${l("print.hourlyRate")}</span><span>${fmt(project.hourlyRateUpTo40h)}</span>
-        <span class="label">${l("print.overtimeRate")}</span><span>${fmt(project.overtimeRate)}</span>
-      </div>` : ""}
-      ${workers ? `<h2>${l("print.workers")}</h2><table><thead><tr><th>${l("print.name")}</th><th>${l("print.number")}</th></tr></thead><tbody>${workers}</tbody></table>` : ""}
-      ${project.notes ? `<h2>${l("print.notes")}</h2><p>${project.notes}</p>` : ""}
-    `);
+  const [showPrintConfig, setShowPrintConfig] = useState(false);
+
+  function buildSectionRenderers(): Record<string, () => string> {
+    const addr = formatAddress([
+      project.siteAddressLine1, project.sitePostalCode, project.siteCity, project.siteCountry,
+    ]);
+    return {
+      masterData: () => `<h2>${escapeHtml(l("print.projectData"))}</h2>
+        <div class="grid">
+          <span class="label">${escapeHtml(l("print.customer"))}</span><span>${escapeHtml(project.customer?.companyName ?? "-")}</span>
+          <span class="label">${escapeHtml(l("print.site"))}</span><span>${escapeHtml(addr || "-")}</span>
+          <span class="label">${escapeHtml(l("print.status"))}</span><span>${escapeHtml(project.status ?? "-")}</span>
+          <span class="label">${escapeHtml(l("print.serviceType"))}</span><span>${escapeHtml(project.serviceType ?? "-")}</span>
+          ${project.description ? `<span class="label">${escapeHtml(l("print.description"))}</span><span>${escapeHtml(project.description)}</span>` : ""}
+        </div>`,
+      pricing: () => {
+        if (!hasPricing) return "";
+        return `<h2>${escapeHtml(l("print.prices"))}</h2><div class="grid">
+          <span class="label">${escapeHtml(l("print.weeklyFlat"))}</span><span>${escapeHtml(fmt(project.weeklyFlatRate))}</span>
+          <span class="label">${escapeHtml(l("print.includedHours"))}</span><span>${escapeHtml(project.includedHoursPerWeek != null ? `${project.includedHoursPerWeek} h` : "-")}</span>
+          <span class="label">${escapeHtml(l("print.hourlyRate"))}</span><span>${escapeHtml(fmt(project.hourlyRateUpTo40h))}</span>
+          <span class="label">${escapeHtml(l("print.overtimeRate"))}</span><span>${escapeHtml(fmt(project.overtimeRate))}</span>
+        </div>`;
+      },
+      workers: () => {
+        const list = project.assignments ?? [];
+        if (list.length === 0) return "";
+        const rows = list
+          .map((a) => `<tr><td>${escapeHtml(`${a.worker.firstName} ${a.worker.lastName}`)}</td><td>${escapeHtml(a.worker.workerNumber)}</td></tr>`)
+          .join("");
+        return `<h2>${escapeHtml(l("print.workers"))}</h2><table><thead><tr><th>${escapeHtml(l("print.name"))}</th><th>${escapeHtml(l("print.number"))}</th></tr></thead><tbody>${rows}</tbody></table>`;
+      },
+      financials: () => {
+        if (!financials) return "";
+        return `<h2>${escapeHtml(l("proj.financials"))}</h2>
+          <div class="grid">
+            <span class="label">${escapeHtml(l("kpi.totalHours"))}</span><span>${escapeHtml(`${financials.totalHours} h`)}</span>
+            <span class="label">${escapeHtml(l("kpi.overtime"))}</span><span>${escapeHtml(`${financials.overtimeHours} h`)}</span>
+            <span class="label">${escapeHtml(l("kpi.totalRevenue"))}</span><span>${escapeHtml(`${financials.totalRevenue.toFixed(2)} EUR`)}</span>
+            <span class="label">${escapeHtml(l("kpi.workerCosts"))}</span><span>${escapeHtml(`${financials.totalCosts.toFixed(2)} EUR`)}</span>
+            <span class="label">${escapeHtml(l("kpi.margin"))}</span><span>${escapeHtml(`${financials.margin.toFixed(2)} EUR`)}</span>
+          </div>`;
+      },
+      timesheets: () => {
+        if (timesheets.length === 0) return "";
+        const rows = timesheets
+          .map((t) => `<tr><td>${escapeHtml(`${t.weekYear}-W${String(t.weekNumber).padStart(2, "0")}`)}</td><td>${escapeHtml(t.worker ? `${t.worker.firstName} ${t.worker.lastName}` : "-")}</td><td>${escapeHtml(t.status)}</td><td>${escapeHtml((t.totalMinutesNet / 60).toFixed(2))} h</td></tr>`)
+          .join("");
+        return `<h2>${escapeHtml(l("ts.title"))}</h2><table><thead><tr><th>${escapeHtml(l("table.cw"))}</th><th>${escapeHtml(l("table.worker"))}</th><th>${escapeHtml(l("table.status"))}</th><th>${escapeHtml(l("kpi.hours"))}</th></tr></thead><tbody>${rows}</tbody></table>`;
+      },
+      notices: () => (project.notes ? `<h2>${escapeHtml(l("print.notes"))}</h2><p>${escapeHtml(project.notes)}</p>` : ""),
+      documents: () => "", // handled by handleConfiguredPrint below
+    };
+  }
+
+  function handleConfiguredPrint(payload: PrintSelectionPayload) {
+    const renderers = buildSectionRenderers();
+    const sectionsExceptDocuments = payload.sections.filter((s) => s !== "documents");
+    let html = `<h1>${escapeHtml(project.title)}</h1>
+      <p class="meta">${escapeHtml(project.projectNumber)} · ${escapeHtml(project.customer?.companyName ?? "-")} · ${escapeHtml(project.status ?? "-")}</p>`;
+    html += composeSelectedHtml(sectionsExceptDocuments, renderers);
+    if (payload.sections.includes("documents") && payload.includeDocuments) {
+      html += renderDocumentList({
+        headline: l("print.section.project.documents"),
+        emptyLabel: l("print.cfg.noDocumentsSelected"),
+        documents,
+        selectedIds: payload.documentIds,
+      });
+    }
+    openPrintWindow(`${l("print.project")} ${project.projectNumber}`, html);
+    setShowPrintConfig(false);
+  }
+
+  // Filter/Sort fuer den Verwaltungsblock: Suchfeld matcht Name/Nummer.
+  // Bereits zugewiesene Monteure werden separat gerendert; "verfuegbar"
+  // sind alle anderen aktiven Monteure (mit optionalem Inaktiv-Toggle).
+  const search = workerSearch.trim().toLowerCase();
+  const matches = (worker: Worker) => {
+    if (!search) return true;
+    return (
+      `${worker.firstName} ${worker.lastName}`.toLowerCase().includes(search) ||
+      worker.workerNumber.toLowerCase().includes(search)
+    );
+  };
+  const assignedWorkerObjects = workers.filter((w) => selectedWorkerIds.includes(w.id) && matches(w));
+  const availableActiveWorkers = workers.filter(
+    (w) => !selectedWorkerIds.includes(w.id) && w.active !== false && matches(w),
+  );
+  const availableInactiveWorkers = workers.filter(
+    (w) => !selectedWorkerIds.includes(w.id) && w.active === false && matches(w),
+  );
+
+  function toggleWorker(workerId: string) {
+    setSelectedWorkerIds((current) =>
+      current.includes(workerId)
+        ? current.filter((id) => id !== workerId)
+        : [...current, workerId],
+    );
   }
 
   return (
     <div className="grid gap-5">
-      {/* ── Stammdaten ──────────────────────────────────── */}
+      {/* ── Header / Kompaktansicht + gebündelte Aktionen ── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h3 className="text-lg font-semibold">{project.title}</h3>
             <p className="text-sm text-slate-500">
               {project.projectNumber} · {project.customer?.companyName ?? l("proj.noCustomer")}
+              <span className={cx("ml-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium align-middle", statusColor(project.status))}>
+                {statusLabel(project.status)}
+              </span>
             </p>
+            <div className="mt-2 text-sm text-slate-500">
+              {formatAddress([
+                project.siteAddressLine1,
+                project.sitePostalCode,
+                project.siteCity,
+                project.siteCountry,
+              ]) || l("proj.noSiteAddress")}
+            </div>
           </div>
-          <div className="flex gap-2">
-            {projectMapsUrl ? <MapLinkButton href={projectMapsUrl}>{l("common.googleMaps")}</MapLinkButton> : null}
+          <div className="flex flex-wrap gap-2">
+            {onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+                  <path d="M2.695 14.762l-1.262 3.155a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.886L17.5 5.501a2.121 2.121 0 00-3-3L3.58 13.419a4 4 0 00-.885 1.343z" />
+                </svg>
+                {l("common.edit")}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => scrollToId("project-team")}
+              className="inline-flex items-center rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+            >
+              {l("proj.actionAssignTeam")}
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollToId("project-documents")}
+              className="inline-flex items-center rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+            >
+              {l("proj.actionUploadDocument")}
+            </button>
             <Link href={projectReminderHref} className="inline-flex items-center rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800">
               {l("settings.remindersQuickCreate")}
             </Link>
-            <PrintButton onClick={printProject} label={l("proj.printProject")} />
-          </div>
-        </div>
-        <div className="mt-2 grid gap-1 text-sm text-slate-500">
-          <div>{project.status ?? l("proj.noStatus")}</div>
-          <div>
-            {formatAddress([
-              project.siteAddressLine1,
-              project.sitePostalCode,
-              project.siteCity,
-              project.siteCountry,
-            ]) || l("proj.noSiteAddress")}
+            {canPrint ? <PrintButton onClick={() => setShowPrintConfig(true)} label={l("proj.printProject")} /> : null}
+            {projectMapsUrl ? <MapLinkButton href={projectMapsUrl}>{l("common.googleMaps")}</MapLinkButton> : null}
           </div>
         </div>
       </div>
 
-      {/* ── Projektpreise ───────────────────────────────── */}
-      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-        <h4 className="mb-3 text-base font-semibold">{l("proj.pricing")}</h4>
-        {hasPricing ? (
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            <div className="text-slate-500">{l("proj.weeklyFlatRate")}</div>
-            <div className="font-mono">{fmt(project.weeklyFlatRate)}</div>
-            <div className="text-slate-500">{l("proj.includedHours")}</div>
-            <div className="font-mono">{project.includedHoursPerWeek != null ? `${project.includedHoursPerWeek} h` : "-"}</div>
-            <div className="text-slate-500">{l("proj.hourlyRate")}</div>
-            <div className="font-mono">{fmt(project.hourlyRateUpTo40h)}</div>
-            <div className="text-slate-500">{l("proj.overtimeRate")}</div>
-            <div className="font-mono">{fmt(project.overtimeRate)}</div>
+      {/* ── Team und Monteure (Live + Zuordnen kombiniert) ── */}
+      <div id="project-team" className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h4 className="text-base font-semibold">{l("proj.assignTeam")}</h4>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="search"
+              value={workerSearch}
+              onChange={(e) => setWorkerSearch(e.target.value)}
+              placeholder={l("proj.teamSearchPlaceholder")}
+              className="rounded-xl border border-black/10 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-white/10 dark:bg-slate-900"
+            />
+            <SecondaryButton onClick={() => void saveAssignments()}>
+              {assignmentSaving ? "..." : l("proj.assignmentSave")}
+            </SecondaryButton>
           </div>
-        ) : (
-          <p className="text-sm text-slate-500">{l("proj.noPricing")}</p>
-        )}
-      </div>
-
-      {/* ── Eingeteilte Monteure mit Stundensatz ────────── */}
-      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-        <h4 className="mb-1 text-base font-semibold">{l("proj.assignments")}</h4>
+        </div>
         <p className="mb-3 text-xs text-slate-500">{l("proj.assignmentTimeHint")}</p>
+        <MessageBar error={assignmentErr} success={assignmentMsg} />
         {assignmentTimeLoadErr ? (
           <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">{assignmentTimeLoadErr}</p>
         ) : null}
-        {(project.assignments ?? []).length === 0 ? (
-          <p className="text-sm text-slate-500">{l("proj.noAssignments")}</p>
-        ) : (
-          <div className="grid gap-2">
-            {(project.assignments ?? []).map((assignment) => {
-              const live = assignmentTimeSummary?.find((r) => r.workerId === assignment.worker.id);
-              return (
-                <Link
-                  key={assignment.id}
-                  href={`/workers/${assignment.worker.id}`}
-                  className="flex flex-col gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800 sm:flex-row sm:items-start sm:justify-between"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium">{assignment.worker.firstName} {assignment.worker.lastName}</div>
-                    <div className="text-slate-500">{assignment.worker.workerNumber}</div>
-                    {live ? (
-                      <div className="mt-2 grid gap-1 text-xs text-slate-600 dark:text-slate-400">
+
+        {/* Bereits zugewiesene Monteure mit Live-Status */}
+        <div className="mt-2">
+          <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("proj.teamAssignedHeading")}</h5>
+          {(project.assignments ?? []).length === 0 && assignedWorkerObjects.length === 0 ? (
+            <p className="text-sm text-slate-500">{l("proj.noAssignments")}</p>
+          ) : (
+            <div className="grid gap-2">
+              {(project.assignments ?? [])
+                .filter((a) => selectedWorkerIds.includes(a.worker.id) && matches({
+                  // Map Assignment-Worker auf Worker-Shape fuer matches()
+                  id: a.worker.id,
+                  firstName: a.worker.firstName,
+                  lastName: a.worker.lastName,
+                  workerNumber: a.worker.workerNumber,
+                  active: true,
+                } as Worker))
+                .map((assignment) => {
+                  const live = assignmentTimeSummary?.find((r) => r.workerId === assignment.worker.id);
+                  return (
+                    <div
+                      key={assignment.id}
+                      className="flex flex-col gap-2 rounded-xl border-2 border-emerald-300 bg-emerald-50/40 px-3 py-2 text-sm dark:border-emerald-500/30 dark:bg-emerald-500/5 sm:flex-row sm:items-start sm:justify-between"
+                    >
+                      <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={live.workingOnProjectNow
-                              ? "inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
-                              : "inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"}
-                          >
-                            {live.workingOnProjectNow ? l("proj.assignmentLiveWorking") : l("proj.assignmentLiveIdle")}
-                          </span>
-                          {live.workingOnProjectNow && live.openClockInStartedAt ? (
-                            <span className="text-slate-500">
-                              {l("proj.assignmentSince")}{" "}
-                              {new Date(live.openClockInStartedAt).toLocaleString(locale)}
-                            </span>
-                          ) : null}
+                          <Link href={`/workers/${assignment.worker.id}`} className="font-medium hover:underline">
+                            {assignment.worker.firstName} {assignment.worker.lastName}
+                          </Link>
+                          <span className="text-xs text-slate-500">{assignment.worker.workerNumber}</span>
                         </div>
-                        <div>
-                          {l("proj.assignmentTodayFirst")}{" "}
-                          {live.todayFirstClockInOnProjectAt
-                            ? new Date(live.todayFirstClockInOnProjectAt).toLocaleString(locale)
-                            : l("proj.assignmentTodayFirstNone")}
-                        </div>
-                        <div>
-                          {l("proj.assignmentTodayOnProject")}{" "}
-                          <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
-                            {formatTodayMinutes(live.todayMinutesOnProject)}
-                          </span>
-                        </div>
+                        {live ? (
+                          <div className="mt-2 grid gap-1 text-xs text-slate-600 dark:text-slate-400">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={live.workingOnProjectNow
+                                  ? "inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                                  : "inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"}
+                              >
+                                {live.workingOnProjectNow ? l("proj.assignmentLiveWorking") : l("proj.assignmentLiveIdle")}
+                              </span>
+                              {live.workingOnProjectNow && live.openClockInStartedAt ? (
+                                <span className="text-slate-500">
+                                  {l("proj.assignmentSince")}{" "}
+                                  {new Date(live.openClockInStartedAt).toLocaleString(locale)}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div>
+                              {l("proj.assignmentTodayFirst")}{" "}
+                              {live.todayFirstClockInOnProjectAt
+                                ? new Date(live.todayFirstClockInOnProjectAt).toLocaleString(locale)
+                                : l("proj.assignmentTodayFirstNone")}
+                            </div>
+                            <div>
+                              {l("proj.assignmentTodayOnProject")}{" "}
+                              <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
+                                {formatTodayMinutes(live.todayMinutesOnProject)}
+                              </span>
+                            </div>
+                          </div>
+                        ) : assignmentTimeSummary === null && !assignmentTimeLoadErr ? (
+                          <div className="mt-1 text-xs text-slate-400">{l("common.loading")}</div>
+                        ) : null}
                       </div>
-                    ) : assignmentTimeSummary === null && !assignmentTimeLoadErr ? (
-                      <div className="mt-1 text-xs text-slate-400">{l("common.loading")}</div>
-                    ) : null}
+                      <div className="flex shrink-0 items-start gap-3 sm:pt-0.5">
+                        <span className="font-mono text-xs text-slate-500">
+                          {assignment.worker.internalHourlyRate != null
+                            ? `${assignment.worker.internalHourlyRate.toFixed(2)} ${l("proj.internalPerHour")}`
+                            : l("proj.noHourlyRate")}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleWorker(assignment.worker.id)}
+                          className="rounded-lg border border-red-200 bg-white px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:bg-slate-900 dark:text-red-400"
+                        >
+                          {l("common.remove")}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              {/* Frisch ausgewaehlte aber noch nicht gespeicherte Monteure (selectedIds, die noch nicht in project.assignments sind) */}
+              {assignedWorkerObjects
+                .filter((w) => !(project.assignments ?? []).some((a) => a.worker.id === w.id))
+                .map((worker) => (
+                  <div key={worker.id} className="flex items-center justify-between gap-2 rounded-xl border-2 border-emerald-200 border-dashed bg-emerald-50/30 px-3 py-2 text-sm dark:border-emerald-500/20 dark:bg-emerald-500/5">
+                    <span>
+                      {worker.firstName} {worker.lastName}
+                      <span className="ml-2 text-xs text-slate-500">{worker.workerNumber}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleWorker(worker.id)}
+                      className="rounded-lg border border-red-200 bg-white px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:bg-slate-900 dark:text-red-400"
+                    >
+                      {l("common.remove")}
+                    </button>
                   </div>
-                  <div className="shrink-0 text-right font-mono text-xs text-slate-500 sm:pt-0.5">
-                    {assignment.worker.internalHourlyRate != null
-                      ? `${assignment.worker.internalHourlyRate.toFixed(2)} ${l("proj.internalPerHour")}`
-                      : l("proj.noHourlyRate")}
-                  </div>
-                </Link>
-              );
-            })}
+                ))}
+            </div>
+          )}
+        </div>
+
+        {/* Verfuegbare aktive Monteure */}
+        <div className="mt-4">
+          <h5 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">{l("proj.teamAvailableHeading")}</h5>
+          {availableActiveWorkers.length === 0 ? (
+            <p className="text-sm text-slate-500">{search ? l("proj.teamNoMatch") : "—"}</p>
+          ) : (
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {availableActiveWorkers.map((worker) => (
+                <button
+                  key={worker.id}
+                  type="button"
+                  onClick={() => toggleWorker(worker.id)}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-left text-sm transition hover:border-emerald-300 hover:bg-emerald-50/50 dark:border-white/10 dark:bg-slate-900 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/5"
+                >
+                  <span>
+                    <span className="font-medium">{worker.firstName} {worker.lastName}</span>
+                    <span className="ml-2 text-xs text-slate-500">{worker.workerNumber}</span>
+                  </span>
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">+</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Inaktive Monteure (sekundaer, nur wenn explizit eingeblendet) */}
+        {availableInactiveWorkers.length > 0 ? (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setShowInactiveWorkers((v) => !v)}
+              className="text-xs font-medium text-slate-500 underline-offset-4 hover:underline"
+            >
+              {showInactiveWorkers ? l("proj.teamHideInactive") : l("proj.teamShowInactive")} ({availableInactiveWorkers.length})
+            </button>
+            {showInactiveWorkers ? (
+              <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                {availableInactiveWorkers.map((worker) => (
+                  <button
+                    key={worker.id}
+                    type="button"
+                    onClick={() => toggleWorker(worker.id)}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-black/10 bg-white px-3 py-2 text-left text-sm text-slate-500 transition hover:border-emerald-300 dark:border-white/10 dark:bg-slate-900"
+                  >
+                    <span>
+                      {worker.firstName} {worker.lastName}
+                      <span className="ml-2 text-xs">({l("common.inactive")})</span>
+                    </span>
+                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">+</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
-        )}
+        ) : null}
       </div>
 
-      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-        <h4 className="mb-1 text-base font-semibold">{l("proj.manageAssignments")}</h4>
-        <p className="mb-3 text-sm text-slate-500">{l("proj.assignmentHint")}</p>
-        <MessageBar error={assignmentErr} success={assignmentMsg} />
-        <div className="mt-3 grid gap-2">
-          {workers
-            .filter((worker) => worker.active !== false || selectedWorkerIds.includes(worker.id))
-            .map((worker) => (
-            <label key={worker.id} className="flex items-center justify-between gap-3 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/10">
-              <span>
-                {worker.firstName} {worker.lastName}
-                <span className="ml-2 text-xs text-slate-500">{worker.workerNumber}</span>
-                {worker.active === false ? <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">({l("common.inactive")})</span> : null}
-              </span>
-              <input
-                type="checkbox"
-                checked={selectedWorkerIds.includes(worker.id)}
-                onChange={(event) =>
-                  setSelectedWorkerIds((current) =>
-                    event.target.checked
-                      ? [...current, worker.id]
-                      : current.filter((id) => id !== worker.id),
-                  )
-                }
-              />
-            </label>
-          ))}
-        </div>
-        <div className="mt-3 flex gap-2">
-          <SecondaryButton onClick={() => void saveAssignments()}>
-            {assignmentSaving ? "..." : l("proj.assignmentSave")}
-          </SecondaryButton>
-        </div>
-      </div>
-
-      {/* ── Auswertung ──────────────────────────────────── */}
+      {/* ── Auswertung (sekundaer, einklappbar) ─────────── */}
       {financials ? (
         <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
           <button
             type="button"
             onClick={() => setFinancialsOpen((current) => !current)}
-            className="flex w-full items-center justify-between gap-3 rounded-xl border-2 border-emerald-500 bg-emerald-50/70 px-4 py-3 text-left transition hover:bg-emerald-100/70 dark:border-emerald-400/70 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20"
+            className="flex w-full items-center justify-between gap-3 text-left"
           >
             <h4 className="text-base font-semibold">{l("proj.financials")}</h4>
             <CollapseIndicator open={financialsOpen} />
@@ -420,6 +628,16 @@ export function ProjectDetailCard({
       {/* ── Baustellenhinweise ─────────────────────────── */}
       <ProjectNoticesSection projectId={project.id} apiFetch={apiFetch} isAdmin={true} />
 
+      {/* ── Wiedervorlagen (FOLLOW_UP) ─────────────────── */}
+      {currentUserId ? (
+        <EmbeddedRemindersSection
+          scope={{ kind: "project", projectId: project.id, customerId: project.customerId }}
+          apiFetch={apiFetch}
+          currentUserId={currentUserId}
+          onChanged={onRemindersChanged}
+        />
+      ) : null}
+
       {/* ── Abrechnungsfreigabe ────────────────────────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <div className="flex items-center justify-between">
@@ -444,7 +662,7 @@ export function ProjectDetailCard({
       </div>
 
       {/* ── Dokumente ───────────────────────────────────── */}
-      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+      <div id="project-documents" className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <DocumentPanel
           documents={documents}
           onOpenDocument={onOpenDocument}
@@ -458,6 +676,34 @@ export function ProjectDetailCard({
           onApproveDocument={(docId) => void apiFetch(`/documents/${docId}/approve`, { method: "POST", body: JSON.stringify({}) })}
           onRejectDocument={(docId) => void apiFetch(`/documents/${docId}/reject`, { method: "POST", body: JSON.stringify({}) })}
         />
+      </div>
+
+      {/* ── Projektpreise (sekundaer, einklappbar) ──────── */}
+      <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
+        <button
+          type="button"
+          onClick={() => setPricingOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <h4 className="text-base font-semibold">{l("proj.pricing")}</h4>
+          <CollapseIndicator open={pricingOpen} />
+        </button>
+        <CollapsibleContent open={pricingOpen}>
+          {hasPricing ? (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              <div className="text-slate-500">{l("proj.weeklyFlatRate")}</div>
+              <div className="font-mono">{fmt(project.weeklyFlatRate)}</div>
+              <div className="text-slate-500">{l("proj.includedHours")}</div>
+              <div className="font-mono">{project.includedHoursPerWeek != null ? `${project.includedHoursPerWeek} h` : "-"}</div>
+              <div className="text-slate-500">{l("proj.hourlyRate")}</div>
+              <div className="font-mono">{fmt(project.hourlyRateUpTo40h)}</div>
+              <div className="text-slate-500">{l("proj.overtimeRate")}</div>
+              <div className="font-mono">{fmt(project.overtimeRate)}</div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">{l("proj.noPricing")}</p>
+          )}
+        </CollapsibleContent>
       </div>
 
       {showWorkRecords ? (
@@ -477,6 +723,17 @@ export function ProjectDetailCard({
           onUpload={onUpload}
           onApproveDocument={(docId) => void apiFetch(`/documents/${docId}/approve`, { method: "POST", body: JSON.stringify({}) })}
           onRejectDocument={(docId) => void apiFetch(`/documents/${docId}/reject`, { method: "POST", body: JSON.stringify({}) })}
+        />
+      ) : null}
+
+      {showPrintConfig ? (
+        <PrintConfiguratorModal
+          entityType="project"
+          entityId={project.id}
+          title={`${l("proj.printProject")} — ${project.projectNumber}`}
+          documents={documents}
+          onClose={() => setShowPrintConfig(false)}
+          onPrint={handleConfiguredPrint}
         />
       ) : null}
     </div>

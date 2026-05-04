@@ -15,8 +15,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
+  type Dispatch,
   type FormEvent,
   type ReactNode,
+  type SetStateAction,
   useCallback,
   useEffect,
   useMemo,
@@ -42,10 +44,17 @@ import {
   SectionCard, InfoCard, MessageBar,
   FormRow, Field, SelectField, TextArea,
   PrintButton, openPrintWindow,
+  CollapseIndicator, CollapsibleContent,
 } from "./crm-app/shared";
 import { KioskLoginScreen } from "./crm-app/login";
 import { WorkerTimeView, WorkerDetailCard, KioskUserView, getDeviceUuid, getDeviceInfo } from "./crm-app/worker";
-import { CustomerDetailCard, CreateCustomerModal } from "./crm-app/customers";
+import {
+  CustomerDetailCard,
+  CreateCustomerModal,
+  EditCustomerModal,
+  type EditCustomerInitialTab,
+  type EditCustomerPrefill,
+} from "./crm-app/customers";
 import { NoteDetailModal, SpeechButton, MarkdownContent } from "./crm-app/notes";
 import { appendSpeechTranscript } from "./crm-app/notes/speech-format";
 import { ReminderSettings, SettingsPanel } from "./crm-app/settings";
@@ -178,12 +187,23 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [projectTimesheets, setProjectTimesheets] = useState<TimesheetItem[]>([]);
   const [customerFinancials, setCustomerFinancials] = useState<CustomerFinancials | null>(null);
   const [showCreateCustomer, setShowCreateCustomer] = useState(false);
+  const [showEditCustomer, setShowEditCustomer] = useState(false);
+  const [editCustomerTab, setEditCustomerTab] = useState<EditCustomerInitialTab>("basics");
+  const [editCustomerPrefill, setEditCustomerPrefill] = useState<EditCustomerPrefill | undefined>(undefined);
+  const [reminderCounts, setReminderCounts] = useState<{ byCustomer: Record<string, number>; byProject: Record<string, number> }>({ byCustomer: {}, byProject: {} });
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showCreateWorker, setShowCreateWorker] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
 
   const canManageSettings = hasRole(auth, ["SUPERADMIN", "OFFICE"]);
   const canManageUsers = hasRole(auth, ["SUPERADMIN"]);
+  const canEditCustomer = hasPermission(auth, "customers.edit");
+  const canEditProject = hasPermission(auth, "projects.edit");
+  const canPrintCustomer = hasPermission(auth, "customers.print");
+  const canPrintProject = hasPermission(auth, "projects.print");
+  const canPrintDocument = hasPermission(auth, "documents.print");
+  const canPrintReports = hasPermission(auth, "reports.print");
+  const canPrintTasks = hasPermission(auth, "tasks.print");
 
   const selectedCustomer = useMemo(
     () => customers.find((item) => item.id === entityId) ?? null,
@@ -249,6 +269,22 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     [auth?.accessToken, l],
   );
 
+  /**
+   * Wiedervorlagen-Counts neu laden, ohne den Rest der App zu re-fetchen.
+   * Wird nach Anlage/Erledigung im Embedded-Bereich aufgerufen, damit Listen-
+   * Badges live aktuell bleiben.
+   */
+  const refreshReminderCounts = useCallback(async () => {
+    try {
+      const counts = await apiFetch<{ byCustomer: Record<string, number>; byProject: Record<string, number> }>(
+        "/reminders/counts?status=OPEN&kind=FOLLOW_UP",
+      );
+      setReminderCounts(counts);
+    } catch {
+      // Wenn der Nutzer nicht zugreifen darf, bleibt der letzte Stand.
+    }
+  }, [apiFetch]);
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -270,6 +306,40 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     }
   }, []);
 
+  // Sync permissions/roles from the server once after auth is restored.
+  // Catches role changes the admin made since last login and migrates older
+  // stored AuthState that predates the permissions field.
+  const accessToken = auth?.accessToken;
+  const authType = auth?.type;
+  useEffect(() => {
+    if (!accessToken || authType === "worker") return;
+    let cancelled = false;
+    void apiFetch<{ sub: string; roles: string[]; permissions: string[]; type: string } | null>("/auth/me")
+      .then((me) => {
+        if (cancelled || !me) return;
+        setAuth((current) => {
+          if (!current) return current;
+          const next: AuthState = {
+            ...current,
+            user: {
+              ...current.user,
+              roles: me.roles ?? current.user.roles,
+              permissions: me.permissions ?? [],
+            },
+          };
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(next));
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        // 401 is handled by the global apiFetch error handler / logout flow;
+        // any other error here just leaves the cached permissions in place.
+      });
+    return () => { cancelled = true; };
+  }, [accessToken, authType, apiFetch]);
+
   const loadData = useCallback(async () => {
     if (!auth || auth.type === "worker" || auth.type === "kiosk-user") {
       return;
@@ -286,6 +356,14 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         apiFetch<Worker[]>("/workers").then(setWorkers),
         apiFetch<DocumentItem[]>("/documents").then(setDocuments),
         apiFetch<TeamItem[]>("/teams").then(setTeams),
+        // Wiedervorlagen-Counts: ein Aufruf liefert beide Maps; Fehler (z. B.
+        // fehlende Office-Berechtigung) machen die Listen ohne Badge weiter
+        // funktionsfaehig statt das ganze Loading abzubrechen.
+        apiFetch<{ byCustomer: Record<string, number>; byProject: Record<string, number> }>(
+          "/reminders/counts?status=OPEN&kind=FOLLOW_UP",
+        )
+          .then(setReminderCounts)
+          .catch(() => setReminderCounts({ byCustomer: {}, byProject: {} })),
       ];
 
       if (canManageSettings) {
@@ -418,7 +496,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         accessToken: string;
         loginType: "worker" | "kiosk-user" | "user";
         worker: { id: string; workerNumber: string; name: string } | null;
-        user: { id: string; email: string; displayName: string; roles: string[] } | null;
+        user: { id: string; email: string; displayName: string; roles: string[]; permissions?: string[] } | null;
         currentProjects: AuthState["currentProjects"];
         futureProjects: AuthState["futureProjects"];
         pastProjects: AuthState["pastProjects"];
@@ -1003,15 +1081,79 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     financials={customerFinancials}
                     documents={filterDocuments(documents, "CUSTOMER", selectedCustomer.id)}
                     onOpenDocument={handleOpenDocument}
-                    onPrintDocument={handlePrintDocument}
+                    onPrintDocument={canPrintDocument ? handlePrintDocument : undefined}
                     onDownload={handleDownloadDocument}
                     onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, l("doc.title"))}
                     documentForm={documentForm}
                     setDocumentForm={setDocumentForm}
                     authToken={auth.accessToken}
                     onUpload={() => handleDocumentUpload("CUSTOMER", selectedCustomer.id)}
+                    onEdit={canEditCustomer ? () => {
+                      // "Weitere Kundendaten ergaenzen" landet bewusst im
+                      // Vereinbarungen/Finanzen-Reiter. Die reinen Stammdaten
+                      // erreicht der Nutzer ueber den Bearbeiten-Stift im
+                      // Header bzw. den ersten Reiter im geoeffneten Modal.
+                      setEditCustomerTab("agreements");
+                      setEditCustomerPrefill(undefined);
+                      setShowEditCustomer(true);
+                    } : undefined}
+                    onAddPrimaryContact={canEditCustomer ? () => {
+                      setEditCustomerTab("contacts");
+                      setEditCustomerPrefill({ newContact: { asPrimary: true } });
+                      setShowEditCustomer(true);
+                    } : undefined}
+                    onAddBranch={canEditCustomer ? () => {
+                      setEditCustomerTab("branches");
+                      setEditCustomerPrefill({ newBranch: true });
+                      setShowEditCustomer(true);
+                    } : undefined}
+                    onEditContacts={canEditCustomer ? () => {
+                      setEditCustomerTab("contacts");
+                      setEditCustomerPrefill(undefined);
+                      setShowEditCustomer(true);
+                    } : undefined}
+                    onCreateProject={canEditProject ? () => {
+                      setProjectForm({
+                        ...emptyProjectForm(),
+                        customerId: selectedCustomer.id,
+                      });
+                      setShowCreateProject(true);
+                      router.push("/projects");
+                    } : undefined}
+                    canPrint={canPrintCustomer}
                     apiFetch={apiFetch}
+                    currentUserId={auth.user.id}
+                    onRemindersChanged={() => void refreshReminderCounts()}
                   />
+                  {showEditCustomer ? (
+                    <EditCustomerModal
+                      customer={selectedCustomer}
+                      customerProjects={projects.filter((p) => p.customerId === selectedCustomer.id)}
+                      apiFetch={apiFetch}
+                      initialTab={editCustomerTab}
+                      prefill={editCustomerPrefill}
+                      onCreateProject={canEditProject ? () => {
+                        setProjectForm({
+                          ...emptyProjectForm(),
+                          customerId: selectedCustomer.id,
+                        });
+                        setShowEditCustomer(false);
+                        setEditCustomerPrefill(undefined);
+                        setShowCreateProject(true);
+                        router.push("/projects");
+                      } : undefined}
+                      onClose={() => {
+                        setShowEditCustomer(false);
+                        setEditCustomerPrefill(undefined);
+                      }}
+                      onSaved={async () => {
+                        setShowEditCustomer(false);
+                        setEditCustomerPrefill(undefined);
+                        await loadData();
+                        setSuccess(l("cust.updated"));
+                      }}
+                    />
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -1038,6 +1180,18 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                       onOpen={(item) => router.push(`/customers/${item.id}`)}
                       onEdit={(item) => router.push(`/customers/${item.id}`)}
                       onDelete={(item) => void handleDelete(`/customers/${item.id}`, l("nav.customers"), true)}
+                      badges={(item) => {
+                        const count = reminderCounts.byCustomer[item.id] ?? 0;
+                        if (count <= 0) return null;
+                        return (
+                          <span
+                            title={`${count} ${l("reminder.openCount")}`}
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
+                          >
+                            ⏰ {count} {l("reminder.openCountShort")}
+                          </span>
+                        );
+                      }}
                     />
                   </SectionCard>
                   {showCreateCustomer ? (
@@ -1074,7 +1228,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     timesheets={projectTimesheets}
                     documents={filterDocuments(documents, "PROJECT", selectedProject.id)}
                     onOpenDocument={handleOpenDocument}
-                    onPrintDocument={handlePrintDocument}
+                    onPrintDocument={canPrintDocument ? handlePrintDocument : undefined}
                     onDownload={handleDownloadDocument}
                     onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, l("doc.title"))}
                     documentForm={documentForm}
@@ -1082,7 +1236,18 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     authToken={auth.accessToken}
                     onUpload={() => handleDocumentUpload("PROJECT", selectedProject.id)}
                     onDataChanged={loadData}
+                    onEdit={
+                      canEditProject
+                        ? () => {
+                            setProjectForm(mapProjectToForm(selectedProject));
+                            setShowCreateProject(true);
+                          }
+                        : undefined
+                    }
+                    canPrint={canPrintProject}
                     apiFetch={apiFetch}
+                    currentUserId={auth.user.id}
+                    onRemindersChanged={() => void refreshReminderCounts()}
                   />
                 </>
               ) : (
@@ -1101,10 +1266,12 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                       </svg>
                       {l("proj.create")}
                     </button>
-                    <PrintButton onClick={() => {
-                      const rows = projects.map((p) => `<tr><td>${p.projectNumber}</td><td>${p.title}</td><td>${p.customer?.companyName ?? "-"}</td><td>${p.status ?? "-"}</td><td>${p.plannedStartDate?.slice(0, 10) ?? "-"} - ${p.plannedEndDate?.slice(0, 10) ?? l("worker.open")}</td></tr>`).join("");
-                      openPrintWindow(l("proj.list"), `<h1>${l("proj.list")}</h1><p class="meta">${projects.length} ${l("proj.title")}</p><table><thead><tr><th>${l("table.nr")}</th><th>${l("table.title")}</th><th>${l("table.customer")}</th><th>${l("table.status")}</th><th>${l("table.period")}</th></tr></thead><tbody>${rows}</tbody></table>`);
-                    }} label={l("doc.print")} />
+                    {canPrintProject ? (
+                      <PrintButton onClick={() => {
+                        const rows = projects.map((p) => `<tr><td>${p.projectNumber}</td><td>${p.title}</td><td>${p.customer?.companyName ?? "-"}</td><td>${p.status ?? "-"}</td><td>${p.plannedStartDate?.slice(0, 10) ?? "-"} - ${p.plannedEndDate?.slice(0, 10) ?? l("worker.open")}</td></tr>`).join("");
+                        openPrintWindow(l("proj.list"), `<h1>${l("proj.list")}</h1><p class="meta">${projects.length} ${l("proj.title")}</p><table><thead><tr><th>${l("table.nr")}</th><th>${l("table.title")}</th><th>${l("table.customer")}</th><th>${l("table.status")}</th><th>${l("table.period")}</th></tr></thead><tbody>${rows}</tbody></table>`);
+                      }} label={l("doc.print")} />
+                    ) : null}
                   </div>
                   <EntityList
                     items={projects}
@@ -1113,6 +1280,18 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     deleteLabel={l("common.delete")}
                     onOpen={(item) => router.push(`/projects/${item.id}`)}
                     onDelete={(item) => void handleDelete(`/projects/${item.id}`, l("nav.projects"), true)}
+                    badges={(item) => {
+                      const count = reminderCounts.byProject[item.id] ?? 0;
+                      if (count <= 0) return null;
+                      return (
+                        <span
+                          title={`${count} ${l("reminder.openCount")}`}
+                          className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
+                        >
+                          ⏰ {count} {l("reminder.openCountShort")}
+                        </span>
+                      );
+                    }}
                   />
                 </SectionCard>
               )}
@@ -1127,223 +1306,12 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                   subtitle={l("proj.createSub")}
                 >
                   <form className="grid gap-4" onSubmit={handleProjectSubmit}>
-                <FormRow>
-                  <Field
-                    label={l("proj.number")}
-                    value={projectForm.projectNumber}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        projectNumber: event.target.value,
-                      }))
-                    }
+                  <ProjectFormFields
+                    form={projectForm}
+                    setForm={setProjectForm}
+                    customers={customers}
+                    l={l}
                   />
-                  <Field
-                    label={l("doc.title")}
-                    value={projectForm.title}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        title: event.target.value,
-                      }))
-                    }
-                  />
-                </FormRow>
-                <FormRow>
-                  <SelectField
-                    label={l("proj.customer")}
-                    value={projectForm.customerId}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        customerId: event.target.value,
-                        branchId: "",
-                      }))
-                    }
-                    options={customers.map((customer) => ({
-                      value: customer.id,
-                      label: `${customer.companyName} (${customer.customerNumber})`,
-                    }))}
-                  />
-                  <SelectField
-                    label={l("cust.branches")}
-                    value={projectForm.branchId}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        branchId: event.target.value,
-                      }))
-                    }
-                    options={[
-                      { value: "", label: "-" },
-                      ...availableBranches(customers, projectForm.customerId).map((branch) => ({
-                        value: branch.id ?? branch.name,
-                        label: branch.name,
-                      })),
-                    ]}
-                  />
-                </FormRow>
-                <FormRow>
-                  <SelectField
-                    label={l("proj.status")}
-                    value={projectForm.status}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        status: event.target.value,
-                      }))
-                    }
-                    options={[
-                      { value: "DRAFT", label: l("status.DRAFT") },
-                      { value: "PLANNED", label: l("status.PLANNED") },
-                      { value: "ACTIVE", label: l("status.ACTIVE") },
-                      { value: "PAUSED", label: l("status.PAUSED") },
-                      { value: "COMPLETED", label: l("status.COMPLETED") },
-                      { value: "CANCELED", label: l("status.CANCELED") },
-                    ]}
-                  />
-                  <SelectField
-                    label={l("proj.serviceType")}
-                    value={projectForm.serviceType}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        serviceType: event.target.value,
-                      }))
-                    }
-                    options={[
-                      { value: "VIDEO", label: l("proj.serviceVideo") },
-                      { value: "ELECTRICAL", label: l("proj.serviceElectrical") },
-                      { value: "SERVICE", label: l("proj.serviceService") },
-                      { value: "OTHER", label: l("proj.serviceOther") },
-                    ]}
-                  />
-                </FormRow>
-                <FormRow>
-                  <Field
-                    label={l("proj.site")}
-                    value={projectForm.siteName}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        siteName: event.target.value,
-                      }))
-                    }
-                  />
-                  <Field
-                    label={l("work.address")}
-                    value={projectForm.siteAddressLine1}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        siteAddressLine1: event.target.value,
-                      }))
-                    }
-                  />
-                </FormRow>
-                <FormRow>
-                  <Field
-                    label={l("work.postalCode")}
-                    value={projectForm.sitePostalCode}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        sitePostalCode: event.target.value,
-                      }))
-                    }
-                  />
-                  <Field
-                    label={l("work.city")}
-                    value={projectForm.siteCity}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        siteCity: event.target.value,
-                      }))
-                    }
-                  />
-                </FormRow>
-                <FormRow>
-                  <Field
-                    label={l("work.country")}
-                    value={projectForm.siteCountry}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        siteCountry: event.target.value,
-                      }))
-                    }
-                  />
-                  <Field
-                    label={l("proj.accommodation")}
-                    value={projectForm.accommodationAddress}
-                    onChange={(event) =>
-                      setProjectForm((current) => ({
-                        ...current,
-                        accommodationAddress: event.target.value,
-                      }))
-                    }
-                  />
-                </FormRow>
-                <div className="rounded-2xl border border-black/10 bg-slate-50/50 p-4 dark:border-white/10 dark:bg-slate-950/30">
-                  <h4 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">Projektpreise</h4>
-                  <div className="grid gap-4">
-                    <FormRow>
-                      <Field
-                        label={l("proj.weeklyFlatRate")}
-                        value={projectForm.weeklyFlatRate}
-                        onChange={(event) =>
-                          setProjectForm((current) => ({
-                            ...current,
-                            weeklyFlatRate: event.target.value,
-                          }))
-                        }
-                      />
-                      <Field
-                        label={l("proj.includedHours")}
-                        value={projectForm.includedHoursPerWeek}
-                        onChange={(event) =>
-                          setProjectForm((current) => ({
-                            ...current,
-                            includedHoursPerWeek: event.target.value,
-                          }))
-                        }
-                      />
-                    </FormRow>
-                    <FormRow>
-                      <Field
-                        label={l("proj.hourlyRate")}
-                        value={projectForm.hourlyRateUpTo40h}
-                        onChange={(event) =>
-                          setProjectForm((current) => ({
-                            ...current,
-                            hourlyRateUpTo40h: event.target.value,
-                          }))
-                        }
-                      />
-                      <Field
-                        label={l("proj.overtimeRate")}
-                        value={projectForm.overtimeRate}
-                        onChange={(event) =>
-                          setProjectForm((current) => ({
-                            ...current,
-                            overtimeRate: event.target.value,
-                          }))
-                        }
-                      />
-                    </FormRow>
-                  </div>
-                </div>
-                <TextArea
-                  label={l("proj.description")}
-                  value={projectForm.description}
-                  onChange={(event) =>
-                    setProjectForm((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                />
                     <div className="flex gap-3">
                       <PrimaryButton disabled={submitting}>
                         {submitting ? l("common.saving") : l("proj.save")}
@@ -1382,7 +1350,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     projects={projects}
                     documents={filterDocuments(documents, "WORKER", selectedWorker.id)}
                     onOpenDocument={handleOpenDocument}
-                    onPrintDocument={handlePrintDocument}
+                    onPrintDocument={canPrintDocument ? handlePrintDocument : undefined}
                     onDownload={handleDownloadDocument}
                     onDeleteDocument={(id) => void handleDelete(`/documents/${id}`, l("doc.title"))}
                     documentForm={documentForm}
@@ -1794,6 +1762,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
             projects={projects}
             workers={workers}
             apiFetch={apiFetch}
+            canPrint={canPrintReports}
           />
         ) : null}
 
@@ -1811,6 +1780,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               showOfficeSection
               officeListFirst
               usePopupForm
+              canPrint={canPrintTasks}
             />
           ) : (
             <InfoCard title={l("settings.noAccess")}>{l("settings.noAccess")}</InfoCard>
@@ -1846,7 +1816,11 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       {documentPreview ? (
         <DocumentPreviewModal
           preview={documentPreview}
-          onPrint={() => void handlePrintDocumentById(documentPreview.documentId)}
+          onPrint={
+            canPrintDocument
+              ? () => void handlePrintDocumentById(documentPreview.documentId)
+              : undefined
+          }
           onClose={() => {
             window.URL.revokeObjectURL(documentPreview.url);
             setDocumentPreview(null);
@@ -2159,6 +2133,10 @@ function hasRole(auth: AuthState | null, roles: string[]) {
   return roles.some((role) => auth?.user.roles.includes(role));
 }
 
+function hasPermission(auth: AuthState | null, code: string) {
+  return Boolean(auth?.user.permissions?.includes(code));
+}
+
 function mapProjectToForm(project: Project): ProjectFormState {
   return {
     id: project.id,
@@ -2224,3 +2202,254 @@ function availableBranches(customers: Customer[], customerId: string) {
   return customers.find((customer) => customer.id === customerId)?.branches ?? [];
 }
 
+/**
+ * Projektformular-Body (anlegen/bearbeiten). Strukturiert in:
+ *  - Basisdaten (immer sichtbar): Nummer, Titel, Kunde+Niederlassung, Status,
+ *    Leistungsart und Baustellenadresse.
+ *  - Plan/Zeitraum (einklappbar): Start, Ende, Unterkunft, Prioritaet.
+ *  - Preise (einklappbar): Wochenpauschale, Inklusivstunden, Stundensaetze.
+ *  - Beschreibung & Notizen (einklappbar): Freitext.
+ *
+ * Beim Bearbeiten klappen Bereiche, die bereits Daten enthalten, automatisch
+ * auf, damit nichts versehentlich versteckt bleibt.
+ */
+function ProjectFormFields({
+  form,
+  setForm,
+  customers,
+  l,
+}: {
+  form: ProjectFormState;
+  setForm: Dispatch<SetStateAction<ProjectFormState>>;
+  customers: Customer[];
+  l: (key: string) => string;
+}) {
+  const hasSchedule = !!(form.plannedStartDate || form.plannedEndDate || form.accommodationAddress || (form.priority && form.priority !== 0));
+  const hasPricing = !!(form.weeklyFlatRate || form.includedHoursPerWeek || form.hourlyRateUpTo40h || form.overtimeRate);
+  const hasNotes = !!(form.description || form.notes);
+
+  const [scheduleOpen, setScheduleOpen] = useState<boolean>(hasSchedule);
+  const [pricesOpen, setPricesOpen] = useState<boolean>(hasPricing);
+  const [notesOpen, setNotesOpen] = useState<boolean>(hasNotes);
+
+  const branchOptions = [
+    { value: "", label: "-" },
+    ...availableBranches(customers, form.customerId).map((branch) => ({
+      value: branch.id ?? branch.name,
+      label: branch.name,
+    })),
+  ];
+
+  return (
+    <div className="grid gap-4">
+      {/* ── Basisdaten ───────────────────────── */}
+      <section className="rounded-2xl bg-slate-50/70 p-4 dark:bg-slate-950/40">
+        <h3 className="mb-3 text-base font-semibold">{l("proj.basics")}</h3>
+        <div className="grid gap-3">
+          <FormRow>
+            <Field
+              label={l("proj.number")}
+              value={form.projectNumber}
+              onChange={(event) => setForm((c) => ({ ...c, projectNumber: event.target.value }))}
+            />
+            <Field
+              label={l("doc.title")}
+              value={form.title}
+              onChange={(event) => setForm((c) => ({ ...c, title: event.target.value }))}
+            />
+          </FormRow>
+          <FormRow>
+            <SelectField
+              label={l("proj.customer")}
+              value={form.customerId}
+              onChange={(event) => setForm((c) => ({ ...c, customerId: event.target.value, branchId: "" }))}
+              options={customers.map((customer) => ({
+                value: customer.id,
+                label: `${customer.companyName} (${customer.customerNumber})`,
+              }))}
+            />
+            <SelectField
+              label={l("cust.branches")}
+              value={form.branchId}
+              onChange={(event) => setForm((c) => ({ ...c, branchId: event.target.value }))}
+              options={branchOptions}
+            />
+          </FormRow>
+          <FormRow>
+            <SelectField
+              label={l("proj.status")}
+              value={form.status}
+              onChange={(event) => setForm((c) => ({ ...c, status: event.target.value }))}
+              options={[
+                { value: "DRAFT", label: l("status.DRAFT") },
+                { value: "PLANNED", label: l("status.PLANNED") },
+                { value: "ACTIVE", label: l("status.ACTIVE") },
+                { value: "PAUSED", label: l("status.PAUSED") },
+                { value: "COMPLETED", label: l("status.COMPLETED") },
+                { value: "CANCELED", label: l("status.CANCELED") },
+              ]}
+            />
+            <SelectField
+              label={l("proj.serviceType")}
+              value={form.serviceType}
+              onChange={(event) => setForm((c) => ({ ...c, serviceType: event.target.value }))}
+              options={[
+                { value: "VIDEO", label: l("proj.serviceVideo") },
+                { value: "ELECTRICAL", label: l("proj.serviceElectrical") },
+                { value: "SERVICE", label: l("proj.serviceService") },
+                { value: "OTHER", label: l("proj.serviceOther") },
+              ]}
+            />
+          </FormRow>
+          <h4 className="mt-2 text-sm font-semibold uppercase tracking-wider text-slate-500">{l("proj.siteAddress")}</h4>
+          <FormRow>
+            <Field
+              label={l("proj.site")}
+              value={form.siteName}
+              onChange={(event) => setForm((c) => ({ ...c, siteName: event.target.value }))}
+            />
+            <Field
+              label={l("work.address")}
+              value={form.siteAddressLine1}
+              onChange={(event) => setForm((c) => ({ ...c, siteAddressLine1: event.target.value }))}
+            />
+          </FormRow>
+          <FormRow>
+            <Field
+              label={l("work.postalCode")}
+              value={form.sitePostalCode}
+              onChange={(event) => setForm((c) => ({ ...c, sitePostalCode: event.target.value }))}
+            />
+            <Field
+              label={l("work.city")}
+              value={form.siteCity}
+              onChange={(event) => setForm((c) => ({ ...c, siteCity: event.target.value }))}
+            />
+          </FormRow>
+          <FormRow>
+            <Field
+              label={l("work.country")}
+              value={form.siteCountry}
+              onChange={(event) => setForm((c) => ({ ...c, siteCountry: event.target.value }))}
+            />
+            <div />
+          </FormRow>
+        </div>
+      </section>
+
+      {/* ── Plan und Zeitraum ────────────────── */}
+      <section className="rounded-2xl bg-slate-50/70 p-4 dark:bg-slate-950/40">
+        <button
+          type="button"
+          onClick={() => setScheduleOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <div>
+            <h3 className="text-base font-semibold">{l("proj.scheduleAndExtras")}</h3>
+            <p className="text-xs text-slate-500">{l("proj.scheduleHint")}</p>
+          </div>
+          <CollapseIndicator open={scheduleOpen} />
+        </button>
+        <CollapsibleContent open={scheduleOpen}>
+          <div className="grid gap-3">
+            <FormRow>
+              <Field
+                label={l("proj.startDate")}
+                type="date"
+                value={form.plannedStartDate}
+                onChange={(event) => setForm((c) => ({ ...c, plannedStartDate: event.target.value }))}
+              />
+              <Field
+                label={l("proj.endDate")}
+                type="date"
+                value={form.plannedEndDate}
+                onChange={(event) => setForm((c) => ({ ...c, plannedEndDate: event.target.value }))}
+              />
+            </FormRow>
+            <FormRow>
+              <Field
+                label={l("proj.accommodation")}
+                value={form.accommodationAddress}
+                onChange={(event) => setForm((c) => ({ ...c, accommodationAddress: event.target.value }))}
+              />
+              <Field
+                label={l("proj.priority")}
+                value={String(form.priority ?? 0)}
+                onChange={(event) => setForm((c) => ({ ...c, priority: Number(event.target.value) || 0 }))}
+              />
+            </FormRow>
+          </div>
+        </CollapsibleContent>
+      </section>
+
+      {/* ── Preise ───────────────────────────── */}
+      <section className="rounded-2xl bg-slate-50/70 p-4 dark:bg-slate-950/40">
+        <button
+          type="button"
+          onClick={() => setPricesOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <div>
+            <h3 className="text-base font-semibold">{l("proj.priceSection")}</h3>
+            <p className="text-xs text-slate-500">{l("proj.priceSectionHint")}</p>
+          </div>
+          <CollapseIndicator open={pricesOpen} />
+        </button>
+        <CollapsibleContent open={pricesOpen}>
+          <div className="grid gap-3">
+            <FormRow>
+              <Field
+                label={l("proj.weeklyFlatRate")}
+                value={form.weeklyFlatRate}
+                onChange={(event) => setForm((c) => ({ ...c, weeklyFlatRate: event.target.value }))}
+              />
+              <Field
+                label={l("proj.includedHours")}
+                value={form.includedHoursPerWeek}
+                onChange={(event) => setForm((c) => ({ ...c, includedHoursPerWeek: event.target.value }))}
+              />
+            </FormRow>
+            <FormRow>
+              <Field
+                label={l("proj.hourlyRate")}
+                value={form.hourlyRateUpTo40h}
+                onChange={(event) => setForm((c) => ({ ...c, hourlyRateUpTo40h: event.target.value }))}
+              />
+              <Field
+                label={l("proj.overtimeRate")}
+                value={form.overtimeRate}
+                onChange={(event) => setForm((c) => ({ ...c, overtimeRate: event.target.value }))}
+              />
+            </FormRow>
+          </div>
+        </CollapsibleContent>
+      </section>
+
+      {/* ── Beschreibung und Notizen ─────────── */}
+      <section className="rounded-2xl bg-slate-50/70 p-4 dark:bg-slate-950/40">
+        <button
+          type="button"
+          onClick={() => setNotesOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <h3 className="text-base font-semibold">{l("proj.descriptionSection")}</h3>
+          <CollapseIndicator open={notesOpen} />
+        </button>
+        <CollapsibleContent open={notesOpen}>
+          <div className="grid gap-3">
+            <TextArea
+              label={l("proj.description")}
+              value={form.description}
+              onChange={(event) => setForm((c) => ({ ...c, description: event.target.value }))}
+            />
+            <TextArea
+              label={l("proj.notes")}
+              value={form.notes}
+              onChange={(event) => setForm((c) => ({ ...c, notes: event.target.value }))}
+            />
+          </div>
+        </CollapsibleContent>
+      </section>
+    </div>
+  );
+}

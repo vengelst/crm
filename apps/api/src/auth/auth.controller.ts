@@ -9,8 +9,10 @@ import { PinLoginDto } from './dto/pin-login.dto';
 type RequestWithUser = Request & {
   user?: {
     sub: string;
+    email?: string;
     roles: string[];
-    type: 'user' | 'worker';
+    permissions?: string[];
+    type: 'user' | 'worker' | 'kiosk-user';
   };
 };
 
@@ -38,6 +40,14 @@ export class AuthController {
 
   @Get('me')
   me(@Req() request: RequestWithUser) {
-    return request.user ?? null;
+    const user = request.user;
+    if (!user) return null;
+    return {
+      sub: user.sub,
+      email: user.email,
+      type: user.type,
+      roles: user.roles ?? [],
+      permissions: user.permissions ?? [],
+    };
   }
 }

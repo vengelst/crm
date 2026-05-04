@@ -5,7 +5,14 @@ import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, us
 import { useI18n } from "../../../i18n-context";
 import type { OfficeReminderItem, ReminderConfig, ReminderReferenceData } from "../types";
 import { apiUrl, AUTH_STORAGE_KEY } from "../types";
-import { cx, Field, FormRow, SectionCard, SelectField, TextArea } from "../shared";
+import { cx, Field, FormRow, SectionCard, SelectField, TextArea, PrintButton, openPrintWindow } from "../shared";
+import {
+  PrintConfiguratorModal,
+  composeSelectedHtml,
+  escapeHtml,
+  SECTIONS,
+  type PrintSelectionPayload,
+} from "../print";
 
 type ReminderFormState = {
   id?: string;
@@ -75,6 +82,7 @@ export function ReminderSettings({
   showOfficeSection = true,
   officeListFirst = false,
   usePopupForm = false,
+  canPrint = false,
 }: {
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   setPanelSuccess: Dispatch<SetStateAction<string | null>>;
@@ -83,6 +91,7 @@ export function ReminderSettings({
   showOfficeSection?: boolean;
   officeListFirst?: boolean;
   usePopupForm?: boolean;
+  canPrint?: boolean;
 }) {
   const { t: l, locale } = useI18n();
   const searchParams = useSearchParams();
@@ -96,6 +105,8 @@ export function ReminderSettings({
   const [focusedItemId, setFocusedItemId] = useState("");
   const [recentlyCompletedId, setRecentlyCompletedId] = useState("");
   const [showOfficeForm, setShowOfficeForm] = useState(false);
+  const [showListPrintConfig, setShowListPrintConfig] = useState(false);
+  const [singlePrintTarget, setSinglePrintTarget] = useState<OfficeReminderItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
@@ -531,15 +542,20 @@ export function ReminderSettings({
   const officeListSection = (
     <SectionCard title={l("settings.remindersItems")} subtitle={l("settings.remindersOfficeSub")}>
       <div className="grid gap-4">
-        {usePopupForm ? (
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={openCreateForm}
-              className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
-            >
-              {l("settings.remindersCreate")}
-            </button>
+        {usePopupForm || canPrint ? (
+          <div className="flex flex-wrap justify-end gap-2">
+            {canPrint ? (
+              <PrintButton onClick={() => setShowListPrintConfig(true)} label={l("tasks.printList")} />
+            ) : null}
+            {usePopupForm ? (
+              <button
+                type="button"
+                onClick={openCreateForm}
+                className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+              >
+                {l("settings.remindersCreate")}
+              </button>
+            ) : null}
           </div>
         ) : null}
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -693,6 +709,12 @@ export function ReminderSettings({
                       className="rounded-xl border border-black/10 px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800">
                       {l("common.edit")}
                     </button>
+                    {canPrint ? (
+                      <button type="button" onClick={() => setSinglePrintTarget(item)}
+                        className="rounded-xl border border-black/10 px-3 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-slate-800">
+                        {l("common.print")}
+                      </button>
+                    ) : null}
                     {item.status === "OPEN" ? (
                       <button type="button" onClick={() => void completeItem(item.id)}
                         className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-500/30 dark:text-emerald-300 dark:hover:bg-emerald-500/10">
@@ -723,6 +745,65 @@ export function ReminderSettings({
       </div>
     </SectionCard>
   );
+
+  function renderTaskRow(item: OfficeReminderItem): string {
+    const due = item.dueAt ? new Date(item.dueAt).toLocaleString(locale) : "-";
+    const remind = new Date(item.remindAt).toLocaleString(locale);
+    const ctx = reminderContext(item) || "-";
+    return `<tr><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.kind)}</td><td>${escapeHtml(item.assignedUser.displayName)}</td><td>${escapeHtml(remind)}</td><td>${escapeHtml(due)}</td><td>${escapeHtml(ctx)}</td></tr>`;
+  }
+
+  function buildListSectionRenderers(): Record<string, () => string> {
+    return {
+      filters: () => `<h2>${escapeHtml(l("print.section.tasks.filters"))}</h2>
+        <div class="grid">
+          <span class="label">${escapeHtml(l("settings.remindersStatusAll"))}</span><span>${escapeHtml(statusFilter || l("settings.remindersStatusAll"))}</span>
+          <span class="label">${escapeHtml(l("settings.remindersTimeAll"))}</span><span>${escapeHtml(timeFilter || l("settings.remindersTimeAll"))}</span>
+        </div>`,
+      openTasks: () => {
+        const open = filteredItems.filter((i) => i.status === "OPEN");
+        if (open.length === 0) return "";
+        const rows = open.map(renderTaskRow).join("");
+        return `<h2>${escapeHtml(l("print.section.tasks.openTasks"))} (${open.length})</h2><table><thead><tr><th>${escapeHtml(l("doc.title"))}</th><th>${escapeHtml(l("table.status"))}</th><th>${escapeHtml(l("settings.remindersAssignedTo"))}</th><th>${escapeHtml(l("settings.remindersReminderAt"))}</th><th>${escapeHtml(l("settings.remindersDueLabel"))}</th><th>${escapeHtml(l("settings.remindersContext"))}</th></tr></thead><tbody>${rows}</tbody></table>`;
+      },
+      completedTasks: () => {
+        const done = filteredItems.filter((i) => i.status === "COMPLETED");
+        if (done.length === 0) return "";
+        const rows = done.map(renderTaskRow).join("");
+        return `<h2>${escapeHtml(l("print.section.tasks.completedTasks"))} (${done.length})</h2><table><thead><tr><th>${escapeHtml(l("doc.title"))}</th><th>${escapeHtml(l("table.status"))}</th><th>${escapeHtml(l("settings.remindersAssignedTo"))}</th><th>${escapeHtml(l("settings.remindersReminderAt"))}</th><th>${escapeHtml(l("settings.remindersDueLabel"))}</th><th>${escapeHtml(l("settings.remindersContext"))}</th></tr></thead><tbody>${rows}</tbody></table>`;
+      },
+    };
+  }
+
+  function buildSingleTaskRenderers(item: OfficeReminderItem): Record<string, () => string> {
+    return {
+      taskDetail: () => `<h2>${escapeHtml(item.title)}</h2>
+        <div class="grid">
+          <span class="label">${escapeHtml(l("table.status"))}</span><span>${escapeHtml(item.status)}</span>
+          <span class="label">${escapeHtml(l("settings.remindersAssignedTo"))}</span><span>${escapeHtml(item.assignedUser.displayName)}</span>
+          <span class="label">${escapeHtml(l("settings.remindersReminderAt"))}</span><span>${escapeHtml(new Date(item.remindAt).toLocaleString(locale))}</span>
+          <span class="label">${escapeHtml(l("settings.remindersDueLabel"))}</span><span>${escapeHtml(item.dueAt ? new Date(item.dueAt).toLocaleString(locale) : "-")}</span>
+          <span class="label">${escapeHtml(l("settings.remindersCreatedBy"))}</span><span>${escapeHtml(item.createdBy.displayName)}</span>
+          <span class="label">${escapeHtml(l("settings.remindersContext"))}</span><span>${escapeHtml(reminderContext(item) || "-")}</span>
+          <span class="label">${escapeHtml(l("settings.remindersChannels"))}</span><span>${escapeHtml(item.channels.join(", "))}</span>
+        </div>
+        ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}`,
+    };
+  }
+
+  function handleListPrint(payload: PrintSelectionPayload) {
+    const html = `<h1>${escapeHtml(l("settings.remindersItems"))}</h1>
+      <p class="meta">${escapeHtml(new Date().toLocaleString(locale))}</p>` +
+      composeSelectedHtml(payload.sections, buildListSectionRenderers());
+    openPrintWindow(l("settings.remindersItems"), html);
+    setShowListPrintConfig(false);
+  }
+
+  function handleSinglePrint(payload: PrintSelectionPayload, item: OfficeReminderItem) {
+    const html = composeSelectedHtml(payload.sections, buildSingleTaskRenderers(item));
+    openPrintWindow(item.title, html);
+    setSinglePrintTarget(null);
+  }
 
   if (loading) {
     return (
@@ -778,6 +859,27 @@ export function ReminderSettings({
             {officeFormSection}
           </div>
         </div>
+      ) : null}
+
+      {showListPrintConfig ? (
+        <PrintConfiguratorModal
+          entityType="tasks"
+          title={l("tasks.printList")}
+          availableSections={SECTIONS.tasks.filter((s) => s.key !== "taskDetail")}
+          onClose={() => setShowListPrintConfig(false)}
+          onPrint={handleListPrint}
+        />
+      ) : null}
+
+      {singlePrintTarget ? (
+        <PrintConfiguratorModal
+          entityType="tasks"
+          entityId={singlePrintTarget.id}
+          title={`${l("tasks.printSingle")} — ${singlePrintTarget.title}`}
+          availableSections={SECTIONS.tasks.filter((s) => s.key === "taskDetail")}
+          onClose={() => setSinglePrintTarget(null)}
+          onPrint={(payload) => handleSinglePrint(payload, singlePrintTarget)}
+        />
       ) : null}
     </div>
   );

@@ -11,7 +11,7 @@ export function DocumentPreviewModal({
   onClose,
 }: {
   preview: DocumentPreviewState;
-  onPrint: () => void;
+  onPrint?: () => void;
   onClose: () => void;
 }) {
   const { t: l } = useI18n();
@@ -27,7 +27,7 @@ export function DocumentPreviewModal({
             <p className="text-sm text-slate-500">{preview.mimeType}</p>
           </div>
           <div className="flex gap-2">
-            <SecondaryButton onClick={onPrint}>{l("common.print")}</SecondaryButton>
+            {onPrint ? <SecondaryButton onClick={onPrint}>{l("common.print")}</SecondaryButton> : null}
             <SecondaryButton onClick={onClose}>{l("common.close")}</SecondaryButton>
           </div>
         </div>

@@ -179,7 +179,7 @@ export function WorkerTimesheetSection({
                     {ts.status === "DRAFT" ? (
                       <button type="button" onClick={() => setSigningTsId(ts.id)}
                         className="rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400">
-                        Unterschreiben
+                        {l("ts.sign")}
                       </button>
                     ) : null}
                   </div>
