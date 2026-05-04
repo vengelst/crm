@@ -26,8 +26,12 @@ export type Summary = {
 
 export type AuthState = {
   accessToken: string;
-  type: "user" | "worker" | "kiosk-user";
+  type: "user" | "worker" | "kiosk-user" | "emergency-admin";
   sessionLang?: "de" | "en";
+  /** True wenn der Login per Notfall-/Break-Glass-Pfad erfolgte. */
+  emergency?: boolean;
+  /** Server-seitig limitierte Token-Lebenszeit in Minuten (nur Notfall-Login). */
+  emergencyTtlMinutes?: number;
   user: {
     id: string;
     email: string;

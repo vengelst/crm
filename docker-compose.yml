@@ -58,6 +58,13 @@ services:
       SMTP_HOST: localhost
       SMTP_PORT: 1025
       SMTP_FROM: crm@example.local
+      # Break-Glass-Admin (Default deaktiviert; nur fuer echte Notfaelle setzen).
+      EMERGENCY_ADMIN_ENABLED: ${EMERGENCY_ADMIN_ENABLED:-false}
+      EMERGENCY_ADMIN_USER: ${EMERGENCY_ADMIN_USER:-}
+      EMERGENCY_ADMIN_PASS: ${EMERGENCY_ADMIN_PASS:-}
+      EMERGENCY_ADMIN_TTL_MINUTES: ${EMERGENCY_ADMIN_TTL_MINUTES:-20}
+      EMERGENCY_ADMIN_ALLOWED_IPS: ${EMERGENCY_ADMIN_ALLOWED_IPS:-}
+      EMERGENCY_ADMIN_REQUIRE_HEADER: ${EMERGENCY_ADMIN_REQUIRE_HEADER:-}
     ports:
       - "3801:3801"
     volumes:

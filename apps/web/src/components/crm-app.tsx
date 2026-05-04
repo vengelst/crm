@@ -157,6 +157,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [loginEmail, setLoginEmail] = useState("admin@example.local");
   const [loginPassword, setLoginPassword] = useState("admin12345");
   const [loginPin, setLoginPin] = useState("");
+  const [emergencyUsername, setEmergencyUsername] = useState("");
+  const [emergencyPassword, setEmergencyPassword] = useState("");
+  const [emergencyEnabled, setEmergencyEnabled] = useState(false);
   const [loginLang, setLoginLang] = useState<SupportedLang>("de");
   const activeLang: SupportedLang = auth?.sessionLang === "en" ? "en" : loginLang;
   const l = useCallback((key: string) => t(key, activeLang), [activeLang]);
@@ -304,6 +307,21 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     } finally {
       setReady(true);
     }
+  }, []);
+
+  // Feature-Flag fuer den Notfall-Login (Public-Endpoint /auth/config). Nur
+  // wenn der Server EMERGENCY_ADMIN_ENABLED=true meldet, blendet der Login-
+  // Screen den Notfall-Bereich ein.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    void fetch(apiUrl("/auth/config"))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((cfg: { emergencyLogin?: { enabled?: boolean } } | null) => {
+        setEmergencyEnabled(cfg?.emergencyLogin?.enabled === true);
+      })
+      .catch(() => {
+        setEmergencyEnabled(false);
+      });
   }, []);
 
   // Sync permissions/roles from the server once after auth is restored.
@@ -477,6 +495,65 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
       }
 
       setAuth(nextAuth);
+      setSuccess(l("common.success"));
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : l("common.error"));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /**
+   * Notfall-Login. ENV-basiertes JWT mit kurzer TTL — funktioniert auch bei
+   * DB-Ausfall. Speichert die Session wie ein normaler Login, ergaenzt aber
+   * `emergency`/`emergencyTtlMinutes`, sodass die UI den Banner zeigen kann.
+   */
+  async function handleEmergencyLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await apiFetch<{
+        accessToken: string;
+        ttlMinutes: number;
+        user: {
+          id: string;
+          email: string;
+          displayName: string;
+          roles: string[];
+          permissions: string[];
+        };
+        emergency: boolean;
+      }>("/auth/emergency-login", {
+        method: "POST",
+        body: JSON.stringify({
+          username: emergencyUsername,
+          password: emergencyPassword,
+        }),
+      });
+
+      const nextAuth: AuthState = {
+        accessToken: response.accessToken,
+        type: "emergency-admin",
+        sessionLang: loginLang,
+        emergency: true,
+        emergencyTtlMinutes: response.ttlMinutes,
+        user: {
+          id: response.user.id,
+          email: response.user.email,
+          displayName: response.user.displayName,
+          roles: response.user.roles,
+          permissions: response.user.permissions,
+        },
+      };
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuth));
+      }
+      setAuth(nextAuth);
+      setEmergencyPassword("");
       setSuccess(l("common.success"));
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : l("common.error"));
@@ -959,6 +1036,12 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         setLoginEmail={setLoginEmail}
         loginPassword={loginPassword}
         setLoginPassword={setLoginPassword}
+        emergencyEnabled={emergencyEnabled}
+        emergencyUsername={emergencyUsername}
+        setEmergencyUsername={setEmergencyUsername}
+        emergencyPassword={emergencyPassword}
+        setEmergencyPassword={setEmergencyPassword}
+        onEmergencyLogin={handleEmergencyLogin}
         submitting={submitting}
         error={error}
         success={success}
@@ -1004,6 +1087,28 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     <I18nProvider lang={activeLang}>
     <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-200">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6">
+        {auth.type === "emergency-admin" || auth.emergency ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-200" role="alert">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-white">
+                {l("kiosk.emergencyBanner")}
+              </span>
+              <span>{l("kiosk.emergencyBannerNote")}</span>
+              {auth.emergencyTtlMinutes ? (
+                <span className="text-xs text-amber-800 dark:text-amber-300">
+                  {l("kiosk.emergencyTtlInfo").replace("{minutes}", String(auth.emergencyTtlMinutes))}
+                </span>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={() => logout()}
+              className="rounded-lg border border-amber-500 bg-white px-3 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 dark:border-amber-500/40 dark:bg-slate-900 dark:text-amber-300"
+            >
+              {l("kiosk.emergencyBannerLogout")}
+            </button>
+          </div>
+        ) : null}
         <div className="flex flex-col gap-4 rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-500">{l("worker.platform")}</p>
@@ -2134,6 +2239,10 @@ function hasRole(auth: AuthState | null, roles: string[]) {
 }
 
 function hasPermission(auth: AuthState | null, code: string) {
+  // Notfall-/Break-Glass-Token traegt "*" als Wildcard und deckt damit jede
+  // einzelne Permission im UI-Gating ab (parallel zur PermissionsGuard auf
+  // dem Server).
+  if (auth?.user.permissions?.includes("*")) return true;
   return Boolean(auth?.user.permissions?.includes(code));
 }
 

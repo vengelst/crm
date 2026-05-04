@@ -10,7 +10,7 @@ import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 
 type RequestWithUser = Request & {
   user?: {
-    type: 'user' | 'worker' | 'kiosk-user';
+    type: 'user' | 'worker' | 'kiosk-user' | 'emergency-admin';
     permissions?: string[];
   };
 };
@@ -61,6 +61,14 @@ export class PermissionsGuard implements CanActivate {
     }
 
     const held = user.permissions ?? [];
+
+    // Notfall-Admin / Wildcard: Token traegt "*" als Sentinel, der jede
+    // Permission-Anforderung deckt. Ohne diese Sonderbehandlung wuerde
+    // Break-Glass-Admin an permission-gateten Endpoints scheitern.
+    if (held.includes('*')) {
+      return true;
+    }
+
     const missing = required.filter((code) => !held.includes(code));
 
     if (missing.length > 0) {

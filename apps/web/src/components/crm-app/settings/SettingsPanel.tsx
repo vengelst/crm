@@ -19,6 +19,120 @@ import { ReminderSettings } from "./ReminderSettings";
 import { KioskDeviceSettings } from "./KioskDeviceSettings";
 import { EntityList } from "../dashboard";
 
+/**
+ * Untergruppen-IDs (entsprechen den bisherigen flachen Tabs). Werden weiter
+ * als Deep-Link-Wert via `?tab=...` akzeptiert, damit existierende Links nicht
+ * brechen.
+ */
+type SettingsTab =
+  | "general"
+  | "users"
+  | "roles"
+  | "company"
+  | "pdfconfig"
+  | "smtp"
+  | "backup"
+  | "gcal"
+  | "devices"
+  | "templates"
+  | "reminders";
+
+/** Hauptgruppen — alltagsnahe Themen zuerst, technische Themen am Ende. */
+type SettingsGroupId = "general" | "users" | "reminders" | "company" | "system";
+
+/**
+ * Mapping: jede Untergruppe gehoert zu genau einer Hauptgruppe. Wird sowohl
+ * fuer das Rendering als auch fuer den Deep-Link-Fallback genutzt.
+ */
+const SETTINGS_GROUP_OF: Record<SettingsTab, SettingsGroupId> = {
+  general: "general",
+  users: "users",
+  roles: "users",
+  reminders: "reminders",
+  company: "company",
+  pdfconfig: "company",
+  templates: "company",
+  smtp: "system",
+  backup: "system",
+  gcal: "system",
+  devices: "system",
+};
+
+/**
+ * Fuer jede Hauptgruppe die enthaltenen Untergruppen in Anzeige-Reihenfolge.
+ * Entries die mit `requiresUserManagement: true` markiert sind, fallen ohne
+ * `canManageUsers` automatisch raus.
+ */
+const SETTINGS_GROUP_TABS: Record<
+  SettingsGroupId,
+  Array<{ key: SettingsTab; requiresUserManagement?: boolean }>
+> = {
+  general: [{ key: "general" }],
+  users: [
+    { key: "users", requiresUserManagement: true },
+    { key: "roles", requiresUserManagement: true },
+  ],
+  reminders: [{ key: "reminders" }],
+  company: [{ key: "company" }, { key: "pdfconfig" }, { key: "templates" }],
+  system: [
+    { key: "smtp" },
+    { key: "backup" },
+    { key: "gcal" },
+    { key: "devices" },
+  ],
+};
+
+const SETTINGS_GROUP_ORDER: SettingsGroupId[] = [
+  "general",
+  "users",
+  "reminders",
+  "company",
+  "system",
+];
+
+function isSettingsTab(value: string | null | undefined): value is SettingsTab {
+  return (
+    value === "general" ||
+    value === "users" ||
+    value === "roles" ||
+    value === "company" ||
+    value === "pdfconfig" ||
+    value === "smtp" ||
+    value === "backup" ||
+    value === "gcal" ||
+    value === "devices" ||
+    value === "templates" ||
+    value === "reminders"
+  );
+}
+
+function isSettingsGroupId(value: string | null | undefined): value is SettingsGroupId {
+  return (
+    value === "general" ||
+    value === "users" ||
+    value === "reminders" ||
+    value === "company" ||
+    value === "system"
+  );
+}
+
+/**
+ * Sichtbarkeit der Hauptgruppe in der oberen Navigation.
+ *
+ * `users` ist die einzige Gruppe, die ausschliesslich aus Untergruppen mit
+ * `requiresUserManagement: true` besteht. Ohne `canManageUsers` haette die
+ * Gruppe keine bedienbaren Inhalte, deshalb verstecken wir sie komplett —
+ * keine inkonsistente "leere Gruppe aktiv"-Situation.
+ *
+ * Alle anderen Gruppen sind allgemein verfuegbar; sollten dort einzelne
+ * Untergruppen kuenftig berechtigungspflichtig werden, greift weiterhin der
+ * pro-Sub-Tab-Filter (`requiresUserManagement`).
+ */
+function canShowGroup(group: SettingsGroupId, canManageUsers: boolean): boolean {
+  if (group === "users") return canManageUsers;
+  return true;
+}
+
 export function SettingsPanel({
   settingsForm, setSettingsForm, onSettingsSubmit,
   users, roles, workers, userForm, setUserForm, onUserSubmit, onDeleteUser,
@@ -42,7 +156,8 @@ export function SettingsPanel({
 }) {
   const { t: l } = useI18n();
   const searchParams = useSearchParams();
-  const [settingsTab, setSettingsTab] = useState<"general" | "users" | "roles" | "company" | "pdfconfig" | "smtp" | "backup" | "gcal" | "devices" | "templates" | "reminders">("general");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
+  const [activeGroup, setActiveGroup] = useState<SettingsGroupId>("general");
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [rolePermissionIds, setRolePermissionIds] = useState<string[]>([]);
@@ -78,24 +193,69 @@ export function SettingsPanel({
     void apiFetch<PermissionItem[]>(`/settings/roles/${selectedRoleId}/permissions`).then((perms) => setRolePermissionIds(perms.map((p) => p.id))).catch(() => {});
   }, [apiFetch, selectedRoleId]);
 
+  /**
+   * Deep-Link-Verhalten: alte `?tab=<sub>`-Aufrufe (z. B. `?tab=reminders`)
+   * landen weiterhin direkt im richtigen Unterbereich. Wir setzen zusaetzlich
+   * die zugehoerige Hauptgruppe, damit auch die obere Navigation passt.
+   * Auch ein `?group=<id>` wird akzeptiert, falls eine Stelle direkt eine
+   * Hauptgruppe oeffnen will.
+   *
+   * Berechtigungs-Fallback: zielt der Deep-Link auf einen Bereich, fuer den
+   * der Nutzer keine Rechte hat (z. B. `?tab=users` ohne `canManageUsers`),
+   * landet er graceful im Allgemein-Bereich, statt in einer leeren Gruppe.
+   */
   useEffect(() => {
+    const requestedGroup = searchParams.get("group");
     const requestedTab = searchParams.get("tab");
-    if (
-      requestedTab === "general" ||
-      requestedTab === "users" ||
-      requestedTab === "roles" ||
-      requestedTab === "company" ||
-      requestedTab === "pdfconfig" ||
-      requestedTab === "smtp" ||
-      requestedTab === "backup" ||
-      requestedTab === "gcal" ||
-      requestedTab === "devices" ||
-      requestedTab === "templates" ||
-      requestedTab === "reminders"
-    ) {
-      setSettingsTab(requestedTab);
+    if (isSettingsTab(requestedTab)) {
+      const targetGroup = SETTINGS_GROUP_OF[requestedTab];
+      if (canShowGroup(targetGroup, canManageUsers)) {
+        setSettingsTab(requestedTab);
+        setActiveGroup(targetGroup);
+      } else {
+        setActiveGroup("general");
+        setSettingsTab("general");
+      }
+      return;
     }
-  }, [searchParams]);
+    if (isSettingsGroupId(requestedGroup)) {
+      if (!canShowGroup(requestedGroup, canManageUsers)) {
+        setActiveGroup("general");
+        setSettingsTab("general");
+        return;
+      }
+      setActiveGroup(requestedGroup);
+      const firstTab = SETTINGS_GROUP_TABS[requestedGroup].find(
+        (entry) => !entry.requiresUserManagement || canManageUsers,
+      );
+      if (firstTab) setSettingsTab(firstTab.key);
+    }
+  }, [searchParams, canManageUsers]);
+
+  /**
+   * Invariante: die aktive Hauptgruppe muss fuer den Nutzer sichtbar sein.
+   * Wird das Recht zur Laufzeit entzogen oder ein nicht erlaubter Initialwert
+   * geladen, faellt der Bereich automatisch auf "Allgemein" zurueck.
+   */
+  useEffect(() => {
+    if (!canShowGroup(activeGroup, canManageUsers)) {
+      setActiveGroup("general");
+      setSettingsTab("general");
+    }
+  }, [activeGroup, canManageUsers]);
+
+  /**
+   * Wenn der aktive Sub-Tab durch wechselnde Berechtigungen oder Gruppenwechsel
+   * nicht mehr zur aktiven Gruppe gehoert, korrigieren wir auf den ersten
+   * verfuegbaren Tab dieser Gruppe.
+   */
+  useEffect(() => {
+    if (SETTINGS_GROUP_OF[settingsTab] === activeGroup) return;
+    const firstTab = SETTINGS_GROUP_TABS[activeGroup].find(
+      (entry) => !entry.requiresUserManagement || canManageUsers,
+    );
+    if (firstTab) setSettingsTab(firstTab.key);
+  }, [activeGroup, settingsTab, canManageUsers]);
 
   async function saveRolePermissions() {
     setPanelError(null); setPanelSuccess(null);
@@ -160,19 +320,10 @@ export function SettingsPanel({
     } catch (err) { setPanelError(err instanceof Error ? err.message : l("common.error")); }
   }
 
-  const tabs: { key: typeof settingsTab; label: string }[] = [
-    { key: "general", label: l("settings.general") },
-    ...(canManageUsers ? [{ key: "users" as const, label: l("settings.users") }] : []),
-    ...(canManageUsers ? [{ key: "roles" as const, label: l("settings.roles") }] : []),
-    { key: "company" as const, label: l("settings.company") },
-    { key: "pdfconfig" as const, label: l("settings.pdfConfig") },
-    { key: "smtp", label: l("settings.smtp") },
-    { key: "backup", label: l("settings.backup") },
-    { key: "gcal" as const, label: l("settings.gcal") },
-    { key: "devices" as const, label: l("settings.devices") },
-    { key: "templates" as const, label: l("settings.templates") },
-    { key: "reminders" as const, label: l("settings.reminders") },
-  ];
+  /** Untergruppen der aktiven Hauptgruppe, gefiltert nach Berechtigung. */
+  const subTabs = SETTINGS_GROUP_TABS[activeGroup]
+    .filter((entry) => !entry.requiresUserManagement || canManageUsers)
+    .map((entry) => ({ key: entry.key, label: subTabLabel(entry.key, l) }));
 
   const permissionsByCategory = permissions.reduce<Record<string, PermissionItem[]>>((acc, p) => {
     (acc[p.category] ??= []).push(p);
@@ -181,16 +332,68 @@ export function SettingsPanel({
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap gap-2">
-        {tabs.map((t) => (
-          <button key={t.key} type="button" onClick={() => { setSettingsTab(t.key); setPanelSuccess(null); setPanelError(null); }}
-            className={cx("rounded-xl border px-3 py-2 text-sm font-medium transition",
-              settingsTab === t.key
-                ? "border-slate-900 bg-slate-900 !text-white dark:border-slate-300 dark:bg-slate-200 dark:!text-slate-950"
-                : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
-            )}>{t.label}</button>
-        ))}
-      </div>
+      {/* ── Hauptgruppen ───────────────────────────────────────── */}
+      <nav aria-label={l("nav.settings")} className="grid gap-1 rounded-2xl border border-black/10 bg-white/60 p-2 dark:border-white/10 dark:bg-slate-900/40 sm:grid-cols-2 lg:grid-cols-5">
+        {SETTINGS_GROUP_ORDER.filter((group) => canShowGroup(group, canManageUsers)).map((group) => {
+          const labelKey = `settings.group${groupSuffix(group)}` as const;
+          const hintKey = `settings.group${groupSuffix(group)}Hint` as const;
+          const active = activeGroup === group;
+          return (
+            <button
+              key={group}
+              type="button"
+              onClick={() => {
+                setActiveGroup(group);
+                setPanelSuccess(null);
+                setPanelError(null);
+              }}
+              className={cx(
+                "rounded-xl px-3 py-2 text-left text-sm transition",
+                active
+                  ? "bg-slate-900 text-white shadow-sm dark:bg-slate-200 dark:text-slate-950"
+                  : "bg-transparent text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/70",
+              )}
+            >
+              <div className="font-semibold">{l(labelKey)}</div>
+              <div
+                className={cx(
+                  "mt-0.5 text-xs",
+                  active ? "text-white/80 dark:text-slate-950/70" : "text-slate-500",
+                )}
+              >
+                {l(hintKey)}
+              </div>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* ── Untergruppen der aktiven Hauptgruppe ───────────────── */}
+      {subTabs.length > 1 ? (
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label={l("settings.subGroupHeading")}>
+          {subTabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={settingsTab === t.key}
+              onClick={() => {
+                setSettingsTab(t.key);
+                setPanelSuccess(null);
+                setPanelError(null);
+              }}
+              className={cx(
+                "rounded-xl border px-3 py-1.5 text-sm font-medium transition",
+                settingsTab === t.key
+                  ? "border-blue-600 bg-blue-600 !text-white dark:border-blue-400 dark:bg-blue-500"
+                  : "border-black/10 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <MessageBar error={panelError ?? error} success={panelSuccess ?? success} />
 
@@ -369,4 +572,33 @@ export function SettingsPanel({
       ) : null}
     </div>
   );
+}
+
+
+/** Mapping `general` → `General`, `users` → `Users` etc. fuer i18n-Key-Bau. */
+function groupSuffix(group: SettingsGroupId): string {
+  switch (group) {
+    case "general": return "General";
+    case "users": return "Users";
+    case "reminders": return "Reminders";
+    case "company": return "Company";
+    case "system": return "System";
+  }
+}
+
+/** Bezeichnung des Sub-Tabs in der Tab-Leiste. */
+function subTabLabel(tab: SettingsTab, l: (key: string) => string): string {
+  switch (tab) {
+    case "general": return l("settings.general");
+    case "users": return l("settings.users");
+    case "roles": return l("settings.roles");
+    case "company": return l("settings.company");
+    case "pdfconfig": return l("settings.pdfConfig");
+    case "smtp": return l("settings.smtp");
+    case "backup": return l("settings.backup");
+    case "gcal": return l("settings.gcal");
+    case "devices": return l("settings.devices");
+    case "templates": return l("settings.templates");
+    case "reminders": return l("settings.reminders");
+  }
 }

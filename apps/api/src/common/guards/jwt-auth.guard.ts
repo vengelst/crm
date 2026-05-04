@@ -19,7 +19,7 @@ type AuthenticatedUser = {
   email?: string;
   workerId?: string;
   roles: RoleCode[];
-  type: 'user' | 'worker' | 'kiosk-user';
+  type: 'user' | 'worker' | 'kiosk-user' | 'emergency-admin';
   /** Populated by the guard for user/kiosk-user tokens; undefined for worker tokens. */
   permissions?: string[];
 };
@@ -66,6 +66,26 @@ export class JwtAuthGuard implements CanActivate {
           context.getHandler(),
           context.getClass(),
         ]) ?? [];
+
+      // ── Notfall-Admin (Break-Glass) ──
+      // Token enthaelt bereits roles + permissions=['*'] und braucht keinen
+      // DB-Lookup, damit der Login auch bei DB-Ausfall funktioniert. Rollen-
+      // checks gegen @Roles werden gegen die Token-Rollen gepruegt; @Permissions
+      // wird durch die Wildcard "*" abgedeckt (siehe PermissionsGuard).
+      if (payload.type === 'emergency-admin') {
+        if (requiredRoles.length > 0) {
+          const tokenRoles = payload.roles ?? [];
+          const hasRole = requiredRoles.some((role) =>
+            tokenRoles.includes(role),
+          );
+          if (!hasRole) {
+            throw new ForbiddenException('Fehlende Berechtigung.');
+          }
+        }
+        // Permissions koennen aus dem Token uebernommen werden (typischerweise ['*']).
+        payload.permissions = payload.permissions ?? ['*'];
+        return true;
+      }
 
       if (payload.type === 'user' || payload.type === 'kiosk-user') {
         const user = await this.prisma.user.findUnique({

@@ -900,6 +900,28 @@ Beide CRM-Container mit `NODE_ENV=development`, `CHOKIDAR_USEPOLLING=true`, `WAT
 
 ## 2026-05-04
 
+### Nachpruefung Settings-Berechtigungs-Fallback (Codex, read-only Pruefung)
+
+- Ausgangslage:
+  - Die neue Settings-Gruppierung hatte noch einen Restpunkt: `Benutzer & Rechte` konnte ohne `canManageUsers` in einen inkonsistenten leeren Zustand fuehren.
+
+- Pruefung durch Codex:
+  - Geaenderte Hauptstelle gegengeprueft:
+    - `apps/web/src/components/crm-app/settings/SettingsPanel.tsx`
+  - Bestaetigt:
+    - Die Gruppe `Benutzer & Rechte` wird ohne `canManageUsers` komplett aus der Hauptgruppen-Navigation ausgeblendet.
+    - Deep-Links auf `?tab=users`, `?tab=roles` und `?group=users` fallen ohne Rechte sauber auf `general` zurueck.
+    - Ein zusaetzlicher Invariant-Effekt korrigiert ungueltige aktive Gruppen zur Laufzeit auf `general`.
+  - Technische Checks:
+    - `pnpm --filter web lint`: gruen.
+    - `pnpm --filter web test:e2e`: gruen (`5/5 passed`).
+
+- Ergebnis / Entscheidung:
+  - Fuer das Settings-Paket keine neuen Findings mehr.
+  - Die neue Zwei-Ebenen-Struktur ist aus Codex-Sicht abnahmefaehig.
+
+## 2026-05-04
+
 ### Nachpruefung Wiedervorlagen in Kunde und Projekt (Codex, read-only Pruefung)
 
 - Ausgangslage:

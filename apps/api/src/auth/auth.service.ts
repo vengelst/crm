@@ -1,16 +1,20 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma, RoleCode } from '@prisma/client';
 import { compare } from 'bcryptjs';
+import { timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { DevicesService } from '../devices/devices.service';
 import { LoginDto } from './dto/login.dto';
 import { KioskLoginDto } from './dto/kiosk-login.dto';
 import { PinLoginDto } from './dto/pin-login.dto';
+import { EmergencyLoginDto } from './dto/emergency-login.dto';
 
 const workerAuthInclude = {
   assignments: {
@@ -42,11 +46,138 @@ type WorkerAuthData = Prisma.WorkerGetPayload<{
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+  private readonly auditLogger = new Logger('AUTH_AUDIT');
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly devicesService: DevicesService,
   ) {}
+
+  /**
+   * Sind die ENV-Variablen so gesetzt, dass der Notfall-Login potenziell
+   * verfuegbar ist? Genutzt vom Feature-Flag-Endpoint und intern bei jeder
+   * Anmelde-Anfrage.
+   */
+  isEmergencyAdminEnabled(): boolean {
+    return process.env.EMERGENCY_ADMIN_ENABLED === 'true';
+  }
+
+  /**
+   * Notfall-/Break-Glass-Admin.
+   *
+   * Authentifiziert ausschliesslich gegen Umgebungsvariablen — kein DB-Zugriff,
+   * damit der Login auch bei Datenbankausfall funktioniert. Sicherheitsregeln:
+   *   - nur aktiv wenn EMERGENCY_ADMIN_ENABLED=true
+   *   - Credentials per timing-safe-compare gegen ENV
+   *   - optionale IP-Allowlist (EMERGENCY_ADMIN_ALLOWED_IPS, CSV)
+   *   - optionaler Shared-Secret-Header (EMERGENCY_ADMIN_REQUIRE_HEADER:
+   *     "Header-Name=expected-value")
+   *   - kurze TTL (Default 20 Min., konfigurierbar via
+   *     EMERGENCY_ADMIN_TTL_MINUTES, Clamp 5..60)
+   *
+   * Jeder Versuch wird auditiert (Erfolg + Fehlversuch).
+   */
+  async emergencyLogin(
+    dto: EmergencyLoginDto,
+    request: { ip?: string; headers?: Record<string, string | string[] | undefined> },
+  ) {
+    const remoteIp = (request.ip ?? '').toString();
+    const username = dto.username ?? '';
+
+    if (!this.isEmergencyAdminEnabled()) {
+      this.auditLogger.warn(
+        `emergency-login DISABLED ip=${remoteIp} username=${maskUsername(username)}`,
+      );
+      throw new ForbiddenException('Notfall-Login ist deaktiviert.');
+    }
+
+    const expectedUser = process.env.EMERGENCY_ADMIN_USER ?? '';
+    const expectedPass = process.env.EMERGENCY_ADMIN_PASS ?? '';
+    if (!expectedUser || !expectedPass) {
+      this.auditLogger.error(
+        `emergency-login MISCONFIGURED ip=${remoteIp} (EMERGENCY_ADMIN_USER/PASS leer trotz EMERGENCY_ADMIN_ENABLED=true)`,
+      );
+      throw new ForbiddenException('Notfall-Login ist nicht korrekt konfiguriert.');
+    }
+
+    // Optionale IP-Allowlist (Komma-separiert).
+    const allowedIps = (process.env.EMERGENCY_ADMIN_ALLOWED_IPS ?? '')
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    if (allowedIps.length > 0 && !allowedIps.includes(remoteIp)) {
+      this.auditLogger.warn(
+        `emergency-login IP_BLOCKED ip=${remoteIp} username=${maskUsername(username)}`,
+      );
+      throw new ForbiddenException('Diese IP ist fuer den Notfall-Login nicht freigegeben.');
+    }
+
+    // Optionaler Shared-Secret-Header in der Form "X-Header-Name=secret-value".
+    const requiredHeader = process.env.EMERGENCY_ADMIN_REQUIRE_HEADER ?? '';
+    if (requiredHeader) {
+      const sepIndex = requiredHeader.indexOf('=');
+      if (sepIndex > 0) {
+        const headerName = requiredHeader.slice(0, sepIndex).trim().toLowerCase();
+        const expectedValue = requiredHeader.slice(sepIndex + 1).trim();
+        const headers = request.headers ?? {};
+        const rawValue = headers[headerName];
+        const provided = Array.isArray(rawValue)
+          ? rawValue[0] ?? ''
+          : (rawValue ?? '').toString();
+        if (!constantTimeStringEqual(provided, expectedValue)) {
+          this.auditLogger.warn(
+            `emergency-login HEADER_MISMATCH ip=${remoteIp} username=${maskUsername(username)}`,
+          );
+          throw new ForbiddenException('Notfall-Login: Sicherheitsheader fehlt oder ungueltig.');
+        }
+      }
+    }
+
+    const userOk = constantTimeStringEqual(dto.username, expectedUser);
+    const passOk = constantTimeStringEqual(dto.password, expectedPass);
+
+    if (!userOk || !passOk) {
+      this.auditLogger.warn(
+        `emergency-login FAIL ip=${remoteIp} username=${maskUsername(username)}`,
+      );
+      throw new UnauthorizedException('Ungueltige Notfall-Zugangsdaten.');
+    }
+
+    const ttlMinutes = parseEmergencyTtlMinutes(
+      process.env.EMERGENCY_ADMIN_TTL_MINUTES,
+    );
+    const sub = `emergency:${expectedUser}`;
+    const accessToken = await this.jwtService.signAsync(
+      {
+        sub,
+        email: `${expectedUser}@emergency.local`,
+        roles: [RoleCode.SUPERADMIN],
+        permissions: ['*'],
+        type: 'emergency-admin',
+        emergency: true,
+      },
+      { expiresIn: `${ttlMinutes}m` },
+    );
+
+    this.auditLogger.warn(
+      `emergency-login SUCCESS ip=${remoteIp} username=${maskUsername(username)} ttl=${ttlMinutes}min`,
+    );
+
+    return {
+      accessToken,
+      ttlMinutes,
+      user: {
+        id: sub,
+        email: `${expectedUser}@emergency.local`,
+        displayName: 'Notfall-Admin',
+        roles: [RoleCode.SUPERADMIN],
+        permissions: ['*'],
+      },
+      emergency: true,
+    };
+  }
 
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
@@ -339,4 +470,39 @@ export class AuthService {
       pastProjects,
     };
   }
+}
+
+/**
+ * Konstantzeit-Vergleich zweier Strings — schuetzt vor Timing-Angriffen auf
+ * Username/Passwort. Unterschiedliche Laengen werden zuerst auf gleiche Laenge
+ * normalisiert und dann verglichen, sodass der Code immer denselben Pfad nimmt.
+ */
+function constantTimeStringEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a ?? '', 'utf8');
+  const bBuf = Buffer.from(b ?? '', 'utf8');
+  // timingSafeEqual erwartet identische Laengen; mit Padding gleichziehen und
+  // anschliessend zusaetzlich auf Original-Laenge pruefen.
+  const maxLen = Math.max(aBuf.length, bBuf.length, 1);
+  const aPadded = Buffer.alloc(maxLen);
+  const bPadded = Buffer.alloc(maxLen);
+  aBuf.copy(aPadded);
+  bBuf.copy(bPadded);
+  const equal = timingSafeEqual(aPadded, bPadded);
+  return equal && aBuf.length === bBuf.length;
+}
+
+/** Auf Hauptbestandteil des Usernames kuerzen, ohne Volltext im Audit-Log. */
+function maskUsername(value: string): string {
+  if (!value) return '';
+  if (value.length <= 2) return '**';
+  return `${value.slice(0, 2)}***(${value.length})`;
+}
+
+/** TTL-Begrenzung: Default 20 Min., erlaubt 5..60 Min. */
+function parseEmergencyTtlMinutes(raw?: string): number {
+  const fallback = 20;
+  if (!raw) return fallback;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(60, Math.max(5, n));
 }

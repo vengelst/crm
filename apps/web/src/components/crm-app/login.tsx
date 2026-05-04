@@ -9,6 +9,10 @@ export function KioskLoginScreen({
   loginPin, setLoginPin,
   loginEmail, setLoginEmail,
   loginPassword, setLoginPassword,
+  emergencyEnabled = false,
+  emergencyUsername, setEmergencyUsername,
+  emergencyPassword, setEmergencyPassword,
+  onEmergencyLogin,
   submitting, error, success,
   onKioskLogin, onAdminLogin,
   lang, setLang,
@@ -19,6 +23,13 @@ export function KioskLoginScreen({
   setLoginEmail: (v: string) => void;
   loginPassword: string;
   setLoginPassword: (v: string) => void;
+  /** Server-Feature-Flag aus /auth/config: zeigt den Notfall-Bereich nur, wenn aktiv. */
+  emergencyEnabled?: boolean;
+  emergencyUsername?: string;
+  setEmergencyUsername?: (v: string) => void;
+  emergencyPassword?: string;
+  setEmergencyPassword?: (v: string) => void;
+  onEmergencyLogin?: (e: FormEvent<HTMLFormElement>) => void;
   submitting: boolean;
   error: string | null;
   success: string | null;
@@ -29,6 +40,7 @@ export function KioskLoginScreen({
 }) {
   const l = (key: string) => t(key, lang);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showEmergency, setShowEmergency] = useState(false);
   const maxPinLength = 8;
 
   function addDigit(d: string) {
@@ -208,6 +220,68 @@ export function KioskLoginScreen({
             <div className="mt-3"><MessageBar error={error} success={success} /></div>
           ) : null}
         </form>
+      ) : null}
+
+      {emergencyEnabled && onEmergencyLogin ? (
+        <div className="mt-6 w-full max-w-sm">
+          <div className="mb-3 flex items-center gap-4">
+            <div className="h-px flex-1 bg-slate-300 dark:bg-slate-800" />
+            <button
+              type="button"
+              onClick={() => setShowEmergency(!showEmergency)}
+              className="text-xs text-amber-600 transition hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300"
+            >
+              {showEmergency ? l("kiosk.emergencyHide") : l("kiosk.emergencyToggle")}
+            </button>
+            <div className="h-px flex-1 bg-slate-300 dark:bg-slate-800" />
+          </div>
+
+          {showEmergency ? (
+            <form
+              onSubmit={onEmergencyLogin}
+              className="rounded-2xl border-2 border-amber-300 bg-amber-50/60 p-5 shadow-sm dark:border-amber-500/40 dark:bg-amber-500/5"
+            >
+              <h2 className="mb-1 text-sm font-semibold text-amber-700 dark:text-amber-300">
+                {l("kiosk.emergencyTitle")}
+              </h2>
+              <p className="mb-3 text-xs text-amber-700/80 dark:text-amber-400/70">
+                {l("kiosk.emergencyHint")}
+              </p>
+              <div className="grid gap-3">
+                <div className="grid gap-1">
+                  <label className="text-xs text-slate-500">{l("kiosk.emergencyUsername")}</label>
+                  <input
+                    type="text"
+                    value={emergencyUsername ?? ""}
+                    onChange={(e) => setEmergencyUsername?.(e.target.value)}
+                    autoComplete="username"
+                    className="rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-sm text-slate-950 placeholder:text-slate-400 dark:border-amber-500/30 dark:bg-slate-900 dark:text-white"
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <label className="text-xs text-slate-500">{l("kiosk.emergencyPassword")}</label>
+                  <input
+                    type="password"
+                    value={emergencyPassword ?? ""}
+                    onChange={(e) => setEmergencyPassword?.(e.target.value)}
+                    autoComplete="current-password"
+                    className="rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-sm text-slate-950 placeholder:text-slate-400 dark:border-amber-500/30 dark:bg-slate-900 dark:text-white"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="rounded-xl bg-amber-600 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500 disabled:opacity-50"
+                >
+                  {submitting ? l("kiosk.adminLoggingIn") : l("kiosk.emergencyLogin")}
+                </button>
+              </div>
+              {error || success ? (
+                <div className="mt-3"><MessageBar error={error} success={success} /></div>
+              ) : null}
+            </form>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="mt-6">
