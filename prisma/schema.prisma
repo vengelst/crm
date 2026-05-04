@@ -109,6 +109,7 @@ model User {
   assignedOfficeReminders OfficeReminder[] @relation("OfficeReminderAssignee")
   createdOfficeReminders  OfficeReminder[] @relation("OfficeReminderCreator")
   completedOfficeReminders OfficeReminder[] @relation("OfficeReminderCompleter")
+  createdBackups Backup[] @relation("BackupCreator")
 }
 
 model Role {
@@ -826,4 +827,42 @@ model Counter {
   id      String @id          // e.g. "CUSTOMER", "PROJECT"
   prefix  String              // e.g. "K", "P"
   current Int                 // last issued number
+}
+
+enum BackupStatus {
+  READY
+  FAILED
+}
+
+enum BackupStorageType {
+  MINIO
+  FILESYSTEM
+}
+
+/// Persistente Metadaten zu Backups. Die UI liest die Liste ausschliesslich
+/// hieraus; das eigentliche Artefakt liegt unter `storageKey` (MinIO-Prefix
+/// oder Dateisystempfad). Damit ueberlebt ein Backup App-Updates und
+/// Container-Recreates.
+model Backup {
+  id              String            @id @default(cuid())
+  createdAt       DateTime          @default(now())
+  createdByUserId String?
+  status          BackupStatus      @default(READY)
+  storageType     BackupStorageType @default(MINIO)
+  /// Bei MinIO: Prefix unterhalb des Buckets (z. B. `backups/<id>`).
+  /// Bei FILESYSTEM: absoluter oder relativer Pfad zum Backup-Verzeichnis.
+  storageKey      String
+  hasDatabase     Boolean           @default(false)
+  databaseStatus  String            @default("skipped")
+  hasSettings     Boolean           @default(false)
+  settingsStatus  String            @default("skipped")
+  hasDocuments    Boolean           @default(false)
+  documentsStatus String            @default("skipped")
+  documentsCount  Int               @default(0)
+  sizeBytes       BigInt?
+  errorMessage    String?
+  createdBy       User?             @relation("BackupCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([storageType])
 }

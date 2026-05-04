@@ -462,202 +462,305 @@ export class SettingsService {
   }
 
   // ── Backup ──────────────────────────────────────────
+  //
+  // Backups bestehen aus zwei Schichten:
+  //  1) Persistentes Artefakt (bevorzugt MinIO unter `backups/<id>/...`,
+  //     alternativ Filesystem fuer Alt-Backups, die unter `storage/backups`
+  //     entstanden sind).
+  //  2) Stabile Metadaten in der DB-Tabelle `Backup`.
+  //
+  // Die UI-Liste liest ausschliesslich die DB. Damit ueberlebt ein Backup
+  // App-Updates und Container-Recreates, solange der MinIO-Bucket bzw. das
+  // Backup-Verzeichnis persistent bleiben.
+
+  /** Legacy-Verzeichnis fuer Alt-Backups (vor der MinIO-Umstellung). */
   private get backupDir() {
     const dir = resolve(process.cwd(), 'storage', 'backups');
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     return dir;
   }
 
-  async createBackup() {
-    const id = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const backupPath = join(this.backupDir, id);
-    mkdirSync(backupPath, { recursive: true });
+  /** Prefix in MinIO unterhalb des Buckets fuer ein einzelnes Backup. */
+  private minioBackupPrefix(id: string): string {
+    return `backups/${id}`;
+  }
+
+  private dbConnectionUrl(): string {
+    return (
+      process.env.DATABASE_URL ??
+      'postgresql://postgres:postgres@127.0.0.1:55432/crm_monteur'
+    );
+  }
+
+  /**
+   * Adoptiert einmalig pro Service-Lifecycle alle Alt-Backups, die als
+   * Verzeichnis im Filesystem liegen, aber noch keinen DB-Eintrag haben.
+   * Damit verschwinden produktive Alt-Backups nach dem Update nicht aus der
+   * UI; sie laufen weiterhin als `storageType=FILESYSTEM`.
+   */
+  private async adoptLegacyFilesystemBackups(): Promise<void> {
+    if (!existsSync(this.backupDir)) return;
+    const entries = readdirSync(this.backupDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+    if (entries.length === 0) return;
+
+    const existing = await this.prisma.backup.findMany({
+      where: { id: { in: entries } },
+      select: { id: true },
+    });
+    const known = new Set(existing.map((b) => b.id));
+
+    for (const id of entries) {
+      if (known.has(id)) continue;
+      const dir = join(this.backupDir, id);
+      const manifestPath = join(dir, 'manifest.json');
+      if (!existsSync(manifestPath)) continue;
+
+      let manifest: Record<string, unknown> = {};
+      try {
+        manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        continue;
+      }
+
+      const createdAt =
+        typeof manifest.createdAt === 'string'
+          ? new Date(manifest.createdAt)
+          : statSync(dir).mtime;
+      const sizeBytes = computeDirectorySize(dir);
+
+      await this.prisma.backup.create({
+        data: {
+          id,
+          createdAt,
+          status: 'READY',
+          storageType: 'FILESYSTEM',
+          storageKey: dir,
+          hasDatabase: manifest.hasDatabase === true,
+          databaseStatus:
+            typeof manifest.databaseStatus === 'string'
+              ? manifest.databaseStatus
+              : manifest.hasDatabase
+                ? 'success (legacy)'
+                : 'unknown',
+          hasSettings: manifest.hasSettings === true,
+          settingsStatus:
+            typeof manifest.settingsStatus === 'string'
+              ? manifest.settingsStatus
+              : manifest.hasSettings
+                ? 'success (legacy)'
+                : 'unknown',
+          hasDocuments: manifest.hasDocuments === true,
+          documentsStatus:
+            typeof manifest.documentsStatus === 'string'
+              ? manifest.documentsStatus
+              : manifest.hasDocuments
+                ? 'success (legacy)'
+                : 'unknown',
+          sizeBytes: BigInt(sizeBytes),
+        },
+      });
+    }
+  }
+
+  /**
+   * Erzeugt ein neues Backup. Der Ablauf ist robust:
+   *   1) Metadatenzeile mit `status=READY` als Platzhalter
+   *   2) Artefakte erzeugen und nach MinIO hochladen (DB-Dump, Settings, Docs)
+   *   3) Statuszeilen auf der DB-Zeile aktualisieren — auch bei Teilfehlern
+   * Faellt einer der Schritte komplett aus, bleibt der Datensatz mit
+   * `status=FAILED` erhalten, sodass das Problem in der UI sichtbar ist.
+   */
+  async createBackup(createdByUserId?: string) {
+    const id = randomUUID();
+    const minioPrefix = this.minioBackupPrefix(id);
 
     let databaseStatus = 'skipped';
     let settingsStatus = 'skipped';
     let documentsStatus = 'skipped';
+    let documentsCount = 0;
+    let totalBytes = 0;
+    const errorMessages: string[] = [];
 
-    // 1. Database dump
-    const dbUrl =
-      process.env.DATABASE_URL ??
-      'postgresql://postgres:postgres@127.0.0.1:55432/crm_monteur';
+    // ── 1. Datenbank-Dump ────────────────────────────────
+    const dbUrl = this.dbConnectionUrl();
+    let dumpBuffer: Buffer | null = null;
     try {
-      const dumpFile = join(backupPath, 'database.sql');
-      execSync(`pg_dump "${dbUrl}" --clean --if-exists > "${dumpFile}"`, {
-        stdio: ['pipe', 'pipe', 'pipe'],
+      const dump = execSync(`pg_dump "${dbUrl}" --clean --if-exists`, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 1024 * 1024 * 1024, // 1 GiB Cap fuer kleine/mittlere Instanzen
       });
-      // Pruefen ob Dump sinnvollen Inhalt hat (mehr als 100 Bytes)
-      const dumpSize = statSync(dumpFile).size;
-      if (dumpSize > 100) {
+      if (dump.length > 100) {
+        dumpBuffer = dump;
         databaseStatus = 'success';
       } else {
         databaseStatus = 'failed: Dump-Datei ist leer oder zu klein';
-        rmSync(dumpFile);
       }
     } catch (e) {
       databaseStatus = `failed: ${e instanceof Error ? e.message : 'pg_dump nicht verfuegbar'}`;
+      errorMessages.push(databaseStatus);
     }
 
-    // 2. Settings export
+    if (dumpBuffer) {
+      try {
+        await this.storage.uploadObject(
+          `${minioPrefix}/database.sql`,
+          dumpBuffer,
+          dumpBuffer.length,
+          'application/sql',
+        );
+        totalBytes += dumpBuffer.length;
+      } catch (e) {
+        databaseStatus = `failed: Upload abgebrochen — ${e instanceof Error ? e.message : 'Fehler'}`;
+        errorMessages.push(databaseStatus);
+      }
+    }
+
+    // ── 2. Settings-Export ───────────────────────────────
     try {
       const settings = await this.prisma.setting.findMany();
-      writeFileSync(
-        join(backupPath, 'settings.json'),
-        JSON.stringify(settings, null, 2),
+      const json = Buffer.from(JSON.stringify(settings, null, 2), 'utf-8');
+      await this.storage.uploadObject(
+        `${minioPrefix}/settings.json`,
+        json,
+        json.length,
+        'application/json',
       );
-      settingsStatus = 'success';
+      totalBytes += json.length;
+      settingsStatus = `success: ${settings.length} Eintraege`;
     } catch (e) {
       settingsStatus = `failed: ${e instanceof Error ? e.message : 'Unbekannter Fehler'}`;
+      errorMessages.push(settingsStatus);
     }
 
-    // 3. Documents — download from MinIO (with centralized local fallback)
-    const docsBackupDir = join(backupPath, 'uploads');
+    // ── 3. Dokumente — pro Datei aus dem aktiven Storage ueber MinIO duplizieren ──
     try {
       const documents = await this.prisma.document.findMany({
         select: { storageKey: true },
       });
-      if (documents.length > 0) {
-        mkdirSync(docsBackupDir, { recursive: true });
+      if (documents.length === 0) {
+        documentsStatus = 'success: keine Dokumente vorhanden';
+      } else {
         let count = 0;
         for (const doc of documents) {
-          const filename = doc.storageKey.replace(/^uploads\//, '');
-          const destPath = join(docsBackupDir, filename);
           try {
             const buf = await this.storage.getObjectBufferWithFallback(
               doc.storageKey,
             );
-            if (buf) {
-              writeFileSync(destPath, buf);
-              count++;
-            }
+            if (!buf) continue;
+            // Ziel: backups/<id>/uploads/<originalKey>
+            await this.storage.uploadObject(
+              `${minioPrefix}/${doc.storageKey}`,
+              buf,
+              buf.length,
+            );
+            totalBytes += buf.length;
+            count++;
           } catch {
-            // Skip individual file errors
+            // Einzelne Datei darf scheitern, ohne das gesamte Backup zu kippen
           }
         }
+        documentsCount = count;
         documentsStatus = `success: ${count} Dateien`;
-      } else {
-        documentsStatus = 'success: keine Dokumente vorhanden';
       }
     } catch (e) {
       documentsStatus = `failed: ${e instanceof Error ? e.message : 'Kopierfehler'}`;
+      errorMessages.push(documentsStatus);
     }
 
-    // 4. Manifest
-    const manifest = {
-      id,
-      createdAt: new Date().toISOString(),
-      hasDatabase: databaseStatus.startsWith('success'),
-      databaseStatus,
-      hasSettings: settingsStatus.startsWith('success'),
-      settingsStatus,
-      hasDocuments: documentsStatus.startsWith('success'),
-      documentsStatus,
-    };
-    writeFileSync(
-      join(backupPath, 'manifest.json'),
-      JSON.stringify(manifest, null, 2),
-    );
+    const overallStatus: 'READY' | 'FAILED' =
+      databaseStatus.startsWith('success') ||
+      settingsStatus.startsWith('success') ||
+      documentsStatus.startsWith('success')
+        ? 'READY'
+        : 'FAILED';
 
-    // Cleanup: keepCount
+    const record = await this.prisma.backup.create({
+      data: {
+        id,
+        createdByUserId,
+        status: overallStatus,
+        storageType: 'MINIO',
+        storageKey: minioPrefix,
+        hasDatabase: databaseStatus.startsWith('success'),
+        databaseStatus,
+        hasSettings: settingsStatus.startsWith('success'),
+        settingsStatus,
+        hasDocuments: documentsStatus.startsWith('success'),
+        documentsStatus,
+        documentsCount,
+        sizeBytes: BigInt(totalBytes),
+        errorMessage: errorMessages.length ? errorMessages.join(' | ') : null,
+      },
+    });
+
+    // Cleanup: keepCount — nur erfolgreiche Backups zaehlen, FAILED bleibt
+    // sichtbar, damit der Operator den Misserfolg pruefen kann.
     await this.enforceKeepCount();
 
-    return manifest;
+    return serializeBackupRecord(record);
   }
 
-  listBackups() {
-    const dir = this.backupDir;
-    const entries = readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => {
-        const manifestPath = join(dir, e.name, 'manifest.json');
-        if (!existsSync(manifestPath)) return null;
-        try {
-          const manifest = JSON.parse(
-            readFileSync(manifestPath, 'utf-8'),
-          ) as Record<string, unknown>;
-          const stat = statSync(join(dir, e.name));
-          // Calculate size
-          let size = 0;
-          const walkDir = (d: string) => {
-            for (const f of readdirSync(d, { withFileTypes: true })) {
-              const p = join(d, f.name);
-              if (f.isDirectory()) walkDir(p);
-              else size += statSync(p).size;
-            }
-          };
-          walkDir(join(dir, e.name));
-          return {
-            id: e.name,
-            createdAt: manifest.createdAt ?? stat.mtime.toISOString(),
-            hasDatabase: manifest.hasDatabase ?? false,
-            databaseStatus:
-              typeof manifest.databaseStatus === 'string'
-                ? manifest.databaseStatus
-                : manifest.hasDatabase
-                  ? 'success'
-                  : 'unknown',
-            hasSettings: manifest.hasSettings ?? false,
-            settingsStatus:
-              typeof manifest.settingsStatus === 'string'
-                ? manifest.settingsStatus
-                : manifest.hasSettings
-                  ? 'success'
-                  : 'unknown',
-            hasDocuments: manifest.hasDocuments ?? false,
-            documentsStatus:
-              typeof manifest.documentsStatus === 'string'
-                ? manifest.documentsStatus
-                : manifest.hasDocuments
-                  ? 'success'
-                  : 'unknown',
-            sizeBytes: size,
-          };
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean)
-      .sort((a, b) => {
-        const ae = a as { createdAt?: string } | null;
-        const be = b as { createdAt?: string } | null;
-        return (
-          new Date(be?.createdAt ?? '').getTime() -
-          new Date(ae?.createdAt ?? '').getTime()
-        );
-      });
-
-    return entries;
+  async listBackups() {
+    await this.adoptLegacyFilesystemBackups();
+    const rows = await this.prisma.backup.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(serializeBackupRecord);
   }
 
-  private validateBackupId(id: string): string {
-    // Strenge ID-Validierung: nur alphanumerisch, Bindestrich, Unterstrich, Punkt
+  private async getBackupOrThrow(id: string) {
     if (!/^[\w.-]+$/.test(id)) {
-      throw new BadRequestException(
-        'Ungueltige Backup-ID. Nur alphanumerische Zeichen, Bindestrich, Unterstrich und Punkt erlaubt.',
-      );
-    }
-
-    const backupPath = resolve(this.backupDir, id);
-
-    // Pfad-Traversal-Schutz: resolved path muss im Backup-Verzeichnis liegen
-    const normalizedBase = resolve(this.backupDir);
-    if (
-      !backupPath.startsWith(normalizedBase + '/') &&
-      !backupPath.startsWith(normalizedBase + '\\')
-    ) {
       throw new BadRequestException('Ungueltige Backup-ID.');
     }
-
-    if (!existsSync(backupPath)) {
+    const row = await this.prisma.backup.findUnique({ where: { id } });
+    if (!row) {
       throw new BadRequestException('Backup nicht gefunden.');
     }
-
-    return backupPath;
+    return row;
   }
 
-  deleteBackup(id: string) {
-    const backupPath = this.validateBackupId(id);
-    rmSync(backupPath, { recursive: true, force: true });
+  async deleteBackup(id: string) {
+    const row = await this.getBackupOrThrow(id);
+
+    if (row.storageType === 'MINIO') {
+      // Alle Objekte unter dem Prefix einsammeln und entfernen.
+      try {
+        const client = this.storage.getClient();
+        const bucket = this.storage.getBucketName();
+        const stream = client.listObjectsV2(bucket, `${row.storageKey}/`, true);
+        const keys: string[] = [];
+        await new Promise<void>((resolveList, rejectList) => {
+          stream.on('data', (obj) => {
+            if (obj.name) keys.push(obj.name);
+          });
+          stream.on('end', () => resolveList());
+          stream.on('error', (err) => rejectList(err));
+        });
+        for (const key of keys) {
+          await this.storage.deleteObject(key);
+        }
+      } catch {
+        // Speicherbereinigung darf scheitern; wir loeschen den DB-Eintrag
+        // trotzdem, sonst bleibt das Backup als „Leiche" in der UI haengen.
+      }
+    } else {
+      // FILESYSTEM-Alt-Backup: Verzeichnis entfernen, falls vorhanden.
+      const path = row.storageKey;
+      if (path && existsSync(path)) {
+        try {
+          rmSync(path, { recursive: true, force: true });
+        } catch {
+          // Im Fehlerfall: DB-Zeile bleibt, damit der Operator nachsehen kann.
+        }
+      }
+    }
+
+    await this.prisma.backup.delete({ where: { id } });
     return { deleted: true };
   }
 
@@ -665,21 +768,22 @@ export class SettingsService {
     id: string,
     options: { database: boolean; documents: boolean; settings: boolean },
   ) {
-    const backupPath = this.validateBackupId(id);
+    const row = await this.getBackupOrThrow(id);
 
     const results: string[] = [];
 
-    // 1. Settings — echter Restore: bestehende loeschen, dann aus Backup importieren
+    const reader = makeBackupReader(row, this.storage);
+
+    // 1. Settings
     if (options.settings) {
-      const settingsFile = join(backupPath, 'settings.json');
-      if (existsSync(settingsFile)) {
+      const json = await reader.readFile('settings.json');
+      if (json) {
         try {
-          const settings = JSON.parse(
-            readFileSync(settingsFile, 'utf-8'),
-          ) as Array<{ key: string; valueJson: unknown }>;
-          // Bestehende Settings loeschen
+          const settings = JSON.parse(json.toString('utf-8')) as Array<{
+            key: string;
+            valueJson: unknown;
+          }>;
           await this.prisma.setting.deleteMany({});
-          // Aus Backup importieren
           for (const s of settings) {
             const val = s.valueJson as string | number | boolean;
             await this.prisma.setting.create({
@@ -699,45 +803,47 @@ export class SettingsService {
       }
     }
 
-    // 2. Documents — restore: upload backup files into MinIO
+    // 2. Documents — alle Objekte unter `uploads/` zurueck nach MinIO
     if (options.documents) {
-      const docsBackup = join(backupPath, 'uploads');
-      if (existsSync(docsBackup)) {
-        try {
-          const files = readdirSync(docsBackup);
-          let count = 0;
-          for (const file of files) {
-            const filePath = join(docsBackup, file);
-            const stat = statSync(filePath);
-            if (!stat.isFile()) continue;
-            const storageKey = `uploads/${file}`;
-            const buf = readFileSync(filePath);
-            await this.storage.uploadObject(storageKey, buf, buf.length);
-            count++;
-          }
-          results.push(
-            `Dokumente wiederhergestellt (${count} Dateien nach MinIO).`,
-          );
-        } catch (e) {
-          results.push(
-            `Dokumente-Restore fehlgeschlagen: ${e instanceof Error ? e.message : 'Fehler'}`,
-          );
-        }
-      } else {
+      const files = await reader.listUploadFiles();
+      if (files.length === 0) {
         results.push('Dokumente-Backup nicht vorhanden, uebersprungen.');
+      } else {
+        let count = 0;
+        let failed = 0;
+        for (const file of files) {
+          try {
+            const buf = await reader.readUploadFile(file.relativeKey);
+            if (!buf) {
+              failed++;
+              continue;
+            }
+            await this.storage.uploadObject(
+              file.targetStorageKey,
+              buf,
+              buf.length,
+            );
+            count++;
+          } catch {
+            failed++;
+          }
+        }
+        results.push(
+          `Dokumente wiederhergestellt (${count} Dateien${failed ? `, ${failed} fehlgeschlagen` : ''}).`,
+        );
       }
     }
 
     // 3. Database
     if (options.database) {
-      const dumpFile = join(backupPath, 'database.sql');
-      if (existsSync(dumpFile)) {
-        const dbUrl =
-          process.env.DATABASE_URL ??
-          'postgresql://postgres:postgres@127.0.0.1:55432/crm_monteur';
+      const dump = await reader.readFile('database.sql');
+      if (dump) {
+        const dbUrl = this.dbConnectionUrl();
         try {
-          execSync(`psql "${dbUrl}" < "${dumpFile}"`, {
+          execSync(`psql "${dbUrl}"`, {
+            input: dump,
             stdio: ['pipe', 'pipe', 'pipe'],
+            maxBuffer: 1024 * 1024 * 1024,
           });
           results.push('Datenbank wiederhergestellt.');
         } catch (e) {
@@ -755,12 +861,19 @@ export class SettingsService {
 
   private async enforceKeepCount() {
     const config = await this.getBackupConfig();
-    const backups = this.listBackups();
-    if (backups.length > config.keepCount) {
-      const toDelete = backups.slice(config.keepCount);
-      for (const b of toDelete) {
-        const backup = b as { id: string };
-        this.deleteBackup(backup.id);
+    const ready = await this.prisma.backup.findMany({
+      where: { status: 'READY' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (ready.length > config.keepCount) {
+      for (const row of ready.slice(config.keepCount)) {
+        try {
+          await this.deleteBackup(row.id);
+        } catch {
+          // Best-effort: ein einzelner Loeschfehler darf die Erstellung nicht
+          // ruinieren.
+        }
       }
     }
   }
@@ -988,4 +1101,131 @@ export class SettingsService {
       errors: errors.slice(0, 5),
     };
   }
+}
+
+// ── Backup-Helfer (modulpriv) ─────────────────────────────────────────
+
+type BackupRecord = {
+  id: string;
+  createdAt: Date;
+  createdByUserId: string | null;
+  status: 'READY' | 'FAILED';
+  storageType: 'MINIO' | 'FILESYSTEM';
+  storageKey: string;
+  hasDatabase: boolean;
+  databaseStatus: string;
+  hasSettings: boolean;
+  settingsStatus: string;
+  hasDocuments: boolean;
+  documentsStatus: string;
+  documentsCount: number;
+  sizeBytes: bigint | null;
+  errorMessage: string | null;
+};
+
+/** API-Repraesentation eines Backup-Datensatzes (BigInt → number, ISO-Datum). */
+function serializeBackupRecord(row: BackupRecord) {
+  return {
+    id: row.id,
+    createdAt: row.createdAt.toISOString(),
+    createdByUserId: row.createdByUserId,
+    status: row.status,
+    storageType: row.storageType,
+    storageKey: row.storageKey,
+    hasDatabase: row.hasDatabase,
+    databaseStatus: row.databaseStatus,
+    hasSettings: row.hasSettings,
+    settingsStatus: row.settingsStatus,
+    hasDocuments: row.hasDocuments,
+    documentsStatus: row.documentsStatus,
+    documentsCount: row.documentsCount,
+    sizeBytes: row.sizeBytes != null ? Number(row.sizeBytes) : null,
+    errorMessage: row.errorMessage,
+  };
+}
+
+/** Rekursive Verzeichnisgroesse ermitteln (fuer Alt-Backup-Adoption). */
+function computeDirectorySize(dir: string): number {
+  let size = 0;
+  const stack = [dir];
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    if (!existsSync(cur)) continue;
+    for (const entry of readdirSync(cur, { withFileTypes: true })) {
+      const p = join(cur, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(p);
+      } else if (entry.isFile()) {
+        size += statSync(p).size;
+      }
+    }
+  }
+  return size;
+}
+
+/**
+ * Liest Backup-Artefakte einheitlich aus MinIO oder Filesystem. So unterstuetzt
+ * die Restore-Funktion beide Storage-Typen ohne separate Code-Pfade.
+ */
+function makeBackupReader(row: BackupRecord, storage: StorageService) {
+  if (row.storageType === 'MINIO') {
+    const prefix = row.storageKey.replace(/\/+$/, '');
+    return {
+      async readFile(name: string): Promise<Buffer | null> {
+        return storage.getObjectBufferWithFallback(`${prefix}/${name}`);
+      },
+      async listUploadFiles(): Promise<
+        Array<{ relativeKey: string; targetStorageKey: string }>
+      > {
+        const client = storage.getClient();
+        const bucket = storage.getBucketName();
+        const stream = client.listObjectsV2(bucket, `${prefix}/uploads/`, true);
+        const out: Array<{ relativeKey: string; targetStorageKey: string }> = [];
+        await new Promise<void>((res, rej) => {
+          stream.on('data', (obj) => {
+            if (!obj.name) return;
+            const rel = obj.name.slice(prefix.length + 1); // "uploads/<...>"
+            out.push({
+              relativeKey: rel,
+              targetStorageKey: rel, // Originalpfad in MinIO ist dieselbe Key-Struktur
+            });
+          });
+          stream.on('end', () => res());
+          stream.on('error', (err) => rej(err));
+        });
+        return out;
+      },
+      async readUploadFile(relativeKey: string): Promise<Buffer | null> {
+        return storage.getObjectBufferWithFallback(`${prefix}/${relativeKey}`);
+      },
+    };
+  }
+
+  // FILESYSTEM: Alt-Backup-Layout (storage/backups/<id>/...).
+  const baseDir = row.storageKey;
+  return {
+    async readFile(name: string): Promise<Buffer | null> {
+      const p = join(baseDir, name);
+      return existsSync(p) ? readFileSync(p) : null;
+    },
+    async listUploadFiles(): Promise<
+      Array<{ relativeKey: string; targetStorageKey: string }>
+    > {
+      const uploadsDir = join(baseDir, 'uploads');
+      if (!existsSync(uploadsDir)) return [];
+      const out: Array<{ relativeKey: string; targetStorageKey: string }> = [];
+      for (const f of readdirSync(uploadsDir, { withFileTypes: true })) {
+        if (!f.isFile()) continue;
+        out.push({
+          relativeKey: `uploads/${f.name}`,
+          targetStorageKey: `uploads/${f.name}`,
+        });
+      }
+      return out;
+    },
+    async readUploadFile(relativeKey: string): Promise<Buffer | null> {
+      const p = join(baseDir, relativeKey);
+      return existsSync(p) ? readFileSync(p) : null;
+    },
+  };
 }

@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Put,
+  Req,
   Res,
   UploadedFile,
   UseInterceptors,
@@ -14,7 +15,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { RoleCode } from '@prisma/client';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { SettingsService } from './settings.service';
@@ -164,8 +165,8 @@ export class SettingsController {
   }
 
   @Post('backup/create')
-  createBackup() {
-    return this.settingsService.createBackup();
+  createBackup(@Req() request: Request & { user?: { sub?: string } }) {
+    return this.settingsService.createBackup(request.user?.sub);
   }
 
   @Get('backup/list')

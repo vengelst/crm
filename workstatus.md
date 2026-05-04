@@ -922,6 +922,31 @@ Beide CRM-Container mit `NODE_ENV=development`, `CHOKIDAR_USEPOLLING=true`, `WAT
 
 ## 2026-05-04
 
+### Nachpruefung produktionsfaehiger Backup-Umbau (Codex, read-only Pruefung)
+
+- Ausgangslage:
+  - Die Backup-Verwaltung wurde auf persistente DB-Metadaten und MinIO-gestuetzte Artefakte umgebaut, mit Legacy-Fallback fuer bestehende Dateisystem-Backups.
+
+- Pruefung durch Codex:
+  - Geaenderte Hauptstellen gegengeprueft:
+    - `prisma/schema.prisma`
+    - `apps/api/src/settings/settings.service.ts`
+    - `apps/api/src/settings/settings.controller.ts`
+    - `apps/web/src/components/crm-app/settings/BackupSettingsTab.tsx`
+    - `apps/web/src/i18n.ts`
+  - Technische Checks:
+    - `pnpm --filter web lint`: gruen.
+    - `pnpm --filter web test:e2e`: gruen (`5/5 passed`).
+  - Verbleibende Findings:
+    - `status=READY` wird aktuell schon dann gesetzt, wenn irgendein Teil des Backups erfolgreich war. Dadurch koennen unvollstaendige Backups als `READY` erscheinen, obwohl z. B. DB oder Settings fehlgeschlagen sind.
+    - Beim Loeschen eines Legacy-Filesystem-Backups wird die DB-Zeile trotz fehlgeschlagenem `rmSync` am Ende trotzdem geloescht. Damit kann die Referenz auf ein nicht tatsaechlich entferntes Backup verloren gehen.
+
+- Ergebnis / Entscheidung:
+  - Der Umbau ist strukturell stark verbessert und geht in die richtige produktionsfaehige Richtung.
+  - Fuer eine vollstaendig saubere Abnahme sollten die beiden Restpunkte oben noch nachgeschaerft werden.
+
+## 2026-05-04
+
 ### Nachpruefung Wiedervorlagen in Kunde und Projekt (Codex, read-only Pruefung)
 
 - Ausgangslage:

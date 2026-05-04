@@ -10,8 +10,15 @@ type BackupEntry = {
   hasDatabase: boolean;
   hasSettings: boolean;
   hasDocuments: boolean;
-  sizeBytes: number;
+  sizeBytes: number | null;
   databaseStatus?: string;
+  settingsStatus?: string;
+  documentsStatus?: string;
+  /** "READY" | "FAILED" — fehlgeschlagene Backups bleiben sichtbar. */
+  status?: "READY" | "FAILED";
+  /** "MINIO" | "FILESYSTEM" — Alt-Backups werden weiterhin angezeigt. */
+  storageType?: "MINIO" | "FILESYSTEM";
+  errorMessage?: string | null;
 };
 
 export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, submitting, apiFetch, setPanelSuccess, setPanelError }: {
@@ -70,7 +77,8 @@ export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, sub
     finally { setRestoring(false); }
   }
 
-  function fmtSize(bytes: number) {
+  function fmtSize(bytes: number | null) {
+    if (bytes == null) return "—";
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / 1048576).toFixed(1)} MB`;
@@ -103,14 +111,26 @@ export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, sub
               <tbody>
                 {backups.map((b) => (
                   <tr key={b.id} className="border-b border-black/5 dark:border-white/5">
-                    <td className="py-2 pr-2 font-mono text-xs">{b.id}</td>
+                    <td className="py-2 pr-2 font-mono text-xs">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span>{b.id.length > 12 ? `${b.id.slice(0, 12)}…` : b.id}</span>
+                        {b.status === "FAILED" ? (
+                          <span className="rounded bg-red-100 px-1 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-500/20 dark:text-red-300">{l("settings.backupStatusFailed")}</span>
+                        ) : null}
+                        {b.storageType === "FILESYSTEM" ? (
+                          <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/20 dark:text-amber-300" title={l("settings.backupStorageLegacy")}>FS</span>
+                        ) : b.storageType === "MINIO" ? (
+                          <span className="rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-500/20 dark:text-blue-300" title={l("settings.backupStorageMinio")}>S3</span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="py-2 pr-2 text-xs">{new Date(b.createdAt).toLocaleString(locale)}</td>
                     <td className="py-2 pr-2 text-xs">
-                      <span className={b.hasDatabase ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}>{l("settings.backupDBLabel")}{b.hasDatabase ? l("common.ok") : l("common.error")}</span>
+                      <span className={b.hasDatabase ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"} title={b.databaseStatus}>{l("settings.backupDBLabel")}{b.hasDatabase ? l("common.ok") : l("common.error")}</span>
                       {" "}
-                      <span className={b.hasSettings ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}>{l("settings.backupSetLabel")}{b.hasSettings ? l("common.ok") : l("common.error")}</span>
+                      <span className={b.hasSettings ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"} title={b.settingsStatus}>{l("settings.backupSetLabel")}{b.hasSettings ? l("common.ok") : l("common.error")}</span>
                       {" "}
-                      <span className={b.hasDocuments ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}>{l("settings.backupDocLabel")}{b.hasDocuments ? l("common.ok") : "-"}</span>
+                      <span className={b.hasDocuments ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} title={b.documentsStatus}>{l("settings.backupDocLabel")}{b.hasDocuments ? l("common.ok") : "-"}</span>
                     </td>
                     <td className="py-2 pr-2 text-right font-mono text-xs">{fmtSize(b.sizeBytes)}</td>
                     <td className="py-2 text-xs">
