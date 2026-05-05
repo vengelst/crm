@@ -163,6 +163,51 @@ export class ProjectsService {
   }
 
   /**
+   * Detailansicht fuer Kiosk-User (interne Projektmanager). Liefert nur,
+   * wenn der angemeldete User als `internalProjectManagerUserId` am
+   * Projekt eingetragen ist — sonst NotFound. Das matched die Logik von
+   * `listForManager`, sodass die Liste/Detail-Sicht konsistent ist und
+   * verhindert das Leak fremder Projekte ueber Direkt-IDs.
+   */
+  async getByIdForManager(id: string, userId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        internalProjectManagerUserId: userId,
+      },
+      include: {
+        customer: true,
+        branch: true,
+        primaryCustomerContact: true,
+        assignments: {
+          include: {
+            worker: true,
+          },
+        },
+        timeEntries: {
+          orderBy: {
+            occurredAtServer: 'desc',
+          },
+          take: 25,
+        },
+        weeklyTimesheets: {
+          orderBy: {
+            generatedAt: 'desc',
+          },
+          take: 10,
+        },
+      },
+    });
+
+    if (!project) {
+      throw new NotFoundException('Projekt nicht gefunden.');
+    }
+
+    return project;
+  }
+
+  /**
    * Atomically increment the PROJECT counter and return the next number.
    * Uses UPDATE ... RETURNING inside a transaction to prevent race conditions.
    */
@@ -393,7 +438,29 @@ export class ProjectsService {
     const newStart = new Date(data.startDate);
     const newEnd = data.endDate ? new Date(data.endDate) : null;
 
-    // Ueberschneidungspruefung fuer jeden Worker (gleiche Logik wie assignWorker)
+    // Pre-Check: alle workerIds muessen existieren. Sonst wuerde Prisma
+    // erst innerhalb der Transaktion mit einem FK-Constraint-Error in
+    // ein 500er kippen — unschoen fuer den Aufrufer und schwer zu
+    // diagnostizieren. Wir liefern stattdessen eine klare 400 mit der
+    // Liste der unbekannten IDs.
+    if (data.workerIds.length > 0) {
+      const uniqueIds = Array.from(new Set(data.workerIds));
+      const existingWorkers = await this.prisma.worker.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true },
+      });
+      const knownIds = new Set(existingWorkers.map((w) => w.id));
+      const unknown = uniqueIds.filter((id) => !knownIds.has(id));
+      if (unknown.length > 0) {
+        throw new BadRequestException(
+          `Ungueltige workerIds: ${unknown.join(', ')}`,
+        );
+      }
+    }
+
+    // Ueberschneidungspruefung fuer jeden Worker (gleiche Logik wie
+    // assignWorker). Bewusst VOR der Transaktion — wir wollen 400er
+    // raus haben, ohne erst Schreib-Transaktionen zu oeffnen.
     for (const workerId of data.workerIds) {
       const existing = await this.prisma.projectAssignment.findMany({
         where: {
@@ -420,54 +487,74 @@ export class ProjectsService {
       }
     }
 
-    // Bestehende Zuordnungen fuer dieses Projekt laden
-    const currentAssignments = await this.prisma.projectAssignment.findMany({
-      where: { projectId },
-    });
-
-    const currentWorkerIds = new Set(currentAssignments.map((a) => a.workerId));
+    // Schreibvorgang atomar: Delete/Update/Create in einer einzigen
+    // Prisma-Transaktion. Faellt einer der Schritte, wird der Rest
+    // zurueckgerollt — kein Teilzustand mit halb angelegten Worker-
+    // Zuordnungen mehr. Notifications werden nach erfolgreichem Commit
+    // ausserhalb der Transaktion gefeuert (Fire-and-Forget, kein DB-Write).
     const newWorkerIds = new Set(data.workerIds);
-
-    // 1. Entfernte Worker loeschen
-    const removedIds = currentAssignments
-      .filter((a) => !newWorkerIds.has(a.workerId))
-      .map((a) => a.id);
-    if (removedIds.length > 0) {
-      await this.prisma.projectAssignment.deleteMany({
-        where: { id: { in: removedIds } },
+    const newlyAssigned = await this.prisma.$transaction(async (tx) => {
+      // Bestehende Zuordnungen innerhalb der Transaktion lesen — sonst
+      // koennte ein paralleler Schreib-Pfad das Set zwischen Read und
+      // Write veraendern.
+      const currentAssignments = await tx.projectAssignment.findMany({
+        where: { projectId },
       });
-    }
+      const currentWorkerIds = new Set(
+        currentAssignments.map((a) => a.workerId),
+      );
 
-    // 2. Bestehende Worker aktualisieren (nur Datum, Metadaten bleiben)
-    for (const assignment of currentAssignments) {
-      if (newWorkerIds.has(assignment.workerId)) {
-        await this.prisma.projectAssignment.update({
-          where: { id: assignment.id },
-          data: {
-            startDate: newStart,
-            endDate: newEnd ?? undefined,
-          },
+      // 1. Entfernte Worker loeschen
+      const removedIds = currentAssignments
+        .filter((a) => !newWorkerIds.has(a.workerId))
+        .map((a) => a.id);
+      if (removedIds.length > 0) {
+        await tx.projectAssignment.deleteMany({
+          where: { id: { in: removedIds } },
         });
       }
-    }
 
-    // 3. Neue Worker anlegen (ohne Metadaten) + Benachrichtigung
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
-      select: { projectNumber: true, title: true },
+      // 2. Bestehende Worker aktualisieren (nur Datum, Metadaten bleiben)
+      for (const assignment of currentAssignments) {
+        if (newWorkerIds.has(assignment.workerId)) {
+          await tx.projectAssignment.update({
+            where: { id: assignment.id },
+            data: {
+              startDate: newStart,
+              endDate: newEnd ?? undefined,
+            },
+          });
+        }
+      }
+
+      // 3. Neue Worker anlegen
+      const newlyCreated: string[] = [];
+      for (const workerId of data.workerIds) {
+        if (!currentWorkerIds.has(workerId)) {
+          await tx.projectAssignment.create({
+            data: {
+              projectId,
+              workerId,
+              startDate: newStart,
+              endDate: newEnd ?? undefined,
+            },
+          });
+          newlyCreated.push(workerId);
+        }
+      }
+      return newlyCreated;
     });
 
-    for (const workerId of data.workerIds) {
-      if (!currentWorkerIds.has(workerId)) {
-        await this.prisma.projectAssignment.create({
-          data: {
-            projectId,
-            workerId,
-            startDate: newStart,
-            endDate: newEnd ?? undefined,
-          },
-        });
-        if (project) {
+    // Benachrichtigungen erst nach erfolgreichem Commit. Fehler hier
+    // brechen die Zuordnung nicht zurueck — In-App-Notification ist
+    // best-effort, der DB-Stand ist konsistent.
+    if (newlyAssigned.length > 0) {
+      const project = await this.prisma.project.findUnique({
+        where: { id: projectId },
+        select: { projectNumber: true, title: true },
+      });
+      if (project) {
+        for (const workerId of newlyAssigned) {
           void this.notifications.onProjectAssignment(
             workerId,
             project.projectNumber,
@@ -511,6 +598,11 @@ export class ProjectsService {
       entriesByWorker.set(entry.workerId, list);
     }
 
+    // TODO Hardening (Phase 11.5): Umstellung auf `occurredAtServer` pruefen.
+    // Aktuell rechnen wir mit Client-Zeit, was bei verstellter Geraete-Uhr
+    // oder Kiosk-Offline-Mode driften kann. Eine Umstellung wuerde
+    // historische Reports verschieben — daher bewusst ungeaendert,
+    // bis ein begleitender Migrations-/Validierungslauf vorliegt.
     for (const [workerId, entries] of entriesByWorker) {
       let pendingClockIn: Date | null = null;
 

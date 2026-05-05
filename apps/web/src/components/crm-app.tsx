@@ -203,8 +203,12 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const canManageSettings = hasRole(auth, ["SUPERADMIN", "OFFICE"]);
   const canManageUsers = hasRole(auth, ["SUPERADMIN"]);
   const canEditCustomer = hasPermission(auth, "customers.edit");
+  const canCreateCustomer = hasPermission(auth, "customers.create");
+  const canDeleteCustomer = hasPermission(auth, "customers.delete");
   const canEditProject = hasPermission(auth, "projects.edit");
   const canEditWorker = hasPermission(auth, "workers.edit");
+  const canCreateWorker = hasPermission(auth, "workers.create");
+  const canDeleteWorker = hasPermission(auth, "workers.delete");
   const canPrintCustomer = hasPermission(auth, "customers.print");
   const canPrintProject = hasPermission(auth, "projects.print");
   const canPrintDocument = hasPermission(auth, "documents.print");
@@ -1300,18 +1304,20 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               ) : (
                 <>
                   <SectionCard title={l("cust.list")} subtitle={l("cust.listSub")} bordered={false}>
-                    <div className="mb-4">
-                      <button
-                        type="button"
-                        onClick={() => setShowCreateCustomer(true)}
-                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                          <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
-                        </svg>
-                        {l("cust.newCustomer")}
-                      </button>
-                    </div>
+                    {canCreateCustomer ? (
+                      <div className="mb-4">
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateCustomer(true)}
+                          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                            <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                          </svg>
+                          {l("cust.newCustomer")}
+                        </button>
+                      </div>
+                    ) : null}
                     <EntityList
                       items={customers}
                       title={(item) => item.companyName}
@@ -1320,8 +1326,8 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                       editLabel={l("common.edit")}
                       deleteLabel={l("common.delete")}
                       onOpen={(item) => router.push(`/customers/${item.id}`)}
-                      onEdit={(item) => router.push(`/customers/${item.id}`)}
-                      onDelete={(item) => void handleDelete(`/customers/${item.id}`, l("nav.customers"), true)}
+                      onEdit={canEditCustomer ? (item) => router.push(`/customers/${item.id}`) : undefined}
+                      onDelete={canDeleteCustomer ? (item) => void handleDelete(`/customers/${item.id}`, l("nav.customers"), true) : undefined}
                       badges={(item) => {
                         const count = reminderCounts.byCustomer[item.id] ?? 0;
                         if (count <= 0) return null;
@@ -1519,28 +1525,30 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </>
               ) : (
                 <SectionCard title={l("work.list")} subtitle={l("work.listSub")}>
-                  <div className="mb-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setWorkerForm(emptyWorkerForm());
-                        setShowCreateWorker(true);
-                      }}
-                      className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                        <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
-                      </svg>
-                      {l("work.create")}
-                    </button>
-                  </div>
+                  {canCreateWorker ? (
+                    <div className="mb-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWorkerForm(emptyWorkerForm());
+                          setShowCreateWorker(true);
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                          <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                        </svg>
+                        {l("work.create")}
+                      </button>
+                    </div>
+                  ) : null}
                   <EntityList
                     items={workers}
                     title={(item) => `${item.firstName} ${item.lastName}${item.active === false ? " (deaktiviert)" : ""}`}
                     subtitle={(item) => item.workerNumber}
                     deleteLabel={l("common.delete")}
                     onOpen={(item) => router.push(`/workers/${item.id}`)}
-                    onDelete={(item) => void handleDelete(`/workers/${item.id}`, l("nav.workers"), true)}
+                    onDelete={canDeleteWorker ? (item) => void handleDelete(`/workers/${item.id}`, l("nav.workers"), true) : undefined}
                   />
                 </SectionCard>
               )}

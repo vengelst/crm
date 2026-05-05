@@ -1066,3 +1066,213 @@ Beide CRM-Container mit `NODE_ENV=development`, `CHOKIDAR_USEPOLLING=true`, `WAT
   - Parallele Backup-Laeufe sind ausgeschlossen, sowohl Cron×Manual als auch Manual×Manual.
   - UI ist eindeutig: Admin sieht Zeitzone neben jeder Zeit.
   - Manueller Backup-Endpoint behaelt seinen alten 201-Vertrag bei Erfolg und ergaenzt 409 als sauberen Konflikt-Fall.
+
+### Projekte-Hardening: Permissions, Kiosk-Restriktion, atomare Assignments (Claude)
+
+- Ausgangslage:
+  - `ProjectsController` nutzte ausschliesslich `@Roles`, keine fein-granularen `@Permissions` — d. h. jeder OFFICE-User konnte bei `WORKER`-Rolle vorhandene `projects.edit` umgehen, weil keine zweite Pruefebene griff.
+  - `GET /projects/:id` lieferte Kiosk-Usern jedes beliebige Projekt (kein Owner-Filter) — `listForManager` war nur fuer GET / aktiv.
+  - `setAssignments` schrieb Delete/Update/Create ausserhalb einer Transaktion — Crash zwischen Schritten haette einen Teilzustand hinterlassen.
+  - `GET /export/ical` stand im Source UNTER `GET /:id` — anfaellig fuer Routen-Kollisionen (Express matcht `:id="export"`).
+
+- Umsetzung durch Claude:
+  - `@Permissions(...)` an alle 11 Projekt-Endpoints angefuegt (View / Create / Edit / Delete passend). `@Roles`-Decorators erhalten geblieben — Kombination ist additiv.
+  - `PermissionsGuard` minimal entschaerft: Worker- und Kiosk-User-Tokens passieren den Guard ohne Permission-Check (deren Zugriff wird vom RolesGuard / `@KioskAllowed` enforced). Dadurch koennen `@Permissions` auf gemeinsam genutzten Endpoints (z. B. `GET /projects` mit Worker-Pfad) sicher zugefuegt werden, ohne den Worker-Zugang zu blocken. Office/Admin-Tokens werden unveraendert streng geprueft; Notfall-Admin-Wildcard `*` weiterhin respektiert.
+  - Neuer Service-Pfad `getByIdForManager(id, userId)`: laedt das Projekt nur, wenn `internalProjectManagerUserId === userId`, sonst `NotFoundException` (kein 403, damit keine Existenz-Information leakt — konsistent zu `getByIdForWorker`). Controller-Branch fuer `request.user.type === 'kiosk-user'` faengt das.
+  - `setAssignments` komplett in `prisma.$transaction(async (tx) => { … })` gehuellt: Lesen der currentAssignments, Delete, Update, Create laufen jetzt in einer Transaktion; die vorgelagerte Ueberschneidungspruefung bleibt davor (kein Schreib-Roundtrip bei 4xx). Notifications werden nach dem Commit ausserhalb der Transaktion gefeuert (Best-Effort, brechen den DB-Stand nicht).
+  - `GET /export/ical` im Source vor `GET /:id` verschoben — explizit-statische Route gewinnt damit eindeutig.
+  - Optional-Hardening „occurredAtServer fuer Financials": Risiko zu hoch (verschiebt historische Reports), daher als TODO im Code mit Begruendung dokumentiert; Verhalten unveraendert.
+
+- Pruefung durch Claude (Pflicht-Tests):
+  - `pnpm --filter api exec tsc --noEmit` gruen.
+  - Testbenutzer `viewonly@example.local` (PROJECT_MANAGER + Permission `projects.view`) angelegt, JWT geholt, Matrix gefahren:
+    - `GET /projects` → 200
+    - `GET /projects/:id` → 200
+    - `GET /projects/:id/financials` → 200
+    - `GET /projects/export/ical` → 200
+    - `POST /projects` → **403**
+    - `PATCH /projects/:id` → **403**
+    - `POST /projects/:id/assignments` → **403**
+    - `PUT /projects/:id/assignments` → **403**
+    - `POST /projects/:id/billing-ready` → **403**
+    - `DELETE /projects/:id` → **403**
+  - Kiosk-User via PIN-Login (`PROJECT_MANAGER` ohne Backend-Rolle, type=`kiosk-user`):
+    - `GET /projects/:id` (admin-owned) → **404** (kein Leak)
+    - Nach Setzen von `internalProjectManagerUserId=viewonly`: `GET /projects/:id` → **200**, andere Projekte weiterhin **404**.
+    - `GET /projects` (Liste) → genau 1 Eintrag (das eigene Projekt), nicht alle.
+  - `setAssignments`-Atomaritaets-Smoketest: PUT mit nicht-existierendem `workerId` ausgeloest → 500 (Prisma FK), aber `count=2` Assignments unveraendert vor und nach dem Aufruf.
+  - `GET /projects/export/ical` liefert weiterhin 200 mit `Content-Type: text/calendar; charset=utf-8`.
+  - Web-Routen `/customers`, `/projects`, `/dashboard`, `/workers`, `/settings` antworten 200.
+  - Testdaten und temporaere Permission wieder entfernt.
+
+- Restrisiken / offene Punkte:
+  - `occurredAtServer`-Umstellung in `getFinancials` weiterhin offen — als TODO im Code dokumentiert.
+  - Bind-Mount-Stolperfalle aufgefallen: Container laeuft `node dist/main`, nur `apps/api/src` ist gemountet; Quelltext-Aenderungen erfordern `pnpm --filter api build` im Container plus Restart. Ohne den Build greift nichts. (Fuer dev-Workflow ggf. spaeter `start:dev`-Variante einbauen.)
+  - `PermissionsGuard`-Aenderung gilt fuer ALLE Module: Kiosk- und Worker-Tokens passieren jetzt Permission-gateten Endpoints. Da Kiosk/Worker bisher nicht in `@Roles` der `@Permissions`-Endpoints (Planning etc.) standen, hat der RolesGuard diese Tokens ohnehin geblockt — kein Real-World-Effekt nachweisbar. Sollten in Zukunft Kiosk-/Worker-Tokens in `@Roles` von Permission-Endpoints aufgenommen werden, muss bewusst geprueft werden, ob die Bypass-Logik dort gewuenscht ist.
+
+### Projekte-Hardening Restpunkte: strikter Guard + 400 fuer invalid workerIds (Claude)
+
+- Ausgangslage:
+  - Im vorherigen Schritt war der `PermissionsGuard` weichgemacht worden: Worker- und Kiosk-Tokens haben jeden permission-gateten Endpoint passiert. Das war zu grobkoernig.
+  - `setAssignments` warf bei nicht existierenden `workerIds` einen Prisma-FK-Error → 500. Aufrufer konnten nicht erkennen, was schiefgelaufen ist.
+
+- Umsetzung durch Claude:
+  - `PermissionsGuard` zurueckgebaut: kein Worker/Kiosk-Bypass mehr, einzige Ausnahme bleibt das Wildcard `*` fuer Notfall-Admins.
+  - `@Permissions('projects.view')` bewusst von `GET /projects` und `GET /projects/:id` entfernt (mit Code-Kommentar als Begruendung), weil diese Routen explizit `@Roles(WORKER)` + `@KioskAllowed` listen und der RolesGuard / KioskAllowed-Decorator dort die Sicherheit traegt. Worker-/Kiosk-Tokens haben weiterhin keine Permissions, koennen permission-gatete Endpoints also nicht passieren — das ist jetzt das gewuenschte strikte Verhalten.
+  - Alle Schreib-Endpoints und alle office-only Reads (`financials`, `assignment-time-summary`, `export/ical`) behalten ihr `@Permissions(...)`.
+  - `ProjectsService.setAssignments` validiert `data.workerIds` jetzt VOR der Transaktion gegen `worker.findMany`. Unbekannte IDs werden gesammelt und mit `BadRequestException("Ungueltige workerIds: <liste>")` als 400 abgewiesen — kein FK-Fehler mehr, kein Teilupdate. Atomaritaet bleibt erhalten (Pruefung vor Transaktion, dann Delete/Update/Create in `$transaction`).
+
+- Pruefung durch Claude (Tests A/B/C):
+  - **A) Guard-Verhalten** — Office-User mit nur `projects.view`:
+    - PATCH `/projects/:id` → **403** ✅
+    - POST `/projects/:id/assignments` → **403** ✅
+    - PUT `/projects/:id/assignments` → **403** ✅
+    - POST `/projects/:id/billing-ready` → **403** ✅
+    - DELETE `/projects/:id` → **403** ✅
+    - GET `/projects` → **200** ✅
+    - GET `/projects/:id` → **200** ✅
+    - GET `/projects/:id/financials` → **200** ✅
+    - GET `/projects/export/ical` → **200** ✅
+  - **B) Invalid workerIds** — admin-Token:
+    - count vorher = 2
+    - PUT `{"workerIds":["nonexistent_worker_id"], …}` → **HTTP 400**, Body `{"message":"Ungueltige workerIds: nonexistent_worker_id", …}` ✅
+    - count nachher = 2 (kein Teilupdate) ✅
+    - PUT `{"workerIds":["<valid>","bogus_worker_id_xyz"], …}` → **HTTP 400**, Body nennt nur die unbekannte ID; count weiterhin 2 ✅
+  - **C) Smoke**:
+    - GET `/projects` (admin) → 200
+    - GET `/projects/:id` (admin) → 200
+    - PUT `/projects/:id/assignments` mit gueltigem Worker → 200, Antwort enthaelt das aktualisierte Projekt mit 1 Assignment
+    - GET `/projects/export/ical` → 200, `Content-Type: text/calendar; charset=utf-8`
+  - Testbenutzer + temporaere RolePermission danach geloescht.
+
+- Restrisiken:
+  - Workers/Kiosk-User koennen auch andere `@Permissions`-Endpoints (z. B. Planning) nicht mehr ueber den Guard passieren — das war vorher schon dokumentiert und durch RolesGuard ohnehin gesperrt. Kein realer Effekt erwartet.
+
+- Build/Restart-Hinweis: Der Container laeuft `node dist/main`. Aenderungen im `apps/api/src` sind erst nach `docker exec crm-api sh -c 'cd /app && pnpm --filter api build'` plus `docker restart crm-api` aktiv. Wurde fuer dieses Hardening einmalig ausgefuehrt.
+
+### Projekte-Hardening Nachbesserung: projects.view Read-Fence wiederhergestellt (Claude)
+
+- Ausgangslage: Im vorherigen Schritt war `@Permissions('projects.view')` von `GET /projects` und `GET /projects/:id` entfernt worden, damit Worker/Kiosk-Token sie weiter lesen koennen. Konsequenz: jeder authentifizierte Office/PM/Admin-User konnte beide Read-Routen treffen — auch ohne `projects.view`. Das war zu locker.
+
+- Umsetzung durch Claude:
+  - Neuer Decorator `@PermissionsBypassForTokenTypes('worker', 'kiosk-user')` in `apps/api/src/common/decorators/permissions-bypass.decorator.ts`. Setzt Reflector-Metadata `permissionsBypassTokenTypes`.
+  - `PermissionsGuard` liest jetzt zusaetzlich diese Metadata: greift NUR pro Handler, NUR fuer aufgelistete Token-Typen. User-Tokens (Office/PM/Admin) bleiben strikt geprueft. Wildcard `*` (Notfall-Admin) weiterhin gueltig.
+  - `GET /projects` und `GET /projects/:id` haben wieder `@Permissions('projects.view')` und zusaetzlich `@PermissionsBypassForTokenTypes('worker', 'kiosk-user')`. Worker und Kiosk-User passieren via Bypass; ihre Service-Filter (`listForWorker`, `listForManager`, `getByIdForWorker`, `getByIdForManager`) erzwingen die fachliche Zugriffsgrenze.
+
+- Pruefung durch Claude:
+  - **A) Office-User OHNE `projects.view`**:
+    - `GET /projects` → **403** (Body: `Fehlende Berechtigung: projects.view`) ✅
+    - `GET /projects/:id` → **403** ✅
+    - `GET /projects/:id/financials` → **403** ✅
+    - `GET /projects/export/ical` → **403** ✅
+  - **B) Worker/Kiosk passieren weiter**:
+    - Kiosk-User (PIN-Login, type=`kiosk-user`):
+      - `GET /projects` → 200, `count=0` (keine eigene Projekte)
+      - `GET /projects/:id` (admin-owned) → 404 (kein Leak)
+      - Nach `internalProjectManagerUserId=kioskUser`: `GET /projects/:id` (own) → 200, `GET /projects/:id` (foreign) → 404, `GET /projects` → `count=1`
+    - Worker-Token (PIN-Login, type=`worker`):
+      - `GET /projects` → 200, `count=2` (zugewiesene)
+      - `GET /projects/:id` (random nicht zugewiesenes) → 404
+      - `GET /projects/:id` (eigenes zugewiesenes) → 200
+  - **C) Smoke fuer Writes/Edits**:
+    - admin: PATCH 200, PUT (non-overlapping) 200, POST `billing-ready` 201, GET `/export/ical` 200.
+    - noview (PROJECT_MANAGER, ohne Permissions): PATCH 403, PUT 403, POST `billing-ready` 403, DELETE 403, GET `/export/ical` 403 ✅
+    - Bekanntes 400 bei PUT mit ueberlappendem Range = legitime Overlap-Pruefung (kein Regression-Fall).
+  - Testbenutzer wieder geloescht.
+
+- Build/Restart-Hinweis: Container laeuft `node dist/main`. Neue Decorator-Datei + geaenderte Guard/Controller wurden via `docker cp` synchronisiert, dann `pnpm --filter api build` im Container und `docker restart crm-api`. Beim regulaeren Image-Rebuild kein zusaetzlicher Schritt noetig.
+
+### Kunden + Monteure Hardening (Claude)
+
+- Ausgangslage:
+  - `customers.controller` und `workers.controller` hatten gar keine `@Permissions(...)`-Decorators — Office-Konten ohne `customers.edit`/`workers.edit` etc. konnten alles schreiben/loeschen.
+  - `customers.service.update` arbeitete destruktiv: `deleteMany branches` + `deleteMany contacts`, dann Re-Insert. Konsequenz: jeder Edit setzte `Project.primaryCustomerContactId` (FK `onDelete: SetNull`) auf NULL, ohne dass der Anwender es merkte.
+  - `branchName`-Lookup pro Kontakt fiel auf eine `Map.get(name)` zurueck — bei doppelten Namen war das Resultat reihenfolgeabhaengig.
+  - `workers.service.remove` zaehlte ALLE TimeEntry-Records, sagte aber „offene Zeitbuchungen" — fachlich irrefuehrend.
+  - `GET /workers/:id/photo/file` war fuer `WORKER`-Token offen, hat aber NICHT geprueft, dass `request.user.sub === id`. Worker konnten Fotos anderer Monteure abrufen.
+  - Frontend zeigte „Neu/Loeschen"-Buttons ungated — UX-mismatch zu Server-Permissions.
+
+- Umsetzung durch Claude:
+  - `customers.controller`: `@Permissions('customers.view'|create|edit|delete)` an alle 6 Endpoints (View, GetById, Financials, Create, Patch, Delete). `@Roles` bleibt.
+  - `workers.controller`: `@Permissions('workers.view'|create|edit|delete)` an alle 9 Endpoints inkl. PIN-Reset (`workers.edit`), Photo-Upload/Delete (`workers.edit`), Photo-Serve (`workers.view`).
+  - `GET /workers/:id/photo/file` zusaetzlich:
+    - `@PermissionsBypassForTokenTypes('worker', 'kiosk-user')` damit Worker/Kiosk durch den Permission-Guard kommen,
+    - im Handler explizit: `if (request.user?.type === 'worker' && request.user.sub !== id) throw ForbiddenException('Zugriff auf fremdes Profilbild verweigert.')`. Office/Admin/Kiosk unveraendert.
+  - `workers.service.remove`: trennt `CLOCK_IN`/`CLOCK_OUT`-Counts, baut die Meldung passend („noch X offene Zeitbuchung(en) und insgesamt Y historische Eintraege" vs. „Y historische Zeitbuchung(en)"). Verhalten = bisher (jede Buchung blockt Delete), Meldung jetzt ehrlich.
+  - `customers.service.update`: komplett neu auf Diff-basis.
+    - Pre-Check: `branchName`-Mehrdeutigkeit wird vor der Transaktion gefunden; bei Konflikt 400 mit Liste der mehrdeutigen Namen.
+    - Branches: existierende mit `id` UPDATE, neue ohne `id` CREATE, im DTO fehlende DELETE. IDs bleiben fuer unveraenderte Standorte erhalten.
+    - Contacts: gleiches Diff-Pattern. **Kritisch**: `Project.primaryCustomerContactId` bleibt fuer unveraenderte Kontakte intakt, weil deren ID nicht mehr neu vergeben wird. Loeschen geschieht nur fuer im DTO bewusst entfernte Kontakte (Sett-Null auf Project.primaryCustomerContactId ist dann gewollt).
+  - Frontend (`crm-app.tsx`):
+    - Neue Konstanten `canCreateCustomer`, `canDeleteCustomer`, `canCreateWorker`, `canDeleteWorker`.
+    - „Neuer Kunde" + Customer-`onEdit`/`onDelete` werden per Permission-Flag gerendert/uebergeben.
+    - „Neuer Monteur" + Worker-`onDelete` analog.
+    - `EntityList.onDelete` ist jetzt optional → Delete-Button verschwindet, wenn kein Handler uebergeben wurde.
+
+- Pruefung durch Claude (Tests A/B/C/D):
+  - **A) Permission-Matrix** (Office-User mit nur `customers.view`+`workers.view`):
+    - Customers: GET 200, GET/:id 200, /financials 200; POST 403, PATCH 403, DELETE 403 ✅
+    - Workers: GET 200, GET/:id 200; POST 403, PATCH 403, PIN-Reset 403, Photo POST 403, Photo DELETE 403, DELETE 403 ✅
+  - **B) Worker-Foto Ownership**:
+    - Worker A → eigene `/workers/<A>/photo/file`: 404 (kein Foto vorhanden, aber Guard passierte) ✅
+    - Worker A → fremde `/workers/<B>/photo/file`: **403** Body `{"message":"Zugriff auf fremdes Profilbild verweigert."}` ✅
+    - Admin → beide: 404 (Foto fehlt; Guard passiert) ✅
+  - **C) Customer-Update Integritaet**:
+    - PATCH mit gleichem Contact-Array (mit `id`-Feld) + geaendertem `phoneMobile`: Contact behaelt `id` (vorher: neue ID).
+    - `Project.primaryCustomerContactId` BLEIBT bei `sample-contact` (vorher wurde das stillschweigend NULL).
+    - Branch-Mehrdeutigkeit: PATCH mit zwei Standorten gleichen Namens + Kontakt mit `branchName` → **400** Body `{"message":"Mehrdeutige branchName-Referenzen: Hauptsitz. Bitte branchId verwenden oder Standorte eindeutig benennen."}` ✅
+  - **C-Zusatz** (Worker-Remove-Meldung): DELETE Worker mit 58 Time-Entries → 400 Body `{"message":"Monteur kann nicht geloescht werden: 58 historische Zeitbuchung(en)."}` ✅
+  - **D) Web-Smoke**: `/customers`, `/workers`, `/projects`, `/dashboard`, `/settings` → alle 200 ✅
+  - Test-User + Test-RolePermissions wieder geloescht.
+
+- Migrationshinweis: KEINE Schema-/DB-Migration noetig — alle Aenderungen sind reine Service- und Decorator-Logik.
+
+- Restrisiken:
+  - Diff-Update setzt voraus, dass die Frontend-Forms beim Edit die existierenden Contact/Branch-`id`s mit zuruecksenden. Die DTO erlaubt `id` schon, der CustomerFormBody arbeitet bereits mit den Original-Items aus dem Detail-Fetch — sollte funktionieren. Wenn ein Frontend-Feature beim Speichern bewusst `id` weglaesst (z. B. Bulk-Import), wuerde es die Items als „neu" interpretieren und alte Items als „entfernt" loeschen. Bei zukuenftigen Form-Aenderungen darauf achten.
+  - Worker-Remove blockt weiterhin bei rein historischen Entries (so gewuenscht — Reports duerfen keine Luecken bekommen). Wer wirklich loeschen will, muss zuerst die Entries umhaengen oder den Worker deaktivieren (`active=false`).
+  - Branch-Eindeutigkeit nur weich (per-Request-Validierung), nicht als DB-Constraint. Eine zukuenftige Migration koennte `@@unique([customerId, name])` setzen — bewusst nicht jetzt, weil es Bestandsdaten validieren muesste.
+  - Frontend: noch nicht alle DetailCard-Header-Buttons gegated (Customer-Header `onEdit` wird schon ueber `canEditCustomer` gefiltert, Worker analog). Die Listenansichten und EntityList sind sauber gegated.
+
+- Build/Restart-Hinweis: Container laeuft `node dist/main`. Aenderungen via `docker cp` synchronisiert, dann `pnpm --filter api build` im Container und `docker restart crm-api` — sonst wirken die Decorator-/Service-Aenderungen nicht.
+
+## 2026-05-04 — Sicherheits-Nachsteuerung Worker-Foto + Doc-Upload (Claude)
+
+- Fachziel: Monteur (PIN-Login) darf Baustellenbilder im zugewiesenen Projekt hochladen, hat aber keinen pauschalen Lesezugriff auf fremde Monteur-Profilbilder. Kiosk-User analog auf eigene/zugewiesene Projekte einschraenken; kein Worker-Foto-Pauschalzugriff.
+- Aenderungsliste (klein gehalten):
+  - `apps/api/src/workers/workers.controller.ts` — `GET :id/photo/file`:
+    - `@PermissionsBypassForTokenTypes('worker', 'kiosk-user')` reduziert auf `@PermissionsBypassForTokenTypes('worker')`.
+    - Effekt: Kiosk-User-Token erfuellt `workers.view`-Permission nicht und scheitert am `PermissionsGuard`. Worker-Token kommt durch und wird im Handler durch die bestehende ID-Pruefung (`request.user.sub === id`) auf das eigene Foto begrenzt.
+    - Doc-Kommentar des Handlers an die neue Semantik angepasst.
+  - `apps/api/src/documents/documents.controller.ts` — `POST upload`:
+    - Worker-Branch: `entityType !== 'PROJECT' || !entityId` → `ForbiddenException('Monteure duerfen nur Dokumente fuer Projekte hochladen.')` (vorher 400 BadRequest).
+    - Kiosk-Branch: analog `ForbiddenException('Kiosk-User duerfen nur Dokumente fuer Projekte hochladen.')`.
+    - HTTP-Semantik: 403 entspricht „authz fehlt", nicht „DTO syntaktisch falsch".
+  - `apps/api/src/documents/documents.service.ts`:
+    - `assertProjectAssignment` und `assertKioskProjectAccess` werfen jetzt `ForbiddenException` mit klaren Meldungen (vorher BadRequest).
+    - `ForbiddenException` zu Imports hinzugefuegt.
+
+- Testprotokoll (nach `pnpm --filter api build` + `docker restart crm-api`):
+  - Worker-Foto-Matrix:
+    - Worker A → eigenes Foto: **HTTP 404** (kein Foto vorhanden, Guard passierte) ✅
+    - Worker A → Worker B Foto: **HTTP 403** Body `Zugriff auf fremdes Profilbild verweigert.` ✅
+    - Worker B → Worker A Foto: **HTTP 403** Body `Zugriff auf fremdes Profilbild verweigert.` ✅
+    - Kiosk-User (PROJECT_MANAGER) → Worker A Foto: **HTTP 403** Body `Dieser Endpunkt ist fuer Kiosk-Benutzer nicht freigegeben.` ✅
+    - Admin → Worker A/B Foto: **HTTP 404** (kein Foto vorhanden, Guard passierte) ✅
+  - Dokument-Upload-Matrix (`documentType=FOTO` Fixture):
+    - Worker A → zugewiesenes Projekt (`P-2026-001`): **HTTP 201** ✅
+    - Worker A → fremdes Projekt: **HTTP 403** Body `Kein Upload-Zugriff: Projekt ist diesem Monteur nicht zugewiesen.` ✅
+    - Worker A → entityType=CUSTOMER: **HTTP 403** Body `Monteure duerfen nur Dokumente fuer Projekte hochladen.` ✅
+    - Worker A → entityType=WORKER (eigene ID): **HTTP 403** Body `Monteure duerfen nur Dokumente fuer Projekte hochladen.` ✅
+    - Kiosk-User → nicht-verwaltetes Projekt: **HTTP 403** Body `Kein Upload-Zugriff: Projekt wird von diesem Kiosk-User nicht verwaltet.` ✅
+    - Kiosk-User → entityType=CUSTOMER: **HTTP 403** Body `Kiosk-User duerfen nur Dokumente fuer Projekte hochladen.` ✅
+    - Admin → Projekt: **HTTP 201** ✅
+    - Admin → Customer: **HTTP 201** ✅
+  - Test-Fixtures (8 Smoketest-Dokumente + temporaerer Kiosk-PM-User `test_pm_kiosk_001`) wieder geloescht.
+
+- Build/Restart-Hinweis: Erforderlich. Container laeuft `node dist/main`, daher `docker cp` der geaenderten Sources, anschliessend `pnpm --filter api build` im Container und `docker restart crm-api`. Ohne Restart bleiben die Guard-/Service-Aenderungen unwirksam.
+
+- Migrationshinweis: KEINE Schema-/DB-Migration noetig — reine Decorator-/Service-Logik.
+
+- Restrisiken:
+  - Worker-Token-Inhaber sehen weiterhin die eigene Worker-Ressource (`workers/:id` mit eigener ID) ueber andere Endpunkte; nur `photo/file` ist betroffen. Falls weitere `/workers/:id/...`-Subpfade dieselbe „eigene-Ressource"-Logik brauchen, denselben Pattern (`@PermissionsBypassForTokenTypes('worker')` + Handler-ID-Check) anwenden.
+  - Kiosk-User mit OFFICE/SUPERADMIN-Rolle treffen den `kiosk-user`-Pfad nicht — `auth.service.ts` setzt fuer Backend-Rollen `tokenType='user'`. Office-Kiosk-Admins haben damit volle Worker-Foto-Rechte ueber `workers.view`. Fachlich gewollt.

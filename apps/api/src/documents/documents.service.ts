@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -187,11 +188,17 @@ export class DocumentsService {
   }
 
   async assertProjectAssignment(workerId: string, projectId: string) {
+    // Sicherheits-Pruefung: Worker-Token darf nur Dokumente fuer Projekte
+    // hochladen, denen er aktiv zugewiesen ist. Bei Verstoss bewusst 403
+    // (Forbidden) statt 400 — die DTO ist syntaktisch korrekt, fehlend
+    // ist die Berechtigung.
     const assignment = await this.prisma.projectAssignment.findFirst({
       where: { workerId, projectId, active: true },
     });
     if (!assignment) {
-      throw new BadRequestException('No assignment to this project.');
+      throw new ForbiddenException(
+        'Kein Upload-Zugriff: Projekt ist diesem Monteur nicht zugewiesen.',
+      );
     }
   }
 
@@ -202,7 +209,9 @@ export class DocumentsService {
       select: { id: true },
     });
     if (!managedProjects.some((p) => p.id === projectId)) {
-      throw new BadRequestException('No access to this project.');
+      throw new ForbiddenException(
+        'Kein Upload-Zugriff: Projekt wird von diesem Kiosk-User nicht verwaltet.',
+      );
     }
   }
 

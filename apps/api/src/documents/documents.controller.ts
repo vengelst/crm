@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -70,11 +71,14 @@ export class DocumentsController {
     @Body() dto: UploadDocumentDto,
     @Req() request: RequestWithUser,
   ) {
-    // Worker: nur Projekt-Dokumente fuer zugewiesene Projekte
+    // Worker: ausschliesslich Projekt-Dokumente fuer aktiv zugewiesene
+    // Projekte. Andere Entity-Typen (CUSTOMER/WORKER) und fremde Projekte
+    // werden mit 403 abgewiesen — der Worker-Token darf bewusst keinen
+    // Zugriff auf Kunden- oder Monteur-Akten haben.
     if (request.user?.type === 'worker') {
       if (dto.entityType !== 'PROJECT' || !dto.entityId) {
-        throw new BadRequestException(
-          'Workers may only upload project documents.',
+        throw new ForbiddenException(
+          'Monteure duerfen nur Dokumente fuer Projekte hochladen.',
         );
       }
       await this.documentsService.assertProjectAssignment(
@@ -83,11 +87,12 @@ export class DocumentsController {
       );
     }
 
-    // kiosk-user: nur Projekt-Dokumente fuer verwaltete Projekte
+    // Kiosk-User: gleiche Regel — nur Projekte, die dieser interne PM
+    // verwaltet. Kein Schreibzugriff auf Kunden-/Monteurakten.
     if (request.user?.type === 'kiosk-user') {
       if (dto.entityType !== 'PROJECT' || !dto.entityId) {
-        throw new BadRequestException(
-          'Kiosk users may only upload project documents.',
+        throw new ForbiddenException(
+          'Kiosk-User duerfen nur Dokumente fuer Projekte hochladen.',
         );
       }
       await this.documentsService.assertKioskProjectAccess(

@@ -216,19 +216,33 @@ export class CustomersService {
       }
     }
 
+    // Branch-Lookup-Validierung VOR der Transaktion: wenn ein Kontakt
+    // einen `branchName` (statt `branchId`) referenziert, muss der Name
+    // unter den Branches dieses Kunden eindeutig sein. Mehrdeutige
+    // Treffer werden mit 400 abgewiesen — sonst wuerde das Resultat
+    // davon abhaengen, welche Branch zuerst angelegt wurde.
+    if (dto.contacts && dto.branches) {
+      const nameOccurrences = new Map<string, number>();
+      for (const b of dto.branches) {
+        if (!b.name) continue;
+        nameOccurrences.set(b.name, (nameOccurrences.get(b.name) ?? 0) + 1);
+      }
+      const duplicateNames = [...nameOccurrences.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([name]) => name);
+      const ambiguousReferences = (dto.contacts ?? [])
+        .filter((c) => !c.branchId && c.branchName)
+        .map((c) => c.branchName as string)
+        .filter((name) => duplicateNames.includes(name));
+      if (ambiguousReferences.length > 0) {
+        const unique = Array.from(new Set(ambiguousReferences));
+        throw new BadRequestException(
+          `Mehrdeutige branchName-Referenzen: ${unique.join(', ')}. Bitte branchId verwenden oder Standorte eindeutig benennen.`,
+        );
+      }
+    }
+
     return this.prisma.$transaction(async (tx) => {
-      if (dto.branches) {
-        await tx.customerBranch.deleteMany({
-          where: { customerId: id },
-        });
-      }
-
-      if (dto.contacts) {
-        await tx.customerContact.deleteMany({
-          where: { customerId: id },
-        });
-      }
-
       await tx.customer.update({
         where: { id },
         data: {
@@ -250,62 +264,161 @@ export class CustomersService {
         },
       });
 
-      if (dto.branches?.length) {
-        await Promise.all(
-          dto.branches.map((branch) =>
-            tx.customerBranch.create({
+      // ── Branches: diff-basiert (Update existing, Create new, Delete missing).
+      // Vorher wurde alles geloescht und neu angelegt — das hat IDs gewechselt
+      // und damit `Project.branchId`-Referenzen still gekappt (onDelete:
+      // SetNull). Diff-basiert bleibt die ID der unveraenderten Standorte
+      // erhalten.
+      if (dto.branches) {
+        const existingBranches = await tx.customerBranch.findMany({
+          where: { customerId: id },
+        });
+        const existingById = new Map(existingBranches.map((b) => [b.id, b]));
+        const dtoIds = new Set(
+          dto.branches.map((b) => b.id).filter((x): x is string => !!x),
+        );
+
+        // Update vorhandene mit `id`
+        for (const dtoBranch of dto.branches) {
+          if (dtoBranch.id && existingById.has(dtoBranch.id)) {
+            await tx.customerBranch.update({
+              where: { id: dtoBranch.id },
+              data: {
+                name: dtoBranch.name,
+                addressLine1: dtoBranch.addressLine1,
+                addressLine2: dtoBranch.addressLine2,
+                postalCode: dtoBranch.postalCode,
+                city: dtoBranch.city,
+                country: dtoBranch.country,
+                phone: dtoBranch.phone,
+                email: dtoBranch.email,
+                notes: dtoBranch.notes,
+                active: dtoBranch.active ?? true,
+              },
+            });
+          }
+        }
+
+        // Neue ohne `id` anlegen
+        for (const dtoBranch of dto.branches) {
+          if (!dtoBranch.id) {
+            await tx.customerBranch.create({
               data: {
                 customerId: id,
-                name: branch.name,
-                addressLine1: branch.addressLine1,
-                addressLine2: branch.addressLine2,
-                postalCode: branch.postalCode,
-                city: branch.city,
-                country: branch.country,
-                phone: branch.phone,
-                email: branch.email,
-                notes: branch.notes,
-                active: branch.active ?? true,
+                name: dtoBranch.name,
+                addressLine1: dtoBranch.addressLine1,
+                addressLine2: dtoBranch.addressLine2,
+                postalCode: dtoBranch.postalCode,
+                city: dtoBranch.city,
+                country: dtoBranch.country,
+                phone: dtoBranch.phone,
+                email: dtoBranch.email,
+                notes: dtoBranch.notes,
+                active: dtoBranch.active ?? true,
               },
-            }),
-          ),
-        );
+            });
+          }
+        }
+
+        // Wegfallende Branches (im DTO nicht mehr aufgelistet) loeschen.
+        // FK auf Project.branchId hat onDelete=SetNull — Projekte werden
+        // also genullt, was beim absichtlichen Entfernen erwuenscht ist.
+        const toDeleteIds = existingBranches
+          .filter((b) => !dtoIds.has(b.id))
+          .map((b) => b.id);
+        if (toDeleteIds.length > 0) {
+          await tx.customerBranch.deleteMany({
+            where: { id: { in: toDeleteIds } },
+          });
+        }
       }
 
-      if (dto.contacts?.length) {
-        const branches = await tx.customerBranch.findMany({
-          where: {
-            customerId: id,
-          },
+      // ── Contacts: diff-basiert. Kritisch: Project.primaryCustomerContactId
+      // hat onDelete=SetNull. Wenn ein bestehender Kontakt unveraendert bleibt,
+      // muss seine ID erhalten bleiben — sonst werden alle daran haengenden
+      // Projekte still ihre Hauptansprechperson verlieren.
+      if (dto.contacts) {
+        const existingContacts = await tx.customerContact.findMany({
+          where: { customerId: id },
         });
-        const branchIdByName = new Map(
-          branches.map((branch) => [branch.name, branch.id]),
+        const existingById = new Map(existingContacts.map((c) => [c.id, c]));
+        const dtoIds = new Set(
+          dto.contacts.map((c) => c.id).filter((x): x is string => !!x),
         );
 
-        await Promise.all(
-          dto.contacts.map((contact) =>
-            tx.customerContact.create({
+        // BranchName→ID Aufloesung (nach Branch-Sync, damit neue Branches
+        // bereits IDs haben). Eindeutigkeit ist oben validiert.
+        const branchesAfterSync = await tx.customerBranch.findMany({
+          where: { customerId: id },
+        });
+        const branchIdByName = new Map(
+          branchesAfterSync.map((b) => [b.name, b.id]),
+        );
+
+        // Update existing
+        for (const dtoContact of dto.contacts) {
+          if (dtoContact.id && existingById.has(dtoContact.id)) {
+            await tx.customerContact.update({
+              where: { id: dtoContact.id },
+              data: {
+                branchId:
+                  dtoContact.branchId ??
+                  (dtoContact.branchName
+                    ? (branchIdByName.get(dtoContact.branchName) ?? null)
+                    : null),
+                firstName: dtoContact.firstName,
+                lastName: dtoContact.lastName,
+                role: dtoContact.role,
+                email: dtoContact.email,
+                phoneMobile: dtoContact.phoneMobile,
+                phoneLandline: dtoContact.phoneLandline,
+                isAccountingContact: dtoContact.isAccountingContact ?? false,
+                isProjectContact: dtoContact.isProjectContact ?? false,
+                isSignatory: dtoContact.isSignatory ?? false,
+                notes: dtoContact.notes,
+              },
+            });
+          }
+        }
+
+        // Create new (ohne id)
+        for (const dtoContact of dto.contacts) {
+          if (!dtoContact.id) {
+            await tx.customerContact.create({
               data: {
                 customerId: id,
                 branchId:
-                  contact.branchId ??
-                  (contact.branchName
-                    ? branchIdByName.get(contact.branchName)
+                  dtoContact.branchId ??
+                  (dtoContact.branchName
+                    ? branchIdByName.get(dtoContact.branchName)
                     : undefined),
-                firstName: contact.firstName,
-                lastName: contact.lastName,
-                role: contact.role,
-                email: contact.email,
-                phoneMobile: contact.phoneMobile,
-                phoneLandline: contact.phoneLandline,
-                isAccountingContact: contact.isAccountingContact ?? false,
-                isProjectContact: contact.isProjectContact ?? false,
-                isSignatory: contact.isSignatory ?? false,
-                notes: contact.notes,
+                firstName: dtoContact.firstName,
+                lastName: dtoContact.lastName,
+                role: dtoContact.role,
+                email: dtoContact.email,
+                phoneMobile: dtoContact.phoneMobile,
+                phoneLandline: dtoContact.phoneLandline,
+                isAccountingContact: dtoContact.isAccountingContact ?? false,
+                isProjectContact: dtoContact.isProjectContact ?? false,
+                isSignatory: dtoContact.isSignatory ?? false,
+                notes: dtoContact.notes,
               },
-            }),
-          ),
-        );
+            });
+          }
+        }
+
+        // Loeschen, was im DTO nicht mehr ist. Project.primaryCustomerContactId
+        // wird dadurch fuer entfernte Kontakte korrekt auf NULL gesetzt
+        // (onDelete=SetNull) — das ist hier explizit gewuenscht, weil der
+        // Anwender den Kontakt aktiv aus der Liste genommen hat.
+        const toDeleteIds = existingContacts
+          .filter((c) => !dtoIds.has(c.id))
+          .map((c) => c.id);
+        if (toDeleteIds.length > 0) {
+          await tx.customerContact.deleteMany({
+            where: { id: { in: toDeleteIds } },
+          });
+        }
       }
 
       return tx.customer.findUniqueOrThrow({

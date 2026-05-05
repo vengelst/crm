@@ -7,6 +7,10 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+import {
+  BypassTokenType,
+  PERMISSIONS_BYPASS_KEY,
+} from '../decorators/permissions-bypass.decorator';
 
 type RequestWithUser = Request & {
   user?: {
@@ -22,12 +26,18 @@ type RequestWithUser = Request & {
  * `request.user.permissions` from the database (single source of truth –
  * never trust the JWT payload for fine-grained authz).
  *
- * If the endpoint or controller is decorated with `@Permissions(...)`, this
- * guard checks the authenticated user holds ALL listed permission codes.
- * Endpoints without `@Permissions` metadata are unaffected.
+ * Wenn ein Endpoint oder Controller mit `@Permissions(...)` markiert ist,
+ * verlangt dieser Guard, dass der authentifizierte Nutzer ALLE genannten
+ * Codes haelt. Endpoints ohne `@Permissions`-Metadaten werden nicht
+ * beeinflusst.
  *
- * Worker tokens have no fine-grained permissions, so any worker hitting a
- * permission-protected endpoint is rejected.
+ * Ausnahmen:
+ *  - Notfall-Admin / Wildcard-Token (`permissions=["*"]`): passiert immer.
+ *  - Per-Handler-Bypass via `@PermissionsBypassForTokenTypes('worker',
+ *    'kiosk-user')`: aufgelistete Token-Typen passieren NUR an dem
+ *    markierten Handler. Restliche Token-Typen werden weiterhin streng
+ *    geprueft. Diese Ausnahme ist explizit pro Endpoint zu setzen, damit
+ *    es keinen versteckten globalen Bypass gibt.
  */
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -54,18 +64,28 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('Nicht authentifiziert.');
     }
 
-    if (user.type === 'worker') {
-      throw new ForbiddenException(
-        'Dieser Endpunkt ist fuer Monteure nicht freigegeben.',
-      );
-    }
-
     const held = user.permissions ?? [];
 
     // Notfall-Admin / Wildcard: Token traegt "*" als Sentinel, der jede
     // Permission-Anforderung deckt. Ohne diese Sonderbehandlung wuerde
     // Break-Glass-Admin an permission-gateten Endpoints scheitern.
     if (held.includes('*')) {
+      return true;
+    }
+
+    // Per-Handler-Bypass fuer bestimmte Token-Typen (z. B. worker, kiosk-
+    // user auf gemeinsam genutzten Read-Endpoints). Wirkt nur, wenn am
+    // jeweiligen Handler explizit `@PermissionsBypassForTokenTypes(...)`
+    // gesetzt wurde — kein globaler Bypass.
+    const bypassTokenTypes =
+      this.reflector.getAllAndOverride<BypassTokenType[]>(
+        PERMISSIONS_BYPASS_KEY,
+        [context.getHandler(), context.getClass()],
+      ) ?? [];
+    if (
+      bypassTokenTypes.length > 0 &&
+      (bypassTokenTypes as string[]).includes(user.type)
+    ) {
       return true;
     }
 

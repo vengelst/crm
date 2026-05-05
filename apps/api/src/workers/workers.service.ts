@@ -280,13 +280,27 @@ export class WorkersService {
   async remove(id: string) {
     await this.getById(id);
 
-    // Pruefen ob offene Zeitbuchungen existieren
-    const openEntries = await this.prisma.timeEntry.count({
+    // Schutz: solange Zeitbuchungen historisch oder offen existieren,
+    // verhindern wir das Loeschen — Auswertungen wuerden sonst Luecken
+    // bekommen. Die Meldung trennt jetzt klar zwischen "noch nicht
+    // geschlossen" und "historisch", damit Anwender wissen, wieso sie
+    // den Datensatz nicht entfernen koennen.
+    const totalEntries = await this.prisma.timeEntry.count({
       where: { workerId: id },
     });
-    if (openEntries > 0) {
+    if (totalEntries > 0) {
+      const openClockIns = await this.prisma.timeEntry.count({
+        where: { workerId: id, entryType: 'CLOCK_IN' },
+      });
+      const closedEntries = await this.prisma.timeEntry.count({
+        where: { workerId: id, entryType: 'CLOCK_OUT' },
+      });
+      const hasOpen = openClockIns > closedEntries;
+      const reason = hasOpen
+        ? `noch ${openClockIns - closedEntries} offene Zeitbuchung(en) und insgesamt ${totalEntries} historische Eintraege`
+        : `${totalEntries} historische Zeitbuchung(en)`;
       throw new BadRequestException(
-        `Monteur kann nicht geloescht werden, da noch ${openEntries} Zeitbuchung(en) vorhanden sind.`,
+        `Monteur kann nicht geloescht werden: ${reason}.`,
       );
     }
 

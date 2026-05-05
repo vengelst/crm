@@ -28,7 +28,10 @@ export function EntityList<T extends { id: string }>({
   deleteLabel: string;
   onOpen?: (item: T) => void;
   onEdit?: (item: T) => void;
-  onDelete: (item: T) => void;
+  /** Optional — wenn nicht gesetzt, wird der Delete-Button nicht
+   *  gerendert. Frontend-Gating erfolgt durch das Aufrufer-Modul (z. B.
+   *  per `hasPermission(auth, "*.delete")`). */
+  onDelete?: (item: T) => void;
   /** Optionaler Render-Slot fuer kleine Kennzahlen / Badges neben dem Titel. */
   badges?: (item: T) => ReactNode;
 }) {
@@ -75,14 +78,16 @@ export function EntityList<T extends { id: string }>({
                 {editLabel}
               </SecondaryButton>
             ) : null}
-            <SecondaryButton
-              onClick={(event) => {
-                event.stopPropagation();
-                onDelete(item);
-              }}
-            >
-              {deleteLabel}
-            </SecondaryButton>
+            {onDelete ? (
+              <SecondaryButton
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete(item);
+                }}
+              >
+                {deleteLabel}
+              </SecondaryButton>
+            ) : null}
           </div>
         </div>
       ))}
