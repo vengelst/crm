@@ -110,6 +110,17 @@ model User {
   createdOfficeReminders  OfficeReminder[] @relation("OfficeReminderCreator")
   completedOfficeReminders OfficeReminder[] @relation("OfficeReminderCompleter")
   createdBackups Backup[] @relation("BackupCreator")
+  planningScenarios PlanningScenario[] @relation("PlanningScenarioCreator")
+  planningActuals PlanningActualMonthly[] @relation("PlanningActualCreator")
+  planningVersions PlanningScenarioVersion[] @relation("PlanningVersionChanger")
+  planningImports PlanningImportJob[] @relation("PlanningImportCreator")
+  planningAlertRules PlanningAlertRule[] @relation("PlanningAlertRuleCreator")
+  planningAlertsAcknowledged PlanningAlert[] @relation("PlanningAlertAcknowledger")
+  planningAlertsResolved PlanningAlert[] @relation("PlanningAlertResolver")
+  planningDecisionLogs PlanningScenarioDecisionLog[] @relation("PlanningDecisionActor")
+  planningBaselinesSet PlanningBaseline[] @relation("PlanningBaselineSetter")
+  planningBudgetItemsCreated PlanningBudgetItem[] @relation("PlanningBudgetItemCreator")
+  planningPipelineOwned PlanningPipelineItem[] @relation("PlanningPipelineOwner")
 }
 
 model Role {
@@ -865,4 +876,406 @@ model Backup {
 
   @@index([status, createdAt])
   @@index([storageType])
+}
+
+/// Planungsszenarien fuer das Ertragsplanungstool. Persistente Eingaben zu
+/// Teamgroesse, Stunden, Saetzen und Kosten — die Periodenkennzahlen
+/// (Woche/Monat/Quartal/Halbjahr) werden im Frontend abgeleitet.
+model PlanningScenario {
+  id                          String   @id @default(cuid())
+  name                        String
+  description                 String?
+  teamsPerWeek                Float
+  workersPerTeam              Float
+  costPerWorkerWeek           Float
+  regularHoursPerWorkerWeek   Float
+  overtimeHoursPerWorkerWeek  Float
+  regularRatePerHour          Float
+  overtimeRatePerHour         Float
+  weeksPerMonth               Float    @default(4.33)
+  /// Optionale Zielwerte fuer Reporting-Dashboards (Ist vs. Ziel-Ampel).
+  targetMonthlyRevenue        Float?
+  targetMonthlyMargin         Float?
+  targetMarginPercent         Float?
+  createdByUserId             String
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  /// Lifecycle: DRAFT | IN_REVIEW | APPROVED | REJECTED | ARCHIVED.
+  /// Strings statt Enum, damit zusaetzliche Schritte (z. B. PUBLISHED)
+  /// nachgereicht werden koennen ohne Migration.
+  status                      String   @default("DRAFT")
+  /// Bei REJECTED gespeicherter Pflichtkommentar (Anzeige im Detail).
+  /// Wird auch als letzter Eintrag im DecisionLog redundant gepflegt.
+  rejectionReason             String?
+  /// Optionaler Standort-/Einheiten-Tag fuer Mehrstandort-Filterung.
+  locationId                  String?
+  businessUnitId              String?
+  createdBy                   User     @relation("PlanningScenarioCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  location                    PlanningLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  businessUnit                PlanningBusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  versions                    PlanningScenarioVersion[]
+  alertRules                  PlanningAlertRule[] @relation("PlanningAlertRuleScenario")
+  baselines                   PlanningBaseline[]
+  decisionLog                 PlanningScenarioDecisionLog[]
+  budgetItems                 PlanningBudgetItem[]
+  cashflowConfig              PlanningCashflowConfig?
+  capacityProfiles            PlanningCapacityProfile[]
+
+  @@index([createdByUserId, updatedAt])
+  @@index([name])
+  @@index([status])
+  @@index([locationId])
+  @@index([businessUnitId])
+}
+
+/// Monatliche Ist-Werte fuer das Controlling-Modul. Global (nicht
+/// szenariospezifisch); der Vergleich gegen ein konkretes Szenario erfolgt im
+/// Plan-vs-Ist-Endpoint pro Anfrage.
+model PlanningActualMonthly {
+  id                  String   @id @default(cuid())
+  year                Int
+  month               Int      // 1..12
+  actualRevenue       Float
+  actualCost          Float
+  actualHours         Float?
+  actualOvertimeHours Float?
+  /// "manual" oder "import" — fuer spaetere Importauto-Pipeline.
+  source              String   @default("manual")
+  note                String?
+  createdByUserId     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  createdBy           User?    @relation("PlanningActualCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([year, month])
+  @@index([year, month])
+}
+
+/// Versions-Snapshots eines Szenarios. Jede PATCH-/Restore-Operation legt eine
+/// neue Version an; auf Wunsch laesst sich eine alte Version wiederherstellen.
+model PlanningScenarioVersion {
+  id              String   @id @default(cuid())
+  scenarioId      String
+  versionNumber   Int
+  /// Vollstaendiger Snapshot der Eingabe + Targets als JSON.
+  snapshotJson    Json
+  changeNote      String?
+  changedByUserId String?
+  changedAt       DateTime @default(now())
+  scenario        PlanningScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  changedBy       User?    @relation("PlanningVersionChanger", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([scenarioId, versionNumber])
+  @@index([scenarioId, changedAt])
+}
+
+/// Protokoll fuer Datenimporte (CSV / spaetere Connectors). Speichert nur
+/// den Header-Status; ein gekuerzter Fehlerreport wird inline als JSON
+/// vorgehalten, damit kein Filesystem-Pfad fest verdrahtet werden muss.
+model PlanningImportJob {
+  id              String   @id @default(cuid())
+  /// "actuals.csv" oder spaeter "actuals.datev". Erlaubt Erweiterung ohne
+  /// Schemaaenderung.
+  type            String
+  /// "succeeded" | "partial" | "failed". Pending/Running braucht der
+  /// Wizard-Flow nicht — Imports laufen synchron im Request-Cycle.
+  status          String
+  /// "skip" | "overwrite" — die gewaehlte Duplikatstrategie. Auch fuer
+  /// Dry-Runs persistiert, da sie das Ergebnis bestimmt.
+  duplicateStrategy String
+  /// "dry-run" | "commit" — Dry-Runs werden auch geloggt, damit Anwender
+  /// Vorschau-Ergebnisse spaeter nochmal abrufen koennen.
+  mode            String
+  filename        String?
+  totalRows       Int      @default(0)
+  successRows     Int      @default(0)
+  skippedRows     Int      @default(0)
+  errorRows       Int      @default(0)
+  /// Gekuerzter Fehlerreport (max. 200 Zeilen). Format:
+  ///   { rows: Array<{ rowNumber, code, message, raw? }> }
+  errorReportJson Json?
+  startedAt       DateTime @default(now())
+  finishedAt      DateTime?
+  createdByUserId String?
+  createdBy       User?    @relation("PlanningImportCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([startedAt])
+  @@index([type, mode])
+}
+
+/// Konfigurierbare Schwellwert-Regel fuer das Alert-System. Globale
+/// Regeln (nicht user-scoped) — `createdByUserId` dient der Audit-Spur.
+///
+/// Unterstuetzte `metric`-Werte (Strings, kein Enum, damit sich neue Metriken
+/// ohne Migration ergaenzen lassen):
+///   - marginPercent           Ist-Marge % im juengsten Monat mit Actuals
+///   - deltaRevenuePercent     Delta Ist/Plan Umsatz % im juengsten Monat
+///   - deltaCostPercent        Delta Ist/Plan Kosten % im juengsten Monat
+///   - negativeMarginStreak    N Monate in Folge mit negativer Ist-Marge
+///
+/// `operator`: lt | gt | lte | gte (String).
+model PlanningAlertRule {
+  id                String   @id @default(cuid())
+  name              String
+  /// Optional: Szenario fuer den Plan-Vergleich. Wenn null, nimmt die
+  /// Engine das zuletzt aktualisierte Szenario.
+  scenarioId        String?
+  metric            String
+  operator          String
+  threshold         Float
+  /// Nur fuer `negativeMarginStreak`: Anzahl der zu pruefenden Monate.
+  consecutiveMonths Int       @default(1)
+  severity          String    @default("WARN")
+  channelInApp      Boolean   @default(true)
+  channelEmail      Boolean   @default(false)
+  active            Boolean   @default(true)
+  createdByUserId   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  scenario          PlanningScenario? @relation("PlanningAlertRuleScenario", fields: [scenarioId], references: [id], onDelete: SetNull)
+  createdBy         User?     @relation("PlanningAlertRuleCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  alerts            PlanningAlert[]
+
+  @@index([active])
+  @@index([metric])
+}
+
+/// Konkreter Alert-Eintrag, der von der Engine bei Regelverletzung erzeugt
+/// wird. Lifecycle: OPEN → ACKNOWLEDGED → RESOLVED.
+///
+/// Deduplikation: solange ein OPEN-Alert mit demselben `dedupeKey`
+/// existiert, wird kein zweiter angelegt — die Engine prueft das beim
+/// Insert. Typischer Schluessel: `${ruleId}:${year}-${month}`.
+model PlanningAlert {
+  id               String   @id @default(cuid())
+  ruleId           String
+  status           String   @default("OPEN")
+  severity         String   @default("WARN")
+  triggeredAt      DateTime @default(now())
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+  resolvedAt       DateTime?
+  resolvedById     String?
+  metricValue      Float
+  thresholdValue   Float
+  /// Maschinenlesbarer Schluessel fuer Deduplikation. Index auf (ruleId,
+  /// status, dedupeKey) reicht — die Engine sucht selbst.
+  dedupeKey        String
+  /// Beliebiger Zusatzkontext (Monat/Jahr, Plan-/Ist-Werte) als JSON.
+  contextJson      Json?
+  rule             PlanningAlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  acknowledgedBy   User?     @relation("PlanningAlertAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  resolvedBy       User?     @relation("PlanningAlertResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([ruleId, status])
+  @@index([ruleId, status, dedupeKey])
+  @@index([triggeredAt])
+}
+
+
+/// Standort fuer Mehrstandort-Planung (Dropdown-Lookup, kein Geo-Datum).
+model PlanningLocation {
+  id        String   @id @default(cuid())
+  name      String
+  /// Kurzbezeichnung fuer Filter/Badges (z. B. "BLN", "MUC").
+  code      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  scenarios PlanningScenario[]
+  baselines PlanningBaseline[]
+}
+
+/// Geschaeftseinheit (Business Unit) fuer planungsfaehige Sub-Organisationen.
+model PlanningBusinessUnit {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  scenarios PlanningScenario[]
+  baselines PlanningBaseline[]
+}
+
+/// Aktive Plan-Baseline pro (Standort, Einheit, Zeitraum). Frueher gesetzte
+/// Baselines werden auf `active=false` gestellt, statt geloescht — fuer die
+/// Audit-Spur. Eine partielle Unique-Constraint ueber `active=true` haelt die
+/// Eindeutigkeit ohne harte Sperre durch.
+model PlanningBaseline {
+  id              String   @id @default(cuid())
+  scenarioId      String
+  locationId      String?
+  businessUnitId  String?
+  /// "MONTH" | "QUARTER" | "YEAR".
+  periodType      String
+  /// Periodenbezeichnung passend zum Typ:
+  ///   MONTH   -> "2026-04"
+  ///   QUARTER -> "2026-Q2"
+  ///   YEAR    -> "2026"
+  periodRef       String
+  active          Boolean  @default(true)
+  setAt           DateTime @default(now())
+  setByUserId     String?
+  scenario        PlanningScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  location        PlanningLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  businessUnit    PlanningBusinessUnit? @relation(fields: [businessUnitId], references: [id], onDelete: SetNull)
+  setBy           User?    @relation("PlanningBaselineSetter", fields: [setByUserId], references: [id], onDelete: SetNull)
+
+  @@index([scenarioId])
+  @@index([locationId, businessUnitId, periodType, periodRef, active])
+  @@index([active])
+}
+
+/// Audit-Log fuer Workflow-Aktionen am Szenario.
+/// Aktionen: SUBMIT | APPROVE | REJECT | ARCHIVE | UNARCHIVE | SET_BASELINE | UNSET_BASELINE.
+model PlanningScenarioDecisionLog {
+  id            String   @id @default(cuid())
+  scenarioId    String
+  action        String
+  comment       String?
+  actorUserId   String?
+  createdAt     DateTime @default(now())
+  scenario      PlanningScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  actor         User?    @relation("PlanningDecisionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([scenarioId, createdAt])
+  @@index([action])
+}
+
+/// Einzelposten der Budgetplanung (Phase 8). Jede Zeile beschreibt eine
+/// Kostenart fuer ein konkretes Szenario; die Cashflow-Projektion summiert
+/// alle aktiven Posten pro Monat zusammen mit der Plan-Marge.
+///
+/// `costType` trennt Operating Expenses (laufender Aufwand) von Capital
+/// Expenses (Investitionen) — getrennt darstellbar im KPI-Block.
+///
+/// `frequency`:
+///   ONE_TIME    Buchung im `startDate`-Monat, ignoriert in anderen Monaten
+///   MONTHLY     Buchung in jedem Monat zwischen startDate (inkl.) und endDate (inkl.)
+///   QUARTERLY   wie MONTHLY, aber alle 3 Monate ab startDate
+model PlanningBudgetItem {
+  id              String   @id @default(cuid())
+  scenarioId      String
+  /// Kostenart-Bucket (Personal, Material, Fahrzeuge, Miete, IT, Sonstiges, …).
+  /// Bewusst freier String, damit Anwender eigene Buckets definieren koennen.
+  category        String
+  name            String
+  costType        String
+  amount          Float
+  frequency       String
+  startDate       DateTime
+  endDate         DateTime?
+  /// Optionaler Standort/Einheit-Tag (Phase 7 Integration).
+  locationId      String?
+  businessUnitId  String?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  scenario        PlanningScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  createdBy       User?    @relation("PlanningBudgetItemCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([scenarioId])
+  @@index([scenarioId, costType])
+  @@index([startDate])
+}
+
+/// Pro Szenario eine Cashflow-Konfiguration. Halt absichtlich klein —
+/// `startingCash` ist der Hauptparameter; die Verzoegerungstage sind
+/// optionale MVP-Stellschrauben fuer die Vorschau.
+model PlanningCashflowConfig {
+  id                String   @id @default(cuid())
+  scenarioId        String   @unique
+  startingCash      Float    @default(0)
+  /// Kalendertage; werden in der Vorschau auf volle Monate gerundet.
+  revenueDelayDays  Int      @default(0)
+  expenseDelayDays  Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  scenario          PlanningScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+}
+
+/// Kapazitaetsprofil je Szenario fuer die Ressourcenplanung.
+///
+/// Mehrere Profile pro Szenario sind erlaubt — `teamId`/`workerId` koennen
+/// kuenftig zur feineren Steuerung genutzt werden. Im MVP nutzt der Service
+/// das Profil mit `teamId=null && workerId=null` als Default fuer das
+/// gesamte Szenario.
+///
+/// Berechnung pro Woche (Default-Profil):
+///   availableHoursPerWorker = weeklyTargetHours
+///                           * availabilityFactor
+///                           * productivityFactor
+///   availableHoursPerTeam   = availableHoursPerWorker * workersPerTeam (aus Szenario)
+///   availableHoursTotal     = availableHoursPerTeam   * teamsPerWeek (aus Szenario)
+///
+/// `validFrom`/`validTo` schraenken die Geltung auf einen Zeitraum ein
+/// (null = immer aktiv); pro Woche wird das jeweils gueltige Profil gesucht.
+model PlanningCapacityProfile {
+  id                 String   @id @default(cuid())
+  scenarioId         String
+  teamId             String?
+  workerId           String?
+  weeklyTargetHours  Float    @default(40)
+  availabilityFactor Float    @default(0.85)
+  productivityFactor Float    @default(0.95)
+  validFrom          DateTime?
+  validTo            DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  scenario           PlanningScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@index([scenarioId])
+  @@index([scenarioId, teamId, workerId])
+  @@index([validFrom, validTo])
+}
+
+/// Vertriebs-Pipeline-Item fuer die Ertragsplanung (Phase 10).
+///
+/// Ein Eintrag steht fuer ein Angebot/eine Chance gegenueber einem Kunden.
+/// Das gewichtete Volumen (`amountTotal * winProbability / 100`) speist
+/// Forecast und KPI-Karten. Die expliziten Datumsfelder erlauben es,
+/// erwarteten Umsatz auf Monate zu verteilen.
+///
+/// Stage-Werte (String, kein Enum, damit projektspezifische Stages ohne
+/// Migration moeglich sind):
+///   LEAD          erster Kontakt
+///   QUALIFIED     Bedarf bestaetigt
+///   OFFERED       Angebot abgegeben
+///   NEGOTIATION   Verhandlung laeuft
+///   WON           Auftrag erteilt
+///   LOST          verloren / abgelehnt
+///
+/// `customerId` und `projectId` sind freie Strings — wir koppeln sie
+/// bewusst nicht hart an Customer/Project, damit Pipeline-Eintraege auch
+/// ohne CRM-Datensatz angelegt werden koennen.
+model PlanningPipelineItem {
+  id                  String   @id @default(cuid())
+  title               String
+  customerId          String?
+  projectId           String?
+  ownerUserId         String?
+  /// Aktuelle Pipeline-Stufe (siehe Doku oben).
+  stage               String   @default("LEAD")
+  amountTotal         Float    @default(0)
+  /// 0..100. Bei WON automatisch 100, bei LOST automatisch 0 — der Service
+  /// erzwingt das beim Speichern.
+  winProbability      Float    @default(20)
+  expectedStartDate   DateTime
+  expectedEndDate     DateTime?
+  /// Optional: erwarteter Wochen-Stundenbedarf, fuer Phase-9-Integration.
+  expectedWeeklyHours Float?
+  locationId          String?
+  businessUnitId      String?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  owner               User?    @relation("PlanningPipelineOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+
+  @@index([stage])
+  @@index([ownerUserId])
+  @@index([locationId])
+  @@index([businessUnitId])
+  @@index([expectedStartDate])
 }

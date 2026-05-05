@@ -6,6 +6,8 @@ export type AppSection =
   | "projects"
   | "workers"
   | "planning"
+  | "profit-planning"
+  | "whatif"
   | "reports"
   | "tasks"
   | "settings"

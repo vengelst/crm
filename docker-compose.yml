@@ -45,7 +45,10 @@ services:
         condition: service_started
     environment:
       # Aus Projekt-.env (z. B. TEST-Server); Volume-Passwort muss zur URL passen.
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/crm_monteur}
+      # Wichtig: Container-intern immer Service-Hostname `postgres` verwenden.
+      # Lokale Host-URLs wie 127.0.0.1:55432 funktionieren im Container nicht.
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/crm_monteur}
+      TZ: ${TZ:-Europe/Berlin}
       JWT_SECRET: change-me
       API_PORT: 3801
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}

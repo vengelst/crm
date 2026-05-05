@@ -1,8 +1,10 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -19,11 +21,15 @@ import type { Request, Response } from 'express';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { SettingsService } from './settings.service';
+import { BackupSchedulerService } from './backup-scheduler.service';
 
 @Controller('settings')
 @Roles(RoleCode.SUPERADMIN, RoleCode.OFFICE)
 export class SettingsController {
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(
+    private readonly settingsService: SettingsService,
+    private readonly backupScheduler: BackupSchedulerService,
+  ) {}
 
   @Get()
   getSettings() {
@@ -164,9 +170,37 @@ export class SettingsController {
     return this.settingsService.updateBackupConfig(dto);
   }
 
+  @Get('backup/status')
+  getBackupStatus() {
+    return this.settingsService.getBackupStatus();
+  }
+
   @Post('backup/create')
-  createBackup(@Req() request: Request & { user?: { sub?: string } }) {
-    return this.settingsService.createBackup(request.user?.sub);
+  async createBackup(@Req() request: Request & { user?: { sub?: string } }) {
+    // Geht durch denselben In-Memory-Run-Lock wie Cron-Ticks. Bei
+    // laufendem Lauf gibt es 409 — der Anwender sieht klar, dass eine
+    // Sperre greift und kein zweiter Lauf gestartet wurde.
+    const outcome = await this.backupScheduler.runManual(request.user?.sub);
+    if (outcome.outcome === 'skipped') {
+      throw new ConflictException({
+        code: outcome.reason,
+        message:
+          'Ein Backup-Lauf laeuft bereits — bitte warten und erneut versuchen.',
+      });
+    }
+    if (!outcome.backupId) {
+      throw new ConflictException({
+        code: 'BACKUP_FAILED',
+        message: 'Backup wurde gestartet, aber keine ID erzeugt.',
+      });
+    }
+    const record = await this.settingsService.getBackup(outcome.backupId);
+    if (!record) {
+      throw new NotFoundException(
+        `Backup ${outcome.backupId} nicht gefunden.`,
+      );
+    }
+    return record;
   }
 
   @Get('backup/list')

@@ -62,7 +62,8 @@ import { DocumentPreviewModal } from "./crm-app/documents";
 import { DashboardSection, EntityList } from "./crm-app/dashboard";
 import { ReportsSection } from "./crm-app/reports";
 import { NotificationBell } from "./crm-app/notifications";
-import { ProjectDetailCard, KioskProjectView, PlanningCalendar } from "./crm-app/projects";
+import { ProjectDetailCard, KioskProjectView, PlanningCalendar, PlanningProfitTool } from "./crm-app/projects";
+import { WhatIfCalculator } from "./crm-app/whatif/WhatIfCalculator";
 import { SUPPORTED_LANGUAGES, t, type SupportedLang } from "../i18n";
 import { I18nProvider } from "../i18n-context";
 
@@ -163,6 +164,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [loginLang, setLoginLang] = useState<SupportedLang>("de");
   const activeLang: SupportedLang = auth?.sessionLang === "en" ? "en" : loginLang;
   const l = useCallback((key: string) => t(key, activeLang), [activeLang]);
+  const [now, setNow] = useState(() => new Date());
 
   const [summary, setSummary] = useState<Summary | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -202,11 +204,28 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const canManageUsers = hasRole(auth, ["SUPERADMIN"]);
   const canEditCustomer = hasPermission(auth, "customers.edit");
   const canEditProject = hasPermission(auth, "projects.edit");
+  const canEditWorker = hasPermission(auth, "workers.edit");
   const canPrintCustomer = hasPermission(auth, "customers.print");
   const canPrintProject = hasPermission(auth, "projects.print");
   const canPrintDocument = hasPermission(auth, "documents.print");
   const canPrintReports = hasPermission(auth, "reports.print");
   const canPrintTasks = hasPermission(auth, "tasks.print");
+  const timeLocale = activeLang === "en" ? "en-US" : "de-DE";
+  const currentDateTime = useMemo(
+    () =>
+      new Intl.DateTimeFormat(timeLocale, {
+        dateStyle: "medium",
+        timeStyle: "medium",
+      }).format(now),
+    [now, timeLocale],
+  );
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const selectedCustomer = useMemo(
     () => customers.find((item) => item.id === entityId) ?? null,
@@ -1012,12 +1031,22 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     }
   }
 
+  // Nur SUPERADMIN sieht das Ertragsplanungs-Tool. Notfall-Admin (`*`-perm)
+  // greift weiterhin als ueberlagernder Wildcard, aber die Rolle entscheidet
+  // hier, weil das Modul rein finanziellen Charakter hat.
+  const canSeeProfitPlanning = hasRole(auth, ["SUPERADMIN"]);
   const navItems = [
     { key: "dashboard" as const, href: "/dashboard", label: l("nav.dashboard"), icon: <LayoutDashboard className="h-5 w-5" />, color: "text-sky-500 dark:text-sky-400" },
     { key: "customers" as const, href: "/customers", label: l("nav.customers"), icon: <Building2 className="h-5 w-5" />, color: "text-emerald-500 dark:text-emerald-400" },
     { key: "projects" as const, href: "/projects", label: l("nav.projects"), icon: <FolderKanban className="h-5 w-5" />, color: "text-violet-500 dark:text-violet-400" },
     { key: "workers" as const, href: "/workers", label: l("nav.workers"), icon: <HardHat className="h-5 w-5" />, color: "text-amber-500 dark:text-amber-400" },
     { key: "planning" as const, href: "/planning", label: l("nav.planning"), icon: <CalendarDays className="h-5 w-5" />, color: "text-rose-500 dark:text-rose-400" },
+    ...(canSeeProfitPlanning
+      ? [{ key: "profit-planning" as const, href: "/profit-planning", label: l("nav.profitPlanning"), icon: <BarChart3 className="h-5 w-5" />, color: "text-emerald-500 dark:text-emerald-400" }]
+      : []),
+    ...(canSeeProfitPlanning
+      ? [{ key: "whatif" as const, href: "/whatif", label: l("nav.whatif"), icon: <BarChart3 className="h-5 w-5" />, color: "text-fuchsia-500 dark:text-fuchsia-400" }]
+      : []),
     { key: "reports" as const, href: "/reports", label: l("nav.reports"), icon: <BarChart3 className="h-5 w-5" />, color: "text-cyan-500 dark:text-cyan-400" },
     { key: "tasks" as const, href: "/tasks", label: l("nav.tasks"), icon: <ListTodo className="h-5 w-5" />, color: "text-orange-500 dark:text-orange-400" },
     { key: "notes" as const, href: "/notes", label: l("nav.notes"), icon: <NotebookText className="h-5 w-5" />, color: "text-fuchsia-500 dark:text-fuchsia-400" },
@@ -1112,12 +1141,15 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         <div className="flex flex-col gap-4 rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-500">{l("worker.platform")}</p>
-            <h1 className="text-2xl font-semibold">{l(`nav.${section === "users" ? "settings" : section}`)}</h1>
+            <h1 className="text-2xl font-semibold">{l(`nav.${section === "users" ? "settings" : section === "profit-planning" ? "profitPlanning" : section === "whatif" ? "whatif" : section}`)}</h1>
             <p className="text-sm text-slate-500">
               {auth.user.displayName} · {auth.user.email}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <div className="rounded-xl border border-black/10 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-200">
+              {currentDateTime}
+            </div>
             {navItems.map((item) =>
               settingsForm.navAsIcons ? (
                 <IconNavLink key={item.key} href={item.href} active={section === item.key} label={item.label}>
@@ -1224,6 +1256,11 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                       });
                       setShowCreateProject(true);
                       router.push("/projects");
+                    } : undefined}
+                    onEditTab={canEditCustomer ? (tab) => {
+                      setEditCustomerTab(tab);
+                      setEditCustomerPrefill(undefined);
+                      setShowEditCustomer(true);
                     } : undefined}
                     canPrint={canPrintCustomer}
                     apiFetch={apiFetch}
@@ -1346,6 +1383,16 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                         ? () => {
                             setProjectForm(mapProjectToForm(selectedProject));
                             setShowCreateProject(true);
+                          }
+                        : undefined
+                    }
+                    onEditWorker={
+                      canEditWorker
+                        ? (workerId: string) => {
+                            const target = workers.find((w) => w.id === workerId);
+                            if (!target) return;
+                            setWorkerForm(mapWorkerToForm(target));
+                            setShowCreateWorker(true);
                           }
                         : undefined
                     }
@@ -1859,6 +1906,52 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
 
         {section === "planning" ? (
           <PlanningCalendar projects={projects} workers={workers} teams={teams} apiFetch={apiFetch} onDataChanged={() => void loadData()} />
+        ) : null}
+
+        {section === "profit-planning" ? (
+          // Permission-Gate: nicht-SUPERADMIN sehen den Eintrag schon im Menue
+          // nicht; ein Direktaufruf der URL faellt hier auf einen ruhigen
+          // Hinweis zurueck statt eine leere Seite zu zeigen.
+          canSeeProfitPlanning ? (
+            <PlanningProfitTool
+              apiFetch={apiFetch}
+              authToken={auth.accessToken}
+              canEditTargets={hasPermission(auth, "planning.targets")}
+              canExport={hasPermission(auth, "planning.export")}
+              canEditActuals={hasPermission(auth, "planning.actuals.edit")}
+              canViewForecast={hasPermission(auth, "planning.forecast.view")}
+              canManageVersions={hasPermission(auth, "planning.versioning.manage")}
+              canImport={hasPermission(auth, "planning.import")}
+              canViewImportLogs={hasPermission(auth, "planning.import.logs.view")}
+              canViewKpis={hasPermission(auth, "planning.kpi.view")}
+              canManageAlerts={hasPermission(auth, "planning.alerts.manage")}
+              canSubmitReview={hasPermission(auth, "planning.review.submit")}
+              canApproveReview={hasPermission(auth, "planning.review.approve")}
+              canRejectReview={hasPermission(auth, "planning.review.reject")}
+              canManageBaseline={hasPermission(auth, "planning.baseline.manage")}
+              canViewBudget={hasPermission(auth, "planning.budget.view")}
+              canEditBudget={hasPermission(auth, "planning.budget.edit")}
+              canViewCashflow={hasPermission(auth, "planning.cashflow.view")}
+              canViewCapacity={hasPermission(auth, "planning.capacity.view")}
+              canEditCapacity={hasPermission(auth, "planning.capacity.edit")}
+              canViewPipeline={hasPermission(auth, "planning.pipeline.view")}
+              canEditPipeline={hasPermission(auth, "planning.pipeline.edit")}
+            />
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+              {l("common.error")}
+            </div>
+          )
+        ) : null}
+
+        {section === "whatif" ? (
+          canSeeProfitPlanning ? (
+            <WhatIfCalculator />
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+              {l("common.error")}
+            </div>
+          )
         ) : null}
 
         {section === "reports" ? (

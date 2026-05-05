@@ -21,6 +21,20 @@ type BackupEntry = {
   errorMessage?: string | null;
 };
 
+type BackupSchedulerStatus = {
+  enabled: boolean;
+  interval: string;
+  time: string;
+  keepCount: number;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastRunStatus: "succeeded" | "failed" | "running" | null;
+  lastRunMessage: string | null;
+  lastBackupId: string | null;
+  timezone: string;
+  isRunning: boolean;
+};
+
 export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, submitting, apiFetch, setPanelSuccess, setPanelError }: {
   backupForm: { enabled: boolean; interval: string; time: string; keepCount: string };
   setBackupForm: Dispatch<SetStateAction<typeof backupForm>>;
@@ -36,12 +50,34 @@ export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, sub
   const [restoreId, setRestoreId] = useState<string | null>(null);
   const [restoreOpts, setRestoreOpts] = useState({ database: true, documents: true, settings: true });
   const [restoring, setRestoring] = useState(false);
+  const [scheduler, setScheduler] = useState<BackupSchedulerStatus | null>(null);
+  const [selectedBackupIds, setSelectedBackupIds] = useState<string[]>([]);
 
   const loadBackups = useCallback(async () => {
     try { const list = await apiFetch<BackupEntry[]>("/settings/backup/list"); setBackups(list); } catch { /* skip */ }
   }, [apiFetch]);
 
+  const loadScheduler = useCallback(async () => {
+    try {
+      const status = await apiFetch<BackupSchedulerStatus>("/settings/backup/status");
+      setScheduler(status);
+    } catch {
+      // Status ist optional — Hauptfunktionalitaet (Liste, Save, Create) bleibt
+      // erreichbar, wir loggen den Fehler nicht extra.
+    }
+  }, [apiFetch]);
+
   useEffect(() => { void loadBackups(); }, [loadBackups]);
+  useEffect(() => { void loadScheduler(); }, [loadScheduler]);
+  useEffect(() => {
+    setSelectedBackupIds((current) => current.filter((id) => backups.some((b) => b.id === id)));
+  }, [backups]);
+
+  // Status nach jedem Save oder manuellem Backup neu laden, damit
+  // nextRunAt/lastRunAt sofort frisch sind (statt erst nach Reload).
+  useEffect(() => {
+    if (!submitting) void loadScheduler();
+  }, [submitting, loadScheduler]);
 
   async function createBackup() {
     setCreating(true); setPanelError(null);
@@ -49,6 +85,7 @@ export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, sub
       await apiFetch("/settings/backup/create", { method: "POST" });
       setPanelSuccess(l("settings.backupCreated"));
       await loadBackups();
+      await loadScheduler();
     } catch (e) { setPanelError(e instanceof Error ? e.message : l("settings.backupFailed")); }
     finally { setCreating(false); }
   }
@@ -60,6 +97,45 @@ export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, sub
       setPanelSuccess(l("settings.backupDeleted"));
       await loadBackups();
     } catch (e) { setPanelError(e instanceof Error ? e.message : l("common.error")); }
+  }
+
+  async function deleteSelectedBackups() {
+    if (selectedBackupIds.length === 0) return;
+    if (!window.confirm(l("settings.backupDeleteSelectedConfirm").replace("{count}", String(selectedBackupIds.length)))) return;
+    setPanelError(null);
+    setPanelSuccess(null);
+    let deleted = 0;
+    let failed = 0;
+    for (const id of selectedBackupIds) {
+      try {
+        await apiFetch(`/settings/backup/${id}`, { method: "DELETE" });
+        deleted++;
+      } catch {
+        failed++;
+      }
+    }
+    setSelectedBackupIds([]);
+    await loadBackups();
+    if (failed === 0) {
+      setPanelSuccess(l("settings.backupDeleteSelectedSuccess").replace("{count}", String(deleted)));
+      return;
+    }
+    setPanelError(
+      l("settings.backupDeleteSelectedPartial")
+        .replace("{ok}", String(deleted))
+        .replace("{failed}", String(failed)),
+    );
+  }
+
+  function toggleBackupSelection(id: string, checked: boolean) {
+    setSelectedBackupIds((current) => {
+      if (checked) return current.includes(id) ? current : [...current, id];
+      return current.filter((entry) => entry !== id);
+    });
+  }
+
+  function toggleSelectAll(checked: boolean) {
+    setSelectedBackupIds(checked ? backups.map((b) => b.id) : []);
   }
 
   async function restore() {
@@ -97,10 +173,40 @@ export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, sub
         {backups.length === 0 ? (
           <p className="text-sm text-slate-500">{l("settings.backupNone")}</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="grid gap-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <label className="inline-flex items-center gap-2 rounded border border-black/10 px-2 py-1 dark:border-white/10">
+                <input
+                  type="checkbox"
+                  checked={selectedBackupIds.length > 0 && selectedBackupIds.length === backups.length}
+                  onChange={(e) => toggleSelectAll(e.target.checked)}
+                />
+                {l("settings.backupSelectAll")}
+              </label>
+              <span className="text-slate-500">
+                {l("settings.backupSelectedCount").replace("{count}", String(selectedBackupIds.length))}
+              </span>
+              <button
+                type="button"
+                disabled={selectedBackupIds.length === 0}
+                onClick={() => void deleteSelectedBackups()}
+                className="rounded border border-red-300 px-2 py-1 text-[11px] font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-500/40 dark:text-red-300"
+              >
+                {l("settings.backupDeleteSelected")}
+              </button>
+            </div>
+            <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-black/10 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
+                  <th className="pb-2 pr-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedBackupIds.length > 0 && selectedBackupIds.length === backups.length}
+                      onChange={(e) => toggleSelectAll(e.target.checked)}
+                      aria-label={l("settings.backupSelectAll")}
+                    />
+                  </th>
                   <th className="pb-2 pr-2">ID</th>
                   <th className="pb-2 pr-2">{l("table.created")}</th>
                   <th className="pb-2 pr-2">{l("table.content")}</th>
@@ -111,6 +217,14 @@ export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, sub
               <tbody>
                 {backups.map((b) => (
                   <tr key={b.id} className="border-b border-black/5 dark:border-white/5">
+                    <td className="py-2 pr-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedBackupIds.includes(b.id)}
+                        onChange={(e) => toggleBackupSelection(b.id, e.target.checked)}
+                        aria-label={b.id}
+                      />
+                    </td>
                     <td className="py-2 pr-2 font-mono text-xs">
                       <div className="flex flex-wrap items-center gap-1">
                         <span>{b.id.length > 12 ? `${b.id.slice(0, 12)}…` : b.id}</span>
@@ -146,6 +260,7 @@ export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, sub
               </tbody>
             </table>
           </div>
+          </div>
         )}
       </SectionCard>
 
@@ -172,6 +287,7 @@ export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, sub
       ) : null}
 
       <SectionCard title={l("settings.backupAutoTitle")} subtitle={l("settings.backupAutoSub")}>
+        <BackupSchedulerStatusBlock status={scheduler} locale={locale} />
         <form className="grid gap-4 md:max-w-2xl" onSubmit={onSaveConfig}>
           <label className="inline-flex items-center gap-3 text-sm font-medium">
             <input type="checkbox" checked={backupForm.enabled} onChange={(e) => setBackupForm((c) => ({ ...c, enabled: e.target.checked }))} />
@@ -188,5 +304,96 @@ export function BackupSettingsTab({ backupForm, setBackupForm, onSaveConfig, sub
       </SectionCard>
     </div>
   );
+}
+
+function BackupSchedulerStatusBlock({
+  status,
+  locale,
+}: {
+  status: BackupSchedulerStatus | null;
+  locale: string;
+}) {
+  const { t: l } = useI18n();
+  if (!status) return null;
+  // Anzeige in Server-Lokalzeit. Intl-Date akzeptiert die Server-TZ
+  // direkt — der Wert ist dann ueberall identisch zur Cron-Ausfuehrung.
+  const tz = status.timezone || "UTC";
+  let fmt: Intl.DateTimeFormat;
+  try {
+    fmt = new Intl.DateTimeFormat(locale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: tz,
+    });
+  } catch {
+    // Falls Browser die TZ nicht kennt, faellt er auf seine Default-TZ
+    // zurueck. Wir setzen das Label trotzdem auf den Server-TZ-Namen,
+    // damit klar ist, gegen welchen Bezug der Cron getickt hat.
+    fmt = new Intl.DateTimeFormat(locale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }
+  const next = status.nextRunAt ? fmt.format(new Date(status.nextRunAt)) : "—";
+  const last = status.lastRunAt ? fmt.format(new Date(status.lastRunAt)) : "—";
+  const stateTone =
+    status.lastRunStatus === "succeeded"
+      ? "text-emerald-700 dark:text-emerald-400"
+      : status.lastRunStatus === "failed"
+        ? "text-red-700 dark:text-red-400"
+        : status.lastRunStatus === "running"
+          ? "text-blue-700 dark:text-blue-400"
+          : "text-slate-500";
+  const stateLabel = status.lastRunStatus
+    ? l(`settings.backup.runStatus.${status.lastRunStatus}`)
+    : "—";
+  return (
+    <div className="mb-3 rounded-2xl border border-black/10 bg-slate-50/70 p-3 text-xs dark:border-white/10 dark:bg-slate-950/40">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            {l("settings.backup.scheduler.state")}
+          </div>
+          <div className={status.enabled ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500"}>
+            {status.enabled
+              ? l("settings.backup.scheduler.enabled")
+              : l("settings.backup.scheduler.disabled")}
+          </div>
+          {status.isRunning ? (
+            <div className="text-blue-700 dark:text-blue-400">
+              {l("settings.backup.scheduler.running")}
+            </div>
+          ) : null}
+        </div>
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            {l("settings.backup.scheduler.nextRun")}{" "}
+            <span className="opacity-70">({tz})</span>
+          </div>
+          <div className="font-mono">{next}</div>
+        </div>
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            {l("settings.backup.scheduler.lastRun")}{" "}
+            <span className="opacity-70">({tz})</span>
+          </div>
+          <div className="font-mono">{last}</div>
+          <div className={cxLite("text-[11px]", stateTone)}>{stateLabel}</div>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] text-slate-500">
+        {l("settings.backup.scheduler.tzHint").replace("{tz}", tz)}
+      </p>
+      {status.lastRunMessage ? (
+        <p className="mt-1 text-[11px] text-red-700 dark:text-red-400">
+          {status.lastRunMessage}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function cxLite(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
 }
 

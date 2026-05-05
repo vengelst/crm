@@ -40,6 +40,7 @@ export function ProjectDetailCard({
   onUpload,
   onDataChanged,
   onEdit,
+  onEditWorker,
   canPrint = true,
   apiFetch,
   currentUserId,
@@ -60,6 +61,11 @@ export function ProjectDetailCard({
   onUpload: () => void | Promise<void>;
   onDataChanged: () => Promise<void> | void;
   onEdit?: () => void;
+  /** Direkter Klick-Handler fuer einen Monteur in der Team-Liste. Aufruf
+   *  oeffnet die Monteur-Bearbeitung (Modal in `crm-app.tsx`). Wenn
+   *  nicht gesetzt, behaelt die Liste den bestehenden Link auf
+   *  `/workers/{id}`. */
+  onEditWorker?: (workerId: string) => void;
   canPrint?: boolean;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   /** Aktueller Nutzer als Default-Verantwortlicher fuer neue Wiedervorlagen. */
@@ -388,6 +394,16 @@ export function ProjectDetailCard({
                             {assignment.worker.firstName} {assignment.worker.lastName}
                           </Link>
                           <span className="text-xs text-slate-500">{assignment.worker.workerNumber}</span>
+                          {onEditWorker ? (
+                            <button
+                              type="button"
+                              onClick={() => onEditWorker(assignment.worker.id)}
+                              className="rounded-lg border border-black/10 bg-white px-2 py-0.5 text-[11px] font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+                              title={l("proj.editWorkerTitle")}
+                            >
+                              {l("common.edit")}
+                            </button>
+                          ) : null}
                         </div>
                         {live ? (
                           <div className="mt-2 grid gap-1 text-xs text-slate-600 dark:text-slate-400">
@@ -680,14 +696,26 @@ export function ProjectDetailCard({
 
       {/* ── Projektpreise (sekundaer, einklappbar) ──────── */}
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
-        <button
-          type="button"
-          onClick={() => setPricingOpen((v) => !v)}
-          className="flex w-full items-center justify-between gap-3 text-left"
-        >
-          <h4 className="text-base font-semibold">{l("proj.pricing")}</h4>
-          <CollapseIndicator open={pricingOpen} />
-        </button>
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setPricingOpen((v) => !v)}
+            className="flex flex-1 items-center justify-between gap-3 text-left"
+          >
+            <h4 className="text-base font-semibold">{l("proj.pricing")}</h4>
+            <CollapseIndicator open={pricingOpen} />
+          </button>
+          {onEdit ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="ml-2 rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+              title={l("proj.editPricingTitle")}
+            >
+              {l("common.edit")}
+            </button>
+          ) : null}
+        </div>
         <CollapsibleContent open={pricingOpen}>
           {hasPricing ? (
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">

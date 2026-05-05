@@ -81,7 +81,10 @@ export class AuthService {
    */
   async emergencyLogin(
     dto: EmergencyLoginDto,
-    request: { ip?: string; headers?: Record<string, string | string[] | undefined> },
+    request: {
+      ip?: string;
+      headers?: Record<string, string | string[] | undefined>;
+    },
   ) {
     const remoteIp = (request.ip ?? '').toString();
     const username = dto.username ?? '';
@@ -99,7 +102,9 @@ export class AuthService {
       this.auditLogger.error(
         `emergency-login MISCONFIGURED ip=${remoteIp} (EMERGENCY_ADMIN_USER/PASS leer trotz EMERGENCY_ADMIN_ENABLED=true)`,
       );
-      throw new ForbiddenException('Notfall-Login ist nicht korrekt konfiguriert.');
+      throw new ForbiddenException(
+        'Notfall-Login ist nicht korrekt konfiguriert.',
+      );
     }
 
     // Optionale IP-Allowlist (Komma-separiert).
@@ -111,7 +116,9 @@ export class AuthService {
       this.auditLogger.warn(
         `emergency-login IP_BLOCKED ip=${remoteIp} username=${maskUsername(username)}`,
       );
-      throw new ForbiddenException('Diese IP ist fuer den Notfall-Login nicht freigegeben.');
+      throw new ForbiddenException(
+        'Diese IP ist fuer den Notfall-Login nicht freigegeben.',
+      );
     }
 
     // Optionaler Shared-Secret-Header in der Form "X-Header-Name=secret-value".
@@ -119,18 +126,23 @@ export class AuthService {
     if (requiredHeader) {
       const sepIndex = requiredHeader.indexOf('=');
       if (sepIndex > 0) {
-        const headerName = requiredHeader.slice(0, sepIndex).trim().toLowerCase();
+        const headerName = requiredHeader
+          .slice(0, sepIndex)
+          .trim()
+          .toLowerCase();
         const expectedValue = requiredHeader.slice(sepIndex + 1).trim();
         const headers = request.headers ?? {};
         const rawValue = headers[headerName];
         const provided = Array.isArray(rawValue)
-          ? rawValue[0] ?? ''
+          ? (rawValue[0] ?? '')
           : (rawValue ?? '').toString();
         if (!constantTimeStringEqual(provided, expectedValue)) {
           this.auditLogger.warn(
             `emergency-login HEADER_MISMATCH ip=${remoteIp} username=${maskUsername(username)}`,
           );
-          throw new ForbiddenException('Notfall-Login: Sicherheitsheader fehlt oder ungueltig.');
+          throw new ForbiddenException(
+            'Notfall-Login: Sicherheitsheader fehlt oder ungueltig.',
+          );
         }
       }
     }

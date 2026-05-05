@@ -38,6 +38,7 @@ export function CustomerDetailCard({
   onAddBranch,
   onEditContacts,
   onCreateProject,
+  onEditTab,
   canPrint = true,
   apiFetch,
   currentUserId,
@@ -64,6 +65,15 @@ export function CustomerDetailCard({
   onEditContacts?: () => void;
   /** Quick-Action: navigiert zur Projektanlage fuer diesen Kunden. */
   onCreateProject?: () => void;
+  /**
+   * Bereichsbezogenes Edit-Symbol je Sektion. Aufruf oeffnet die Kunden-
+   * Bearbeitung direkt im passenden Tab. Faellt zurueck auf `onEdit`
+   * wenn nicht gesetzt — alte Aufrufer bleiben kompatibel.
+   * Erlaubte Werte: "branches" | "contacts" | "agreements" | "basics" | "projects".
+   */
+  onEditTab?: (
+    tab: "branches" | "contacts" | "agreements" | "basics" | "projects",
+  ) => void;
   canPrint?: boolean;
   apiFetch: <T>(path: string, init?: RequestInit) => Promise<T>;
   /** Aktueller Nutzer als Default-Verantwortlicher fuer neue Wiedervorlagen. */
@@ -331,15 +341,27 @@ export function CustomerDetailCard({
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
           <h4 className="text-base font-semibold">{l("cust.sectionLocations")}</h4>
-          {onAddBranch ? (
-            <button
-              type="button"
-              onClick={onAddBranch}
-              className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
-            >
-              {l("cust.addBranch")}
-            </button>
-          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {onEditTab ? (
+              <button
+                type="button"
+                onClick={() => onEditTab("branches")}
+                className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+                title={l("cust.editSection")}
+              >
+                {l("cust.editSection")}
+              </button>
+            ) : null}
+            {onAddBranch ? (
+              <button
+                type="button"
+                onClick={onAddBranch}
+                className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+              >
+                {l("cust.addBranch")}
+              </button>
+            ) : null}
+          </div>
         </div>
         <p className="mb-3 text-xs text-slate-500">{l("cust.sectionLocationsHint")}</p>
         {customer.branches.length === 0 ? (
@@ -390,15 +412,27 @@ export function CustomerDetailCard({
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h4 className="text-base font-semibold">{l("cust.sectionContacts")}</h4>
-          {onAddPrimaryContact || onEditContacts ? (
-            <button
-              type="button"
-              onClick={onAddPrimaryContact ?? onEditContacts}
-              className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
-            >
-              {l("cust.addContact")}
-            </button>
-          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {onEditTab ? (
+              <button
+                type="button"
+                onClick={() => onEditTab("contacts")}
+                className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+                title={l("cust.editSection")}
+              >
+                {l("cust.editSection")}
+              </button>
+            ) : null}
+            {onAddPrimaryContact || onEditContacts ? (
+              <button
+                type="button"
+                onClick={onAddPrimaryContact ?? onEditContacts}
+                className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+              >
+                {l("cust.addContact")}
+              </button>
+            ) : null}
+          </div>
         </div>
         {sortedContacts.length === 0 ? (
           <p className="text-sm text-slate-500">{l("cust.noContacts")}</p>
@@ -509,6 +543,16 @@ export function CustomerDetailCard({
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
           <h4 className="text-base font-semibold">{l("cust.sectionAgreements")}</h4>
+          {onEditTab ? (
+            <button
+              type="button"
+              onClick={() => onEditTab("agreements")}
+              className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+              title={l("cust.editSection")}
+            >
+              {l("cust.editSection")}
+            </button>
+          ) : null}
         </div>
         <p className="mb-3 text-xs text-slate-500">{l("cust.agreementsHint")}</p>
         <div className="grid gap-1 text-sm">
@@ -528,14 +572,26 @@ export function CustomerDetailCard({
 
         {financials ? (
           <div className="mt-3">
-            <button
-              type="button"
-              onClick={() => setReportsOpen((current) => !current)}
-              className="flex w-full items-center justify-between gap-3 text-left"
-            >
-              <h5 className="text-sm font-semibold">{l("reports.title")}</h5>
-              <CollapseIndicator open={reportsOpen} />
-            </button>
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setReportsOpen((current) => !current)}
+                className="flex flex-1 items-center justify-between gap-3 text-left"
+              >
+                <h5 className="text-sm font-semibold">{l("reports.title")}</h5>
+                <CollapseIndicator open={reportsOpen} />
+              </button>
+              {onEditTab ? (
+                <button
+                  type="button"
+                  onClick={() => onEditTab("agreements")}
+                  className="ml-2 rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+                  title={l("cust.editFinanceHint")}
+                >
+                  {l("cust.editSection")}
+                </button>
+              ) : null}
+            </div>
             <CollapsibleContent open={reportsOpen}>
             <div className="grid gap-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -602,15 +658,27 @@ export function CustomerDetailCard({
       <div className="rounded-2xl border border-black/10 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/40">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h4 className="text-base font-semibold">{l("cust.sectionProjects")}</h4>
-          {onCreateProject ? (
-            <button
-              type="button"
-              onClick={onCreateProject}
-              className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
-            >
-              {l("cust.nextAddProject")}
-            </button>
-          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {onEditTab ? (
+              <button
+                type="button"
+                onClick={() => onEditTab("projects")}
+                className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+                title={l("cust.editSection")}
+              >
+                {l("cust.editSection")}
+              </button>
+            ) : null}
+            {onCreateProject ? (
+              <button
+                type="button"
+                onClick={onCreateProject}
+                className="rounded-lg border border-black/10 bg-white px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+              >
+                {l("cust.nextAddProject")}
+              </button>
+            ) : null}
+          </div>
         </div>
         {customerProjects.length === 0 ? (
           <p className="text-sm text-slate-500">{l("cust.noProjects")}</p>

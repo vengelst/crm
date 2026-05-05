@@ -22,6 +22,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { NotesModule } from './notes/notes.module';
 import { StorageModule } from './storage/storage.module';
 import { PrintModule } from './print/print.module';
+import { PlanningModule } from './planning/planning.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { PrintModule } from './print/print.module';
     NotesModule,
     StorageModule,
     PrintModule,
+    PlanningModule,
   ],
   controllers: [AppController],
   providers: [AppService],

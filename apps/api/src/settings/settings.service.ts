@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  forwardRef,
+} from '@nestjs/common';
 import { createTransport } from 'nodemailer';
 import {
   existsSync,
@@ -16,6 +21,11 @@ import { Readable } from 'node:stream';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
+import {
+  BackupSchedulerService,
+  buildCronExpression,
+  parseHHmm,
+} from './backup-scheduler.service';
 
 export type AppSettings = {
   passwordMinLength: number;
@@ -43,6 +53,8 @@ export class SettingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    @Inject(forwardRef(() => BackupSchedulerService))
+    private readonly backupScheduler: BackupSchedulerService,
   ) {}
 
   async getSettings(): Promise<AppSettings> {
@@ -351,11 +363,30 @@ export class SettingsService {
     time: string;
     keepCount: number;
   }) {
+    // Konfiguration upfront validieren — sonst speichern wir Muell und
+    // der Scheduler bleibt stumm. Die Helfer kommen aus dem Scheduler-
+    // Modul, damit Persistenz und Cron-Regeln nicht auseinanderdriften.
+    if (data.enabled) {
+      if (!parseHHmm(data.time)) {
+        throw new BadRequestException(
+          `Ungueltige Zeit "${data.time}" — erwartet HH:mm (24h).`,
+        );
+      }
+      if (!buildCronExpression(data.interval, data.time)) {
+        throw new BadRequestException(
+          `Ungueltiges Intervall "${data.interval}" — erwartet daily, weekly oder monthly.`,
+        );
+      }
+    }
+    const keepCount = Number.isFinite(data.keepCount) && data.keepCount > 0
+      ? Math.floor(data.keepCount)
+      : 7;
+
     const entries: [string, string | number | boolean][] = [
-      ['backup.enabled', data.enabled],
+      ['backup.enabled', !!data.enabled],
       ['backup.interval', data.interval],
       ['backup.time', data.time],
-      ['backup.keepCount', data.keepCount],
+      ['backup.keepCount', keepCount],
     ];
 
     for (const [key, valueJson] of entries) {
@@ -366,7 +397,19 @@ export class SettingsService {
       });
     }
 
+    // Job sofort neu planen — `enabled=false` raeumt einen alten Job auf,
+    // `enabled=true` registriert einen neuen mit der frischen Zeit.
+    await this.backupScheduler.reschedule();
+
     return this.getBackupConfig();
+  }
+
+  /**
+   * Status fuer das Settings-UI: Konfig + nextRunAt + last-* aus dem
+   * Scheduler. Reine Lesemethode — aendert nichts.
+   */
+  getBackupStatus() {
+    return this.backupScheduler.getStatus();
   }
 
   // ── Logo ────────────────────────────────────────────
@@ -711,6 +754,20 @@ export class SettingsService {
       orderBy: { createdAt: 'desc' },
     });
     return rows.map(serializeBackupRecord);
+  }
+
+  /**
+   * Serialisiertes Backup nach ID. Liefert null statt zu werfen — wird
+   * vom Manual-Backup-Endpoint genutzt, der bei `null` selbst eine 404
+   * baut. Lese-Pfad ist absichtlich entkoppelt von `getBackupOrThrow`,
+   * damit andere Stellen nicht versehentlich auf Exception-Verhalten
+   * angewiesen sind.
+   */
+  async getBackup(id: string) {
+    if (!/^[\w.-]+$/.test(id)) return null;
+    const row = await this.prisma.backup.findUnique({ where: { id } });
+    if (!row) return null;
+    return serializeBackupRecord(row);
   }
 
   private async getBackupOrThrow(id: string) {
@@ -1180,7 +1237,8 @@ function makeBackupReader(row: BackupRecord, storage: StorageService) {
         const client = storage.getClient();
         const bucket = storage.getBucketName();
         const stream = client.listObjectsV2(bucket, `${prefix}/uploads/`, true);
-        const out: Array<{ relativeKey: string; targetStorageKey: string }> = [];
+        const out: Array<{ relativeKey: string; targetStorageKey: string }> =
+          [];
         await new Promise<void>((res, rej) => {
           stream.on('data', (obj) => {
             if (!obj.name) return;

@@ -3,6 +3,7 @@ export { KioskProjectView } from "./KioskProjectView";
 export { ProjectChecklistSection } from "./ProjectChecklistSection";
 export { ProjectNoticesSection } from "./ProjectNoticesSection";
 export { PlanningCalendar } from "./PlanningCalendar";
+export { PlanningProfitTool } from "./PlanningProfitTool";
 export { TimesheetList } from "./TimesheetList";
 export { FinancialKpi } from "./FinancialKpi";
 export { ProjectWorkRecordsModal } from "./ProjectWorkRecordsModal";

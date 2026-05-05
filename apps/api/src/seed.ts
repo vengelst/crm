@@ -407,6 +407,116 @@ async function main() {
       name: 'Rollen/Rechte verwalten',
       category: 'Einstellungen',
     },
+    {
+      code: 'planning.view',
+      name: 'Ertragsplanung ansehen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.edit',
+      name: 'Ertragsplanung bearbeiten',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.export',
+      name: 'Ertragsplanung exportieren (CSV/PDF)',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.targets',
+      name: 'Ziel-Werte pflegen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.actuals.edit',
+      name: 'Ist-Werte pflegen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.forecast.view',
+      name: 'Plan-vs-Ist und Forecast einsehen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.versioning.manage',
+      name: 'Szenario-Versionen verwalten',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.import',
+      name: 'Ist-Werte importieren (CSV)',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.import.logs.view',
+      name: 'Importprotokolle einsehen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.kpi.view',
+      name: 'KPI-Dashboard ansehen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.alerts.manage',
+      name: 'Alert-Regeln & Warnungen verwalten',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.review.submit',
+      name: 'Szenario zur Freigabe einreichen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.review.approve',
+      name: 'Szenario freigeben',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.review.reject',
+      name: 'Szenario ablehnen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.baseline.manage',
+      name: 'Baselines verwalten',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.budget.view',
+      name: 'Budgetposten ansehen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.budget.edit',
+      name: 'Budgetposten pflegen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.cashflow.view',
+      name: 'Liquiditaetsvorschau ansehen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.capacity.view',
+      name: 'Kapazitaet/Auslastung ansehen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.capacity.edit',
+      name: 'Kapazitaetsprofile pflegen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.pipeline.view',
+      name: 'Vertriebs-Pipeline ansehen',
+      category: 'Ertragsplanung',
+    },
+    {
+      code: 'planning.pipeline.edit',
+      name: 'Pipeline-Items pflegen',
+      category: 'Ertragsplanung',
+    },
   ];
 
   for (const perm of permissions) {

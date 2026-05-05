@@ -996,3 +996,73 @@ Beide CRM-Container mit `NODE_ENV=development`, `CHOKIDAR_USEPOLLING=true`, `WAT
 - Ergebnis / Entscheidung:
   - Der fachliche Restpunkt ist geschlossen.
   - Wiedervorlagen in Kunde und Projekt sind jetzt auch in Anzeige und Zaehlung sauber von `TODO` und `CALLBACK` getrennt.
+
+### Backup-Scheduler repariert (Claude)
+
+- Ausgangslage:
+  - Die Backup-Settings (`backup.enabled`, `backup.interval`, `backup.time`, `backup.keepCount`) wurden zwar gespeichert, aber nirgends zyklisch ausgewertet.
+  - In `SettingsService` gab es weder `@Cron`/`@Interval` noch `SchedulerRegistry`-Nutzung — Backups liefen nur ueber den manuellen Button.
+  - Konsequenz: enabled=true ohne Wirkung, `time` rein dekorativ.
+
+- Umsetzung durch Claude:
+  - Neuer Service `apps/api/src/settings/backup-scheduler.service.ts` mit `OnModuleInit` + `OnModuleDestroy`.
+  - Job ueber `SchedulerRegistry.addCronJob` registriert; cron-Ausdruck wird aus `interval` + `HH:mm` aufgebaut (`daily`, `weekly` Mo, `monthly` 1.). Server-Lokalzeit (Container UTC), bewusst nicht UTC-only — `time`-Input und Anzeige laufen identisch.
+  - `parseHHmm` validiert das Zeitformat upfront; `updateBackupConfig` weist ungueltige Werte mit `BadRequestException` zurueck (Frontend zeigt 400-Body als Fehlermeldung).
+  - `forwardRef` zwischen `SettingsService` ↔ `BackupSchedulerService` (beidseitige Abhaengigkeit, weil der Scheduler `createBackup` aufruft und der Service den Scheduler bei Settings-Aenderung neu plant).
+  - `enabled=false` raeumt den Job ueber `SchedulerRegistry.deleteCronJob` weg — kein Zombie.
+  - Lauf-Status wird in der `Setting`-Tabelle persistiert (`backup.lastRunAt`, `backup.lastRunStatus`, `backup.lastRunMessage`, `backup.lastBackupId`); kein Schemawechsel noetig, ueberlebt Container-Restart.
+  - Fehler im `runScheduledBackup` werden gefangen und geloggt, der Cron-Job bleibt registriert — naechster Tick laeuft normal.
+  - `keepCount`-Logik unveraendert (`enforceKeepCount` wird weiterhin aus `createBackup` aufgerufen).
+  - Neuer Endpoint `GET /api/settings/backup/status` liefert Konfig + `nextRunAt` (live aus `cronJob.nextDate()`) + `lastRunAt`/`lastRunStatus`/`lastRunMessage`.
+  - Frontend `BackupSettingsTab` zeigt Status-Block ueber dem Konfig-Formular (Status, Naechster Lauf, Letzter Lauf + farbig markiertes Ergebnis); refetcht nach Save und nach Manuell-Backup. i18n DE/EN ergaenzt.
+  - Neue Direkt-Dependency `cron@^4.4.0` in `apps/api/package.json` (war zuvor nur transitiv ueber `@nestjs/schedule` aufloesbar).
+
+- Pruefung durch Claude (Testplan komplett):
+  - `pnpm --filter api exec tsc --noEmit` gruen.
+  - `pnpm --filter web lint` gruen.
+  - `pnpm --filter web exec tsc --noEmit` gruen.
+  - Boot-Log zeigt nach Container-Restart: `BackupSchedulerService Backup-Scheduler registriert: cron="0 3 * * *", naechster Lauf=…`.
+  - Smoketest mit Schedule auf Server-Uhrzeit + ~3 Minuten:
+    - Cron-Tick um 10:58:10 ausgeloest, Log `Auto-Backup gestartet` + `Auto-Backup beendet: status=succeeded backupId=58f2203d-…`.
+    - Status-Endpoint zeigt anschliessend `lastRunStatus=succeeded`, neue `lastBackupId`, `nextRunAt` rollt korrekt auf den Folgetag.
+    - `GET /settings/backup/list` enthaelt das frisch erstellte Backup mit `status=READY` und `createdByUserId=null` (Systemlauf).
+  - Zeit-Aenderung ohne Restart: `PUT /settings/backup` mit neuer `time` schreibt sofort einen neuen Cron-Eintrag (`Backup-Scheduler registriert: cron="0 23 * * *"`); alter Job war zuvor implizit durch `unregisterIfPresent` weg.
+  - `enabled=false`: Log `Backup-Scheduler: deaktiviert (backup.enabled=false), kein Job registriert.`, Status-Endpoint liefert `nextRunAt=null`.
+  - Ungueltige Eingabe (`time=99:99`) wird mit 400 abgewiesen, Konfig in der DB bleibt unveraendert.
+  - Restore der Original-Konfig (daily 03:00, keep 14) am Ende.
+
+- Ergebnis / Entscheidung:
+  - Automatische Backups laufen jetzt zuverlaessig zur konfigurierten Uhrzeit.
+  - Statusanzeige im UI ermoeglicht Operations-Pruefung ohne Log-Zugriff.
+  - Manuelle Backup-Funktion ist unangetastet, keine Regression.
+
+### Backup-Haertung: Run-Lock + Timezone-Anzeige (Claude)
+
+- Ausgangslage: Backup-Scheduler war stabil (siehe vorigen Eintrag), aber zwei Sicherheitsluecken offen:
+  1. Manuelle Backup-Trigger konnten parallel zum Cron-Tick (oder zueinander) laufen — `pg_dump` zweimal gleichzeitig haette die Replikat-Last verdoppelt und im Worst Case Konflikte erzeugt.
+  2. UI zeigte Zeiten ohne Hinweis auf die Server-Zeitzone — Admins muessten raten, ob `02:00` UTC oder lokal gemeint ist.
+
+- Umsetzung durch Claude:
+  - In-Memory-Run-Lock (`isRunning: boolean`) im `BackupSchedulerService`. Sowohl Cron-Tick als auch der manuelle Pfad gehen jetzt durch `runScheduledBackup(source, userId?)`. Bei aktivem Lauf wird der zweite Trigger mit `outcome: 'skipped', reason: 'SKIPPED_ALREADY_RUNNING'` abgewiesen — nichts gestartet.
+  - Manueller Trigger (`POST /settings/backup/create`) laeuft jetzt ueber `BackupSchedulerService.runManual(userId)`. Das gibt ihm den gleichen Lock wie dem Cron-Pfad und behaelt gleichzeitig den `createdByUserId`-Eintrag bei. Bei Lock-Konflikt antwortet der Endpoint mit `409 ConflictException` und Body `{ code: "SKIPPED_ALREADY_RUNNING", message }`.
+  - `BackupSchedulerStatus` um `timezone: string` (IANA via `Intl.DateTimeFormat().resolvedOptions().timeZone`) und `isRunning: boolean` erweitert. Frontend `BackupSettingsTab` rendert jetzt:
+    - Zeitzonen-Suffix `(UTC)` neben „Naechster Lauf" und „Letzter Lauf",
+    - Hilfetext „Backup-Zeit bezieht sich auf die Server-Zeitzone (UTC).",
+    - Live-Anzeige „Lauf laeuft gerade", solange das Lock haelt.
+  - Datums-Format nutzt im UI explizit `timeZone: status.timezone`, sodass die Anzeige sich nicht vom Browser-User-Profil verschiebt — Cron tickt in Server-TZ, Anzeige passt dazu.
+  - i18n DE/EN: `settings.backup.scheduler.running`, `…tzHint`, `settings.backup.alreadyRunning`.
+
+- Pruefung durch Claude:
+  - `pnpm --filter api exec tsc --noEmit` gruen.
+  - `pnpm --filter web lint` + `tsc --noEmit` gruen.
+  - Concurrent-Trigger-Smoketest: Zwei `POST /settings/backup/create`-Requests mit ~50 ms Versatz.
+    - Request 1: `HTTP 201`, voller Backup-Record (`status=READY`, `createdByUserId` gesetzt).
+    - Request 2: `HTTP 409`, Body `{"code":"SKIPPED_ALREADY_RUNNING", ...}`.
+    - Logs: `Auto-Backup gestartet (source=manual, …)` + `Backup-Lauf (manual) abgewiesen: SKIPPED_ALREADY_RUNNING` (WARN) + `Auto-Backup beendet: source=manual status=succeeded backupId=…`.
+  - `keepCount`-Bereinigung weiterhin korrekt (2 READY-Backups bei Limit 14).
+  - Status-Endpoint zeigt `timezone: "UTC"` und `isRunning: false` ausserhalb von Laeufen.
+
+- Ergebnis / Entscheidung:
+  - Parallele Backup-Laeufe sind ausgeschlossen, sowohl Cron×Manual als auch Manual×Manual.
+  - UI ist eindeutig: Admin sieht Zeitzone neben jeder Zeit.
+  - Manueller Backup-Endpoint behaelt seinen alten 201-Vertrag bei Erfolg und ergaenzt 409 als sauberen Konflikt-Fall.
