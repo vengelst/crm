@@ -847,9 +847,31 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     }
 
     await runMutation(async () => {
-      await apiFetch(path, {
-        method: "DELETE",
-      });
+      try {
+        await apiFetch(path, {
+          method: "DELETE",
+        });
+      } catch (deleteError) {
+        const isWorkerDelete = path.startsWith("/workers/");
+        const isBlockedByTimeData =
+          deleteError instanceof Error
+          && (deleteError as ApiError).status === 400
+          && deleteError.message.includes("Monteur kann nicht geloescht werden");
+
+        if (isWorkerDelete && isBlockedByTimeData) {
+          const forceConfirmed = window.confirm(
+            `${l("worker.forceDeleteConfirm")}\n\n${l("worker.forceDeleteHint")}`,
+          );
+          if (!forceConfirmed) {
+            return;
+          }
+          await apiFetch(`${path}${path.includes("?") ? "&" : "?"}force=true`, {
+            method: "DELETE",
+          });
+        } else {
+          throw deleteError;
+        }
+      }
       await loadData();
       setSuccess(`${label} geloescht.`);
     });

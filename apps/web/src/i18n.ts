@@ -89,6 +89,8 @@ const de: Record<string, string> = {
   "worker.from": "ab",
   "worker.to": "bis",
   "worker.open": "offen",
+  "worker.forceDeleteConfirm": "Dieser Monteur hat bereits Zeitdaten. Sollen alle Monteur-Daten trotzdem geloescht werden?",
+  "worker.forceDeleteHint": "Dabei werden auch zugeordnete Zeitdaten endgueltig entfernt. Dieser Vorgang kann nicht rueckgaengig gemacht werden.",
   // ── Notices ────────────────────────────────────
   "notice.siteNotices": "Baustellenhinweise",
   "notice.noNotices": "Keine Hinweise vorhanden.",
@@ -1901,6 +1903,8 @@ const en: Record<string, string> = {
   "worker.from": "from",
   "worker.to": "to",
   "worker.open": "open",
+  "worker.forceDeleteConfirm": "This worker already has time data. Do you still want to delete all worker data?",
+  "worker.forceDeleteHint": "Assigned time data will also be permanently removed. This action cannot be undone.",
   // ── Notices ────────────────────────────────────
   "notice.siteNotices": "Site Notices",
   "notice.noNotices": "No notices available.",
