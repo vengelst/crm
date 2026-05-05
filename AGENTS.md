@@ -17,6 +17,7 @@
 
 - Unmittelbar nach jeder Umsetzung durch Claude muss sichergestellt werden, dass der **lokale Dev-Docker-Stand** die Aenderungen sichtbar unter **http://localhost:3800** ausliefert (Build/Container/Compose wie im Projekt vorgesehen; bei Bedarf Neustart oder erneutes Hochfahren, bis der aktuelle Stand erreichbar ist).
 - **Alte oder produktionsnahe Containerstaende** duerfen **nicht** als Referenz fuer die lokale Entwicklung gelten. Nur der aktive Dev-Stack auf dem Rechner des Umsetzers zaehlt als gueltiger Nachweis, dass die Aenderung lokal sichtbar ist.
+- Nach **jeder Codeaenderung** an `apps/api/**` oder `apps/web/**` sind die Services `api` und `web` **immer aktiv neu zu laden** (kein Raten, kein Auslassen). Standardvorgehen: `docker compose up -d --build api web`; mindestens jedoch ein expliziter Neustart beider Services, sodass der laufende Stand sicher den letzten Code enthaelt.
 
 ## Dokumentation
 

@@ -58,6 +58,22 @@ export class NotificationsService {
     });
   }
 
+  async remove(id: string) {
+    return this.prisma.notification.delete({
+      where: { id },
+    });
+  }
+
+  async removeAll(recipientType: 'user' | 'worker', recipientId: string) {
+    return this.prisma.notification.deleteMany({
+      where: {
+        ...(recipientType === 'user'
+          ? { recipientUserId: recipientId }
+          : { recipientWorkerId: recipientId }),
+      },
+    });
+  }
+
   // ── Erzeugen ─────────────────────────────────
 
   async notifyWorker(

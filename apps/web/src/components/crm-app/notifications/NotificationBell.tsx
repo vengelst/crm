@@ -60,6 +60,27 @@ export function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, ini
     setUnread(0);
   }
 
+  async function deleteOne(id: string) {
+    const ok = window.confirm(l("notif.deleteConfirm"));
+    if (!ok) return;
+    await apiFetch(`/notifications/${id}`, { method: "DELETE" }).catch(() => {});
+    setItems((current) => {
+      const target = current.find((n) => n.id === id);
+      if (target && !target.read) {
+        setUnread((count) => Math.max(0, count - 1));
+      }
+      return current.filter((n) => n.id !== id);
+    });
+  }
+
+  async function deleteAll() {
+    const ok = window.confirm(l("notif.deleteAllConfirm"));
+    if (!ok) return;
+    await apiFetch("/notifications", { method: "DELETE" }).catch(() => {});
+    setItems([]);
+    setUnread(0);
+  }
+
   const typeLabel = (type: string) => {
     switch (type) {
       case "ASSIGNMENT": return l("notif.typeAssignment");
@@ -87,27 +108,25 @@ export function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, ini
         <div className="absolute right-0 top-full z-50 mt-2 w-80 max-h-96 overflow-auto rounded-2xl border border-black/10 bg-white shadow-xl dark:border-white/10 dark:bg-slate-900">
           <div className="flex items-center justify-between border-b border-black/10 px-4 py-3 dark:border-white/10">
             <span className="text-sm font-semibold">{l("notif.title")}</span>
-            {items.some((n) => !n.read) ? (
-              <button type="button" onClick={() => void markAllRead()} className="text-xs text-blue-600 hover:underline dark:text-blue-400">{l("notif.readAll")}</button>
-            ) : null}
+            <div className="flex items-center gap-3">
+              {items.some((n) => !n.read) ? (
+                <button type="button" onClick={() => void markAllRead()} className="text-xs text-blue-600 hover:underline dark:text-blue-400">
+                  {l("notif.readAll")}
+                </button>
+              ) : null}
+              {items.length > 0 ? (
+                <button type="button" onClick={() => void deleteAll()} className="text-xs text-red-600 hover:underline dark:text-red-400">
+                  {l("notif.deleteAll")}
+                </button>
+              ) : null}
+            </div>
           </div>
           {items.length === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-slate-400">{l("notif.none")}</div>
           ) : (
             <div className="divide-y divide-black/5 dark:divide-white/5">
               {items.map((n) => (
-                <button key={n.id} type="button" onClick={() => {
-                  if (!n.read) void markRead(n.id);
-                  if (n.linkType && n.linkId) {
-                    const path = n.linkType === "PROJECT" ? `/projects/${n.linkId}`
-                      : n.linkType === "CUSTOMER" ? `/customers/${n.linkId}`
-                      : n.linkType === "DOCUMENT" ? `/projects`
-                      : n.linkType === "TIMESHEET" ? `/projects`
-                      : null;
-                    if (path) { setOpen(false); router.push(path); }
-                  }
-                }}
-                  className={cx("w-full px-4 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800", !n.read ? "bg-blue-50/50 dark:bg-blue-500/5" : "")}>
+                <div key={n.id} className={cx("px-4 py-3", !n.read ? "bg-blue-50/50 dark:bg-blue-500/5" : "")}>
                   <div className="flex items-start gap-2">
                     <span className={cx("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase",
                       n.type === "ASSIGNMENT" ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400" :
@@ -116,14 +135,34 @@ export function NotificationBell({ apiFetch }: { apiFetch: <T>(path: string, ini
                       n.type === "REMINDER" ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300" :
                       "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                     )}>{typeLabel(n.type)}</span>
-                    <div className="min-w-0 flex-1">
+                    <button type="button" onClick={() => {
+                      if (!n.read) void markRead(n.id);
+                      if (n.linkType && n.linkId) {
+                        const path = n.linkType === "PROJECT" ? `/projects/${n.linkId}`
+                          : n.linkType === "CUSTOMER" ? `/customers/${n.linkId}`
+                          : n.linkType === "DOCUMENT" ? "/projects"
+                          : n.linkType === "TIMESHEET" ? "/projects"
+                          : null;
+                        if (path) { setOpen(false); router.push(path); }
+                      }
+                    }}
+                      className="min-w-0 flex-1 text-left transition hover:opacity-90">
                       <div className="text-sm font-medium">{n.title}</div>
                       {n.body ? <div className="mt-0.5 text-xs text-slate-500">{n.body}</div> : null}
                       <div className="mt-1 text-[10px] text-slate-400">{new Date(n.createdAt).toLocaleString(locale)}</div>
+                    </button>
+                    <div className="mt-0.5 flex shrink-0 items-center gap-2">
+                      {!n.read ? <span className="h-2 w-2 rounded-full bg-blue-500" /> : null}
+                      <button
+                        type="button"
+                        onClick={() => void deleteOne(n.id)}
+                        className="rounded border border-red-300 px-1.5 py-0.5 text-[10px] text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+                      >
+                        {l("notif.delete")}
+                      </button>
                     </div>
-                    {!n.read ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-blue-500" /> : null}
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}

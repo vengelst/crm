@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Param,
@@ -57,6 +58,13 @@ export class NotificationsController {
     return this.notificationsService.markRead(id);
   }
 
+  @Delete(':id')
+  @KioskAllowed()
+  async remove(@Param('id') id: string, @Req() request: RequestWithUser) {
+    await this.assertOwnership(request, id);
+    return this.notificationsService.remove(id);
+  }
+
   @Post('read-all')
   @KioskAllowed()
   markAllRead(@Req() request: RequestWithUser) {
@@ -65,6 +73,16 @@ export class NotificationsController {
       return this.notificationsService.markAllRead('worker', workerId);
     }
     return this.notificationsService.markAllRead('user', request.user!.sub);
+  }
+
+  @Delete()
+  @KioskAllowed()
+  removeAll(@Req() request: RequestWithUser) {
+    if (request.user?.type === 'worker') {
+      const workerId = request.user.workerId ?? request.user.sub;
+      return this.notificationsService.removeAll('worker', workerId);
+    }
+    return this.notificationsService.removeAll('user', request.user!.sub);
   }
 
   private async assertOwnership(

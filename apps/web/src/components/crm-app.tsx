@@ -1050,13 +1050,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     { key: "projects" as const, href: "/projects", label: l("nav.projects"), icon: <FolderKanban className="h-5 w-5" />, color: "text-violet-500 dark:text-violet-400" },
     { key: "workers" as const, href: "/workers", label: l("nav.workers"), icon: <HardHat className="h-5 w-5" />, color: "text-amber-500 dark:text-amber-400" },
     { key: "planning" as const, href: "/planning", label: l("nav.planning"), icon: <CalendarDays className="h-5 w-5" />, color: "text-rose-500 dark:text-rose-400" },
-    ...(canSeeProfitPlanning
-      ? [{ key: "profit-planning" as const, href: "/profit-planning", label: l("nav.profitPlanning"), icon: <BarChart3 className="h-5 w-5" />, color: "text-emerald-500 dark:text-emerald-400" }]
-      : []),
-    ...(canSeeProfitPlanning
-      ? [{ key: "whatif" as const, href: "/whatif", label: l("nav.whatif"), icon: <BarChart3 className="h-5 w-5" />, color: "text-fuchsia-500 dark:text-fuchsia-400" }]
-      : []),
-    { key: "reports" as const, href: "/reports", label: l("nav.reports"), icon: <BarChart3 className="h-5 w-5" />, color: "text-cyan-500 dark:text-cyan-400" },
     { key: "tasks" as const, href: "/tasks", label: l("nav.tasks"), icon: <ListTodo className="h-5 w-5" />, color: "text-orange-500 dark:text-orange-400" },
     { key: "notes" as const, href: "/notes", label: l("nav.notes"), icon: <NotebookText className="h-5 w-5" />, color: "text-fuchsia-500 dark:text-fuchsia-400" },
   ];
@@ -1147,16 +1140,15 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
             </button>
           </div>
         ) : null}
-        <div className="flex flex-col gap-4 rounded-3xl border border-black/10 bg-white/80 p-5 shadow-sm dark:border-white/10 dark:bg-slate-900/80 lg:flex-row lg:items-center lg:justify-between">
+        <div className="sticky top-3 z-40 flex flex-col gap-2 rounded-3xl border border-black/10 bg-white/90 p-5 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-900/90 lg:flex-row lg:items-center lg:justify-start lg:gap-0">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-slate-500">{l("worker.platform")}</p>
             <h1 className="text-2xl font-semibold">{l(`nav.${section === "users" ? "settings" : section === "profit-planning" ? "profitPlanning" : section === "whatif" ? "whatif" : section}`)}</h1>
-            <p className="text-sm text-slate-500">
-              {auth.user.displayName} · {auth.user.email}
-            </p>
+            <div className="mt-2">
+              <ClockBadge locale={activeLang === "en" ? "en-US" : "de-DE"} />
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <ClockBadge locale={activeLang === "en" ? "en-US" : "de-DE"} />
+          <div className="flex flex-wrap items-center gap-2 lg:-ml-16">
             {navItems.map((item) =>
               settingsForm.navAsIcons ? (
                 <IconNavLink key={item.key} href={item.href} active={section === item.key} label={item.label}>
@@ -1170,26 +1162,34 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </NavLink>
               ),
             )}
+            <ReportsNavMenu
+              iconMode={settingsForm.navAsIcons}
+              active={section === "reports" || section === "profit-planning" || section === "whatif"}
+              activeSection={section}
+              canSeeProfitPlanning={canSeeProfitPlanning}
+              reportsLabel={l("nav.reports")}
+              profitPlanningLabel={l("nav.profitPlanning")}
+              whatIfLabel={l("nav.whatif")}
+            />
             {canManageSettings ? (
-              settingsForm.navAsIcons ? (
-                <IconNavLink
-                  href="/settings"
-                  active={section === "settings" || section === "users"}
-                  label={l("nav.settings")}
-                >
-                  <span className={section === "settings" || section === "users" ? "text-white dark:text-slate-950" : "text-slate-600 dark:text-slate-300"}>
-                    <SettingsIcon className="h-5 w-5" />
-                  </span>
-                </IconNavLink>
-              ) : (
-                <NavLink href="/settings" active={section === "settings" || section === "users"}>
-                  {l("nav.settings")}
-                </NavLink>
-              )
+              <IconNavLink
+                href="/settings"
+                active={section === "settings" || section === "users"}
+                label={l("nav.settings")}
+              >
+                <span className={section === "settings" || section === "users" ? "text-white dark:text-slate-950" : "text-slate-600 dark:text-slate-300"}>
+                  <SettingsIcon className="h-5 w-5" />
+                </span>
+              </IconNavLink>
             ) : null}
             <NotificationBell apiFetch={apiFetch} />
             <ThemeToggle />
-            <SecondaryButton onClick={() => logout()}>{l("nav.logout")}</SecondaryButton>
+            <div className="group relative">
+              <SecondaryButton onClick={() => logout()}>{l("nav.logout")}</SecondaryButton>
+              <div className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-max max-w-[22rem] rounded-xl border border-black/10 bg-white px-3 py-2 text-xs text-slate-600 opacity-0 shadow transition group-hover:opacity-100 dark:border-white/10 dark:bg-slate-900 dark:text-slate-300">
+                {auth.user.displayName} · {auth.user.email}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2350,6 +2350,64 @@ function hasPermission(auth: AuthState | null, code: string) {
   return Boolean(auth?.user.permissions?.includes(code));
 }
 
+function ReportsNavMenu({
+  iconMode,
+  active,
+  activeSection,
+  canSeeProfitPlanning,
+  reportsLabel,
+  profitPlanningLabel,
+  whatIfLabel,
+}: {
+  iconMode: boolean;
+  active: boolean;
+  activeSection: string;
+  canSeeProfitPlanning: boolean;
+  reportsLabel: string;
+  profitPlanningLabel: string;
+  whatIfLabel: string;
+}) {
+  const triggerClass = iconMode
+    ? (active
+      ? "group inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-900 bg-slate-900 !text-white transition dark:border-slate-300 dark:bg-slate-200 dark:!text-slate-950"
+      : "group inline-flex h-11 w-11 items-center justify-center rounded-xl border border-black/10 bg-white/80 transition hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800")
+    : (active
+      ? "group inline-flex rounded-xl border border-slate-900 bg-slate-900 px-3 py-2 text-sm font-medium !text-white transition dark:border-slate-300 dark:bg-slate-200 dark:!text-slate-950"
+      : "group inline-flex rounded-xl border border-black/10 bg-white/80 px-3 py-2 text-sm font-medium transition hover:bg-white dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800");
+
+  const menuLinkClass = (isActive: boolean) => (
+    isActive
+      ? "rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white dark:bg-slate-200 dark:text-slate-950"
+      : "rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+  );
+
+  return (
+    <div className="group relative">
+      <Link href="/reports" aria-label={reportsLabel} title={reportsLabel} className={triggerClass}>
+        <BarChart3 className="h-5 w-5" />
+        {!iconMode ? <span className="ml-2">{reportsLabel}</span> : null}
+      </Link>
+      <div className="pointer-events-none absolute left-0 top-full z-30 mt-2 min-w-[14rem] rounded-xl border border-black/10 bg-white p-2 opacity-0 shadow transition group-hover:pointer-events-auto group-hover:opacity-100 dark:border-white/10 dark:bg-slate-900">
+        <div className="grid gap-1">
+          <Link href="/reports" className={menuLinkClass(activeSection === "reports")}>
+            {reportsLabel}
+          </Link>
+          {canSeeProfitPlanning ? (
+            <Link href="/profit-planning" className={menuLinkClass(activeSection === "profit-planning")}>
+              {profitPlanningLabel}
+            </Link>
+          ) : null}
+          {canSeeProfitPlanning ? (
+            <Link href="/whatif" className={menuLinkClass(activeSection === "whatif")}>
+              {whatIfLabel}
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ClockBadge({ locale }: { locale: string }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -2367,7 +2425,7 @@ function ClockBadge({ locale }: { locale: string }) {
     [locale, now],
   );
   return (
-    <div className="rounded-xl border border-black/10 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-200">
+    <div className="inline-flex w-fit whitespace-nowrap rounded-xl border border-black/10 bg-slate-50 px-2 py-1 text-[11px] font-medium leading-none text-slate-700 dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-200">
       {currentDateTime}
     </div>
   );

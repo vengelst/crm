@@ -233,7 +233,7 @@ export function CollapseIndicator({ open }: { open: boolean }) {
   return (
     <ChevronDown
       className={cx(
-        "h-7 w-7 shrink-0 stroke-[3] text-emerald-600 transition-transform dark:text-emerald-400",
+        "-ml-1 h-5 w-5 shrink-0 stroke-[3] text-emerald-600 transition-transform dark:text-emerald-400",
         open ? "rotate-180" : "rotate-0",
       )}
     />
