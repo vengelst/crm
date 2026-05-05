@@ -288,6 +288,19 @@ else
     exit 1
   fi
   echo "[db] APP: Migration erfolgreich."
+
+  echo "[db] APP: fuehre Seed auf TEST-Datenbank aus..."
+  if ! docker compose -f docker-compose.yml run --rm --build -e DATABASE_URL="$DATABASE_URL" api sh -c "pnpm --filter api db:seed"; then
+    echo "" >&2
+    echo "========================================" >&2
+    echo "  APP-Deploy abgebrochen:" >&2
+    echo "  Seed auf TEST fehlgeschlagen." >&2
+    echo "  Kein Container-Rebuild durchgefuehrt." >&2
+    echo "  TEST-System laeuft weiter mit altem Stand." >&2
+    echo "========================================" >&2
+    exit 1
+  fi
+  echo "[db] APP: Seed erfolgreich."
 fi
 
 echo "[docker] rebuilding stack"

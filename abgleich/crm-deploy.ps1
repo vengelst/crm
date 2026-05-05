@@ -211,7 +211,7 @@ function Run-Deploy {
     # ── 5. Deploy-Modus waehlen und starten ────────────────────
     Write-Host ""
     Write-Host "Deploy mode:"
-    Write-Host "1  APP  (sicher)       - Code + DB-Migration auf TEST"
+    Write-Host "1  APP  (sicher)       - Code + Build + DB-Migration + Seed + API/Web-Neustart auf TEST"
     Write-Host "                         TEST-Datenbank und Storage bleiben erhalten"
     Write-Host "2  FULL (destruktiv)   - Lokale DB + Storage auf TEST ueberschreiben"
     Write-Host "                         ACHTUNG: Ueberschreibt alle TEST-Daten!"
@@ -320,7 +320,7 @@ while ($true) {
     Write-Host "8  Run DB Seed                  - pnpm db:seed"
     Write-Host "9  Create DB Dump               - SQL-Dump aus crm-postgres"
     Write-Host "10 Restore DB Dump              - Dump in crm_monteur einspielen"
-    Write-Host "11 Deploy to TEST Server        - APP (Code+Migration) oder FULL (destruktiv)"
+    Write-Host "11 Deploy to TEST Server        - APP (Build+Migration+Seed+Restart) oder FULL (destruktiv)"
     Write-Host "12 Live Status Dashboard        - Laufende Statusansicht"
     Write-Host "13 Git Workflow                 - Status/Add/Commit/Push"
     Write-Host "20 Exit"
