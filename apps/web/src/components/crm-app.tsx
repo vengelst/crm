@@ -164,7 +164,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [loginLang, setLoginLang] = useState<SupportedLang>("de");
   const activeLang: SupportedLang = auth?.sessionLang === "en" ? "en" : loginLang;
   const l = useCallback((key: string) => t(key, activeLang), [activeLang]);
-  const [now, setNow] = useState(() => new Date());
 
   const [summary, setSummary] = useState<Summary | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -214,22 +213,6 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const canPrintDocument = hasPermission(auth, "documents.print");
   const canPrintReports = hasPermission(auth, "reports.print");
   const canPrintTasks = hasPermission(auth, "tasks.print");
-  const timeLocale = activeLang === "en" ? "en-US" : "de-DE";
-  const currentDateTime = useMemo(
-    () =>
-      new Intl.DateTimeFormat(timeLocale, {
-        dateStyle: "medium",
-        timeStyle: "medium",
-      }).format(now),
-    [now, timeLocale],
-  );
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNow(new Date());
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const selectedCustomer = useMemo(
     () => customers.find((item) => item.id === entityId) ?? null,
@@ -1151,9 +1134,7 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="rounded-xl border border-black/10 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-200">
-              {currentDateTime}
-            </div>
+            <ClockBadge locale={activeLang === "en" ? "en-US" : "de-DE"} />
             {navItems.map((item) =>
               settingsForm.navAsIcons ? (
                 <IconNavLink key={item.key} href={item.href} active={section === item.key} label={item.label}>
@@ -2345,6 +2326,29 @@ function hasPermission(auth: AuthState | null, code: string) {
   // dem Server).
   if (auth?.user.permissions?.includes("*")) return true;
   return Boolean(auth?.user.permissions?.includes(code));
+}
+
+function ClockBadge({ locale }: { locale: string }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const currentDateTime = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        dateStyle: "medium",
+        timeStyle: "medium",
+      }).format(now),
+    [locale, now],
+  );
+  return (
+    <div className="rounded-xl border border-black/10 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-slate-800/70 dark:text-slate-200">
+      {currentDateTime}
+    </div>
+  );
 }
 
 function mapProjectToForm(project: Project): ProjectFormState {

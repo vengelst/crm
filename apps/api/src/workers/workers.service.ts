@@ -277,7 +277,7 @@ export class WorkersService {
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, forceDelete = false) {
     await this.getById(id);
 
     // Schutz: solange Zeitbuchungen historisch oder offen existieren,
@@ -285,23 +285,33 @@ export class WorkersService {
     // bekommen. Die Meldung trennt jetzt klar zwischen "noch nicht
     // geschlossen" und "historisch", damit Anwender wissen, wieso sie
     // den Datensatz nicht entfernen koennen.
-    const totalEntries = await this.prisma.timeEntry.count({
-      where: { workerId: id },
+    if (!forceDelete) {
+      const totalEntries = await this.prisma.timeEntry.count({
+        where: { workerId: id },
+      });
+      if (totalEntries > 0) {
+        const openClockIns = await this.prisma.timeEntry.count({
+          where: { workerId: id, entryType: 'CLOCK_IN' },
+        });
+        const closedEntries = await this.prisma.timeEntry.count({
+          where: { workerId: id, entryType: 'CLOCK_OUT' },
+        });
+        const hasOpen = openClockIns > closedEntries;
+        const reason = hasOpen
+          ? `noch ${openClockIns - closedEntries} offene Zeitbuchung(en) und insgesamt ${totalEntries} historische Eintraege`
+          : `${totalEntries} historische Zeitbuchung(en)`;
+        throw new BadRequestException(
+          `Monteur kann nicht geloescht werden: ${reason}. Fuer erzwungenes Loeschen '?force=true' verwenden.`,
+        );
+      }
+    }
+
+    const worker = await this.prisma.worker.findUnique({
+      where: { id },
+      select: { photoPath: true },
     });
-    if (totalEntries > 0) {
-      const openClockIns = await this.prisma.timeEntry.count({
-        where: { workerId: id, entryType: 'CLOCK_IN' },
-      });
-      const closedEntries = await this.prisma.timeEntry.count({
-        where: { workerId: id, entryType: 'CLOCK_OUT' },
-      });
-      const hasOpen = openClockIns > closedEntries;
-      const reason = hasOpen
-        ? `noch ${openClockIns - closedEntries} offene Zeitbuchung(en) und insgesamt ${totalEntries} historische Eintraege`
-        : `${totalEntries} historische Zeitbuchung(en)`;
-      throw new BadRequestException(
-        `Monteur kann nicht geloescht werden: ${reason}.`,
-      );
+    if (!worker) {
+      throw new NotFoundException('Monteur nicht gefunden.');
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -313,6 +323,10 @@ export class WorkersService {
       await tx.workerPin.deleteMany({ where: { workerId: id } });
       await tx.worker.delete({ where: { id } });
     });
+
+    if (worker.photoPath) {
+      await this.storage.deleteObjectWithFallback(worker.photoPath);
+    }
 
     return { deleted: true };
   }

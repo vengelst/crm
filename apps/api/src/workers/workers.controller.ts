@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   Res,
   UploadedFile,
@@ -66,8 +67,9 @@ export class WorkersController {
 
   @Delete(':id')
   @Permissions('workers.delete')
-  remove(@Param('id') id: string) {
-    return this.workersService.remove(id);
+  remove(@Param('id') id: string, @Query('force') force?: string) {
+    const forceDelete = force === 'true' || force === '1';
+    return this.workersService.remove(id, forceDelete);
   }
 
   // ── Profilbild ─────────────────────────────────────
