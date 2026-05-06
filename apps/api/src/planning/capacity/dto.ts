@@ -1,10 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  IsNumber,
-  IsOptional,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsNumber, IsOptional, Max, Min } from 'class-validator';
 
 /**
  * Patch-Form fuer das Default-Kapazitaetsprofil eines Szenarios.

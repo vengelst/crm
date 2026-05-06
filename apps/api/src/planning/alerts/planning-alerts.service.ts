@@ -88,7 +88,7 @@ export class PlanningAlertsService {
         name: dto.name !== undefined ? dto.name.trim() : undefined,
         // null erlaubt — Szenario explizit loesen.
         scenarioId:
-          dto.scenarioId === undefined ? undefined : dto.scenarioId ?? null,
+          dto.scenarioId === undefined ? undefined : (dto.scenarioId ?? null),
         metric: dto.metric ?? undefined,
         operator: dto.operator ?? undefined,
         threshold: dto.threshold ?? undefined,

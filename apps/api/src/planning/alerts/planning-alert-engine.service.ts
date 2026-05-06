@@ -128,7 +128,10 @@ export class PlanningAlertEngineService {
   }): Promise<EvaluatedRule> {
     const metric = rule.metric as AlertMetric;
     const operator = rule.operator as AlertOperator;
-    if (!ALERT_METRICS.includes(metric) || !ALERT_OPERATORS.includes(operator)) {
+    if (
+      !ALERT_METRICS.includes(metric) ||
+      !ALERT_OPERATORS.includes(operator)
+    ) {
       return {
         ruleId: rule.id,
         name: rule.name,
@@ -251,7 +254,11 @@ export class PlanningAlertEngineService {
       return {
         value: m.marginPercent,
         dedupeKey: `marginPercent:${m.year}-${m.month}`,
-        context: { year: m.year, month: m.month, marginPercent: m.marginPercent },
+        context: {
+          year: m.year,
+          month: m.month,
+          marginPercent: m.marginPercent,
+        },
       };
     }
     if (metric === 'deltaRevenuePercent') {
@@ -556,43 +563,65 @@ function formatAlertBody(
   value: number,
   ctx: Record<string, unknown>,
 ) {
+  const toText = (input: unknown): string => {
+    if (
+      typeof input === 'string' ||
+      typeof input === 'number' ||
+      typeof input === 'boolean'
+    ) {
+      return String(input);
+    }
+    return '-';
+  };
+  const toInt = (input: unknown): number | null => {
+    if (typeof input === 'number' && Number.isFinite(input)) {
+      return Math.trunc(input);
+    }
+    if (typeof input === 'string') {
+      const parsed = Number.parseInt(input, 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  };
+  const year = toInt(ctx.year);
+  const month = toInt(ctx.month);
   const period =
-    ctx.year && ctx.month
-      ? `${ctx.year}-${String(ctx.month).padStart(2, '0')}`
+    year !== null && month !== null
+      ? `${year}-${String(month).padStart(2, '0')}`
       : null;
   const head = period ? `Zeitraum: ${period}\n` : '';
   if (metric === 'marginPercent') {
     return `${head}Ist-Marge: ${value.toFixed(2)} %`;
   }
   if (metric === 'deltaRevenuePercent') {
-    return `${head}Delta Umsatz: ${value.toFixed(2)} % (Plan ${ctx.planRevenue}, Ist ${ctx.actualRevenue})`;
+    return `${head}Delta Umsatz: ${value.toFixed(2)} % (Plan ${toText(ctx.planRevenue)}, Ist ${toText(ctx.actualRevenue)})`;
   }
   if (metric === 'deltaCostPercent') {
-    return `${head}Delta Kosten: ${value.toFixed(2)} % (Plan ${ctx.planCost}, Ist ${ctx.actualCost})`;
+    return `${head}Delta Kosten: ${value.toFixed(2)} % (Plan ${toText(ctx.planCost)}, Ist ${toText(ctx.actualCost)})`;
   }
   if (metric === 'negativeMarginStreak') {
-    return `Negative Marge in ${value} Monaten in Folge (zuletzt ${ctx.lastYear}-${ctx.lastMonth}).`;
+    return `Negative Marge in ${value} Monaten in Folge (zuletzt ${toText(ctx.lastYear)}-${toText(ctx.lastMonth)}).`;
   }
   if (metric === 'cashBalance') {
-    return `Niedrigster Cash-Bestand im Horizont: ${value.toFixed(2)} EUR (Start ${ctx.startingCash}).`;
+    return `Niedrigster Cash-Bestand im Horizont: ${value.toFixed(2)} EUR (Start ${toText(ctx.startingCash)}).`;
   }
   if (metric === 'negativeCashflowStreak') {
-    return `Negativer Netto-Cashflow in ${value} Monaten in Folge (Horizont ${ctx.horizonMonths} Monate).`;
+    return `Negativer Netto-Cashflow in ${value} Monaten in Folge (Horizont ${toText(ctx.horizonMonths)} Monate).`;
   }
   if (metric === 'capexShare') {
-    return `Capex-Anteil am Gesamtbudget: ${value.toFixed(2)} % (Opex ${ctx.opex}, Capex ${ctx.capex}).`;
+    return `Capex-Anteil am Gesamtbudget: ${value.toFixed(2)} % (Opex ${toText(ctx.opex)}, Capex ${toText(ctx.capex)}).`;
   }
   if (metric === 'utilizationPercent') {
-    return `Peak-Auslastung im Horizont (${ctx.horizonWeeks} Wochen): ${value.toFixed(1)} %, ${ctx.weeksOverThreshold} Wochen ueber Schwelle.`;
+    return `Peak-Auslastung im Horizont (${toText(ctx.horizonWeeks)} Wochen): ${value.toFixed(1)} %, ${toText(ctx.weeksOverThreshold)} Wochen ueber Schwelle.`;
   }
   if (metric === 'capacityDeltaHours') {
     return `Niedrigste Wochen-Kapazitaetsreserve im Horizont: ${value.toFixed(0)} Stunden.`;
   }
   if (metric === 'overloadWeeksStreak') {
-    return `Ueberlastung in ${value} Wochen in Folge (Horizont ${ctx.horizonWeeks} Wochen).`;
+    return `Ueberlastung in ${value} Wochen in Folge (Horizont ${toText(ctx.horizonWeeks)} Wochen).`;
   }
   if (metric === 'pipelineWeighted') {
-    return `Gewichtete Pipeline (Quartal): ${value.toFixed(2)} EUR (brutto ${ctx.totalAmount}).`;
+    return `Gewichtete Pipeline (Quartal): ${value.toFixed(2)} EUR (brutto ${toText(ctx.totalAmount)}).`;
   }
   if (metric === 'pipelineEarlyStageShare') {
     return `Frueh-Stage-Anteil an gewichteter Pipeline: ${value.toFixed(1)} %.`;

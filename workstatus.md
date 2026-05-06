@@ -32,6 +32,7 @@
 - Bei Unsicherheit zwischen Planung und direkter Umsetzung erst rueckfragen.
 - Prozessaenderungen immer auch hier festhalten.
 - **Dev-Docker nach Claude-Umsetzung (verbindlich):** Direkt nach jeder Umsetzung durch Claude muss der lokale Dev-Docker-Stand die Aenderungen sichtbar unter **http://localhost:3800** liefern. Alte oder produktionsnahe Containerstaende gelten nicht als Dev-Referenz; nur der laufende Dev-Stack auf dem Umsetzungsrechner ist massgeblich.
+- **Dev-Docker nach Codex-Codeaenderung (verbindlich):** Wenn Codex selbst Code aendert, wird danach die App immer neu gebaut und neu gestartet; bei Aenderungen an `apps/api/**` oder `apps/web/**` werden `api` und `web` aktiv neu geladen (bevorzugt `docker compose up -d --build api web`, alternativ `stopapp.ps1` + `startapp.ps1`).
 - **i18n-Regel (verbindlich):**
   - Fuer dieses Projekt werden Uebersetzungen **nicht** ueber eine Datenbank, sondern **dateibasiert** gepflegt.
   - Wenn ein UI-Bereich mehrsprachig umgesetzt wird, muessen dort **alle sichtbaren festen Systemtexte** ueber i18n laufen.
@@ -53,6 +54,222 @@
   - Codex prueft bei Abnahmen zusaetzlich, ob in den geaenderten mehrsprachigen Komponenten noch harte sichtbare Texte verblieben sind.
 
 ## Aenderungshistorie
+
+## 2026-05-06
+
+### TEST/STAGING/PROD Readiness-Erweiterung + Drift-Checks (Claude)
+
+- Ausgangslage:
+  - PROD-Pfad war eingerichtet (`abgleich/deploy-prod.ps1`,
+    `abgleich/rollback-prod.ps1`, `abgleich/PROD-RUNBOOK.md`).
+  - Auftrag: drei Umgebungen (TEST/STAGING/PROD) klar trennen, Drift- und
+    Credential-Prechecks vor Migration verbindlich machen,
+    STAGING->PROD-Freigabecheck dokumentieren und testbar machen,
+    Rollback fuer STAGING ergaenzen, Runbook aktualisieren.
+
+- Umsetzung durch Claude:
+  - **STAGING-Umgebung neu eingefuehrt**:
+    - `abgleich/deploy-staging.ps1` (Pflichtparameter Server/Domain/RemoteRepo).
+      Hard-Block gegen TEST-Domain `crm.vivahome.de` und TEST-Pfad `/opt/crm`.
+      Hard-Block gegen Pfade/Domains, die `prod`/`-prod` enthalten.
+      Bestaetigungsworte: `STAGING`, `OVERWRITE STAGING DATA`, `NO BACKUP`,
+      `STAGING DRIFT OK`, `STAGING-DOMAIN`.
+    - `abgleich/rollback-staging.ps1` (Modi `code|db|storage|full`,
+      Bestaetigungswort `ROLLBACK STAGING`).
+    - `.env.staging.example` als gitignored Vorlage; `.gitignore` ergaenzt.
+  - **Drift- und Credential-Prechecks vor Migration**:
+    - **Lokaler ENV-Drift-Vorabcheck** in `deploy-staging.ps1` und
+      `deploy-prod.ps1` (`-SkipDriftCheck` schaltet ab):
+      Liest die Server-`.env` per SSH, vergleicht mit lokaler `.env.*`
+      ueber 11 Kern-Schluessel (DATABASE_URL, POSTGRES_PASSWORD, JWT_SECRET,
+      NEXT_PUBLIC_API_URL, MINIO_*, STORAGE_LOCAL_FALLBACK, SMTP_HOST/FROM).
+      Secrets werden maskiert gemeldet (`xx***yy`).
+      Volume-bindende Drifts (POSTGRES_PASSWORD, MINIO_ROOT_USER/PASSWORD)
+      verlangen getippte Bestaetigung `STAGING DRIFT OK` / `PROD DRIFT OK`.
+      Fehlende lokale Schluessel, die auf dem Server gesetzt waren, brechen
+      den Deploy hart ab (kein versteckter Server-Wert ohne Repo-Aequivalent).
+    - **Server-seitiger Credential-Precheck** (psql `select 1`) bleibt als
+      letzte Verteidigungslinie -> bei Fail kein migrate, kein Rebuild.
+    - **Standalone-Drift-Check** `abgleich/preflight-drift.ps1`
+      (`-EnvLabel test|staging|prod`): kombiniert ENV-Vergleich, Git-Drift
+      (lokal vs Server), optionale DB-Probe (`-CheckCredential`) und
+      HTTPS-Smoke (`-CheckSmoke`). Exit 0/2/3.
+  - **STAGING -> PROD Readiness validierbar**:
+    - `abgleich/staging-to-prod-readiness.ps1` (nicht-destruktiv):
+      Pflichtcheck SSH/Git STAGING, Container-Status STAGING (web/api/postgres/minio),
+      HTTPS-Smoke STAGING, optional SSH PROD + Snapshot-Pfad-Schreibtest,
+      optional HTTPS-Smoke PROD, ENV-Schluesselvergleich `.env.staging` vs
+      `.env.prod` (Schluesselmenge identisch, Secrets MUESSEN abweichen,
+      `DATABASE_URL` MUSS abweichen). Exit 0=Go, 2=No-Go, 3=Aufruffehler.
+  - **Cross-Env-Hard-Blocks geschaerft**:
+    - `deploy-prod.ps1` und `rollback-prod.ps1` lehnen jetzt zusaetzlich
+      `/opt/crm-staging` und Pfade/Domains mit `staging`/`-staging` ab.
+  - **Routing/Menu**:
+    - `abgleich/deploy.ps1`: `-Env staging` mit eigenem Parameterset
+      (`-StagingServer`/`-StagingDomain`/`-StagingRemoteRepo`/`-StagingEnvFile`/
+      `-StagingSkipBackup`/`-StagingSkipDriftCheck`).
+      `-Env prod` um `-ProdSkipDriftCheck` ergaenzt.
+    - `abgleich/crm-deploy.ps1`: neue Menueeintraege
+      `16 Deploy to STAGING`, `17 STAGING Rollback`,
+      `18 STAGING -> PROD Readiness`. ValidateSet erweitert um `staging`.
+  - **Runbook + Checkliste aktualisiert**:
+    - `abgleich/PROD-RUNBOOK.md`: drei-Umgebungen-Tabelle, Drift-Check-Sektion
+      (eingebaut + standalone), STAGING-Standardablauf, STAGING->PROD
+      Freigabecheck mit Pruefpunkte-Matrix (hart/weich), Rollback-Beispiele
+      fuer STAGING und PROD, erweiterte Go/No-Go-Kriterien.
+    - `abgleich/GO-LIVE-CHECKLISTE-STAGE-PROD.md`: Status der Punkte 6-9 auf
+      "erfuellt" gesetzt (technisch), Punkt 10 bleibt offen bis STAGING-Server
+      live + Live-Restore-Test, neuer Abschnitt C "Drift-Pruefungen".
+
+- Verifikation:
+  - PowerShell-Parser (`Language.Parser.ParseFile`) gruen fuer alle 8
+    geaenderten/neuen `.ps1`-Dateien (deploy.ps1, deploy-prod.ps1,
+    deploy-staging.ps1, rollback-prod.ps1, rollback-staging.ps1,
+    preflight-drift.ps1, staging-to-prod-readiness.ps1, crm-deploy.ps1).
+  - `pnpm lint`: gruen (api + web, 8.5 s).
+  - `pnpm test`: gruen (api `--passWithNoTests`, web Platzhalter).
+  - `pnpm build`: gruen (api `nest build` + web `next build`).
+  - Keine Secrets ins Repo: `.env.staging` ist gitignored; Vorlage
+    `.env.staging.example` enthaelt ausschliesslich `CHANGE_ME_*`-Platzhalter.
+
+- Ergebnis / Entscheidung:
+  - Akzeptanzkriterien aus dem Auftrag erfuellt:
+    - [x] Eindeutige Trennung TEST/STAGING/PROD (Pfad, Domain, Env-Datei,
+          Compose, Bestaetigungswort, Hard-Blocks beidseitig).
+    - [x] Drift- und Credential-Prechecks laufen vor Migration (lokal +
+          serverseitig).
+    - [x] STAGING->PROD-Freigabecheck dokumentiert und testbar
+          (`staging-to-prod-readiness.ps1` mit Exit-Code-Semantik).
+    - [x] Rollback-Pfade fuer STAGING und PROD technisch nachvollziehbar.
+    - [x] `pnpm lint`/`pnpm test`/`pnpm build` gruen.
+    - [x] `workstatus.md` aktualisiert.
+
+- Offene Punkte / Hinweise an Codex:
+  - STAGING-Server muss durch Betrieb aufgesetzt werden (Domain, SSH-Key,
+    Repo-Pfad `/opt/crm-staging`, eigene `.env.staging`).
+  - Live-Test der Drift-Checks und Rollback-Pfade gegen echte STAGING-/PROD-
+    Umgebung steht noch aus (Punkt 8/10 der Go-Live-Checkliste).
+  - PROD-Server-Werte fuer `-ProdServer`/`-ProdDomain`/`-ProdRemoteRepo` sowie
+    eine echte `.env.prod` muessen vor dem Go/No-Go gesetzt sein.
+
+### Produktions-Readiness Umsetzung (Claude)
+
+- Ausgangslage:
+  - Stage technisch gruen, aber die offenen PROD-Punkte (6-9) aus
+    `abgleich/GO-LIVE-CHECKLISTE-STAGE-PROD.md` blockierten den Go-Live.
+  - Auftrag laut `abgleich/CLAUDE-PROD-READINESS-AUFTRAG.md`:
+    Eindeutiger PROD-Deploypfad, Credential-Precheck, Rollback-Pfad, PROD-Runbook.
+
+- Umsetzung durch Claude:
+  - **PROD-Deploypfad sauber getrennt**:
+    - Neues Skript `abgleich/deploy-prod.ps1` mit Pflichtparametern `-Server`,
+      `-Domain`, `-RemoteRepo`. Keine stillen Defaults auf TEST.
+    - Hard-Block: `-Domain crm.vivahome.de` und `-RemoteRepo /opt/crm` werden
+      explizit als TEST-Reservierungen abgelehnt.
+    - Doppelte Bestaetigung bei `-Mode full` (`PROD` + `OVERWRITE PROD DATA`).
+    - `-SkipBackup` erfordert zusaetzliche `NO BACKUP`-Bestaetigung.
+    - `abgleich/deploy.ps1` akzeptiert jetzt `-Env prod` und reicht nach
+      `deploy-prod.ps1` durch.
+    - `abgleich/crm-deploy.ps1`-Menue: neue Eintraege `14 Deploy to PROD Server`
+      und `15 PROD Rollback` (klar separiert von TEST-Eintraegen).
+  - **PROD-Secrets/Credentials**:
+    - Neue lokale Datei-Vorlage `.env.prod.example` (gitignored:
+      `.gitignore` um `.env.prod` ergaenzt; Secrets verbleiben lokal).
+    - `deploy-prod.ps1` erzwingt Existenz von `-EnvFile` (Default `.env.prod`)
+      und uploadet sie als `.env` in `<RemoteRepo>` mit erzwungenem
+      `NEXT_PUBLIC_API_URL=/api`.
+    - **Credential-Precheck vor Migration**: Remote-Skript parst
+      `DATABASE_URL`, prueft `psql ... select 1` BEVOR Prisma laeuft. Bei
+      Misserfolg klare Fehlermeldung mit Hinweis auf Passwort-Drift
+      (POSTGRES_PASSWORD vs. Volume) und konkreten Fix-Optionen.
+      Migration und Rebuild werden in dem Fall NICHT ausgefuehrt -> PROD
+      bleibt im alten Stand.
+  - **Rollback-Pfad technisch und dokumentiert**:
+    - `deploy-prod.ps1` legt vor jedem Deploy automatisch einen Snapshot unter
+      `<RemoteRepo>/backups/<YYYYMMDD_HHMMSS>/` an:
+      - `commit.txt` (Vor-Deploy-Commit)
+      - `db.sql` (pg_dump --clean --if-exists)
+      - `storage.tar.gz` (tar -czf storage)
+      - Symlink `backups/last` zeigt auf juengsten Snapshot.
+    - Neues Skript `abgleich/rollback-prod.ps1` mit `-Mode code|db|storage|full`,
+      Sicherheits-Bestaetigung `ROLLBACK PROD`, gleiche Hard-Blocks gegen
+      TEST-Pfad. Rebuild bei Code/Full, Restart bei reinem DB/Storage-Restore.
+    - Bei fehlgeschlagener Prisma-Migration gibt das Remote-Skript den
+      konkreten Rollback-Befehl mit dem aktuellen Stamp im Stderr aus.
+  - **PROD-Runbook**:
+    - Neu: `abgleich/PROD-RUNBOOK.md` mit
+      Pre-Deploy-Checks, Standard-Deploy, Migrate-Only, Full-Deploy,
+      Smoke-Test-Liste, Monitoring/Logs, Rollback-Entscheidungskriterien
+      (Tabelle Symptom -> Modus), Beispielaufrufen, Eskalation, Go/No-Go.
+
+- Verifikation:
+  - PowerShell-Parser (`Language.Parser.ParseFile`) gruen fuer alle vier
+    geaenderten/neuen `.ps1`-Dateien (`deploy.ps1`, `deploy-prod.ps1`,
+    `rollback-prod.ps1`, `crm-deploy.ps1`).
+  - `pnpm lint`: gruen (2/2 Pakete, 7.9 s).
+  - `pnpm test`: gruen (api `--passWithNoTests`, web Platzhalter).
+  - `pnpm build`: gruen (api `nest build` + web `next build` 18.4 s).
+  - Keine Secrets ins Repo: `.env.prod` ist gitignored; Vorlage
+    `.env.prod.example` enthaelt ausschliesslich Platzhalter.
+  - Keine destruktiven Schritte ohne explizite Bestaetigung: alle
+    DESTRUKTIVE Pfade verlangen getippte Bestaetigung im Skript.
+
+- Ergebnis / Entscheidung:
+  - Akzeptanzkriterien aus dem Auftrag erfuellt:
+    - [x] eindeutiger PROD-Deploypfad
+    - [x] TEST/PROD klar getrennt
+    - [x] Credential-Precheck vor Migration
+    - [x] Rollback-Pfad technisch und dokumentiert
+    - [x] PROD-Runbook unter `abgleich/`
+    - [x] `pnpm lint/test/build` gruen
+    - [x] `workstatus.md` aktualisiert
+  - **PROD-Switch** kann jetzt kontrolliert mit Go/No-Go-Entscheidung gemaess
+    Runbook erfolgen, sobald `-ProdServer`, `-ProdDomain`, `-ProdRemoteRepo`
+    und eine echte `.env.prod` mit produktiven Secrets bereitstehen.
+
+- Offene Punkte / Hinweise an Codex:
+  - Realer Live-Test des Credential-Prechecks und der Rollback-Skripte gegen
+    eine echte PROD-Umgebung steht noch aus (Punkt 8 der Go-Live-Checkliste:
+    mindestens 1 verifizierter Restore-Test).
+  - Werte fuer `-ProdServer`/`-ProdDomain`/`-ProdRemoteRepo` muessen vor dem
+    ersten Go-Live verbindlich festgelegt werden.
+
+### Stage/Prod-Readiness, DB-Credentials und Qualitaets-Gates (Codex)
+
+- Ausgangslage:
+  - TEST-Deploy (`APP`) brach mit Prisma `P1000` ab (DB-Authentifizierung `postgres` fehlgeschlagen).
+  - Wunsch: Drift pruefen, Stage-Faehigkeit bewerten, Vorbereitung fuer Produktionswechsel.
+
+- Durchgefuehrte Pruefungen:
+  - TEST-Server `.env` geprueft: `DATABASE_URL` zeigte Passwort `postgres`.
+  - DB-Auth gegen `postgres:5432` im `crm_default`-Netz verifiziert; initial nicht konsistent.
+  - Passwort auf TEST-DB-Rolle `postgres` angeglichen; danach Prisma-Migration erfolgreich (`schema is up to date`).
+  - Drift-Check lokal/origin/TEST: gleicher Branch `main`, gleicher Commit `4539309`, kein Ahead/Behind.
+  - Runtime-Checks: `crm.vivahome.de` und `/api` erreichbar; `docker compose ps` auf TEST ok.
+
+- Qualitaetsstatus:
+  - `pnpm lint`: gruen (nur 1 Warning, keine Errors).
+  - `pnpm test`: gruen.
+  - `pnpm build`: gruen.
+
+- Umgesetzte Codeanpassungen (Codex, auf Wunsch direkt umgesetzt):
+  - `apps/api/src/planning/alerts/planning-alert-engine.service.ts`
+    - Typ-sichere String/Number-Normalisierung fuer Alert-Context eingefuehrt, um Template-Literal-Lintfehler zu vermeiden.
+  - `apps/api/src/settings/settings.service.ts`
+    - ungenutzten Import entfernt.
+    - synchrone Dateilese-Helfer als `Promise.resolve(...)` rueckgegeben, damit `require-await`-Verstosse entfallen.
+  - `apps/api/src/settings/backup-scheduler.service.ts`
+    - `void existing.stop();` gesetzt, um Floating-Promise-Warnung sauber zu markieren.
+
+- Dokumentation/Entscheidung:
+  - Auto-Fixes aus dem Lint-Lauf wurden auf Nutzerwunsch **behalten und dokumentiert**.
+  - Neue Go-Live-Checkliste mit klarer Rollenverteilung abgelegt:
+    - `abgleich/GO-LIVE-CHECKLISTE-STAGE-PROD.md`
+  - Konkreter Umsetzungsauftrag fuer Claude (PROD-Readiness) angelegt:
+    - `abgleich/CLAUDE-PROD-READINESS-AUFTRAG.md`
+  - Ergebnislage:
+    - **Stage-faehig: ja**
+    - **Produktionswechsel: erst nach Abschluss der offenen PROD-Punkte aus der Checkliste**
 
 ## 2026-04-28
 

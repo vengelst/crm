@@ -131,15 +131,18 @@ export function PrimaryButton({
 export function SecondaryButton({
   children,
   onClick,
+  disabled,
 }: {
   children: ReactNode;
   onClick: MouseEventHandler<HTMLButtonElement>;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
+      disabled={disabled}
+      className="rounded-xl border border-black/10 bg-white px-4 py-2 text-sm font-medium transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-slate-900 dark:hover:bg-slate-800"
     >
       {children}
     </button>

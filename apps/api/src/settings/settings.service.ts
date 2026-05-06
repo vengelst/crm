@@ -12,7 +12,6 @@ import {
   readFileSync,
   rmSync,
   statSync,
-  writeFileSync,
 } from 'node:fs';
 import { join, resolve, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -378,9 +377,10 @@ export class SettingsService {
         );
       }
     }
-    const keepCount = Number.isFinite(data.keepCount) && data.keepCount > 0
-      ? Math.floor(data.keepCount)
-      : 7;
+    const keepCount =
+      Number.isFinite(data.keepCount) && data.keepCount > 0
+        ? Math.floor(data.keepCount)
+        : 7;
 
     const entries: [string, string | number | boolean][] = [
       ['backup.enabled', !!data.enabled],
@@ -1262,15 +1262,15 @@ function makeBackupReader(row: BackupRecord, storage: StorageService) {
   // FILESYSTEM: Alt-Backup-Layout (storage/backups/<id>/...).
   const baseDir = row.storageKey;
   return {
-    async readFile(name: string): Promise<Buffer | null> {
+    readFile(name: string): Promise<Buffer | null> {
       const p = join(baseDir, name);
-      return existsSync(p) ? readFileSync(p) : null;
+      return Promise.resolve(existsSync(p) ? readFileSync(p) : null);
     },
-    async listUploadFiles(): Promise<
+    listUploadFiles(): Promise<
       Array<{ relativeKey: string; targetStorageKey: string }>
     > {
       const uploadsDir = join(baseDir, 'uploads');
-      if (!existsSync(uploadsDir)) return [];
+      if (!existsSync(uploadsDir)) return Promise.resolve([]);
       const out: Array<{ relativeKey: string; targetStorageKey: string }> = [];
       for (const f of readdirSync(uploadsDir, { withFileTypes: true })) {
         if (!f.isFile()) continue;
@@ -1279,11 +1279,11 @@ function makeBackupReader(row: BackupRecord, storage: StorageService) {
           targetStorageKey: `uploads/${f.name}`,
         });
       }
-      return out;
+      return Promise.resolve(out);
     },
-    async readUploadFile(relativeKey: string): Promise<Buffer | null> {
+    readUploadFile(relativeKey: string): Promise<Buffer | null> {
       const p = join(baseDir, relativeKey);
-      return existsSync(p) ? readFileSync(p) : null;
+      return Promise.resolve(existsSync(p) ? readFileSync(p) : null);
     },
   };
 }

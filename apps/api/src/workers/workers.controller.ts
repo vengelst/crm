@@ -65,6 +65,14 @@ export class WorkersController {
     return this.workersService.resetPin(id, pin);
   }
 
+  @Delete('bulk')
+  @Roles(RoleCode.SUPERADMIN)
+  @Permissions('workers.delete')
+  removeMany(@Body() body: { ids: string[] }, @Query('force') force?: string) {
+    const forceDelete = force === 'true' || force === '1';
+    return this.workersService.removeMany(body.ids ?? [], forceDelete);
+  }
+
   @Delete(':id')
   @Permissions('workers.delete')
   remove(@Param('id') id: string, @Query('force') force?: string) {
@@ -118,15 +126,14 @@ export class WorkersController {
     @Req() request: RequestWithUser,
     @Res() res: Response,
   ) {
-    if (
-      request.user?.type === 'worker' &&
-      request.user.sub !== id
-    ) {
+    if (request.user?.type === 'worker' && request.user.sub !== id) {
       // Worker-Token darf ausschliesslich das eigene Foto lesen — sonst
       // bewusst 403 (klar, dass es um Berechtigung geht; Existenz wird
       // damit nicht direkt geleakt, da der Aufrufer i. d. R. die eigene
       // ID kennt und fremde IDs nicht anhand 403/404 unterscheiden kann).
-      throw new ForbiddenException('Zugriff auf fremdes Profilbild verweigert.');
+      throw new ForbiddenException(
+        'Zugriff auf fremdes Profilbild verweigert.',
+      );
     }
 
     const { stream, contentType } =

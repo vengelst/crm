@@ -17,6 +17,9 @@ export function EntityList<T extends { id: string }>({
   onEdit,
   onDelete,
   badges,
+  selectable,
+  selectedIds,
+  onToggleSelect,
 }: {
   items: T[];
   title: (item: T) => string;
@@ -34,6 +37,12 @@ export function EntityList<T extends { id: string }>({
   onDelete?: (item: T) => void;
   /** Optionaler Render-Slot fuer kleine Kennzahlen / Badges neben dem Titel. */
   badges?: (item: T) => ReactNode;
+  /** Optional: Checkboxen zur Mehrfachauswahl je Eintrag. */
+  selectable?: boolean;
+  /** Optional: derzeit selektierte IDs. */
+  selectedIds?: Set<string>;
+  /** Optional: Callback bei Checkbox-Toggle. */
+  onToggleSelect?: (item: T, checked: boolean) => void;
 }) {
   return (
     <div className="grid gap-3">
@@ -54,7 +63,18 @@ export function EntityList<T extends { id: string }>({
             onOpen && "cursor-pointer transition hover:bg-slate-50 dark:hover:bg-slate-800/70",
           )}
         >
-          <div className="min-w-0">
+          <div className="flex min-w-0 items-start gap-3">
+            {selectable ? (
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 cursor-pointer rounded border-slate-300"
+                checked={selectedIds?.has(item.id) ?? false}
+                onClick={(event) => event.stopPropagation()}
+                onChange={(event) => onToggleSelect?.(item, event.target.checked)}
+                aria-label="Select item"
+              />
+            ) : null}
+            <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               {href ? (
                 <Link href={href(item)} className={cx("text-lg font-semibold hover:underline", titleClassName?.(item))}>
@@ -66,6 +86,7 @@ export function EntityList<T extends { id: string }>({
               {badges ? badges(item) : null}
             </div>
             <p className={cx("text-sm text-slate-500", subtitleClassName?.(item))}>{subtitle(item)}</p>
+            </div>
           </div>
           <div className="flex gap-2">
             {onEdit && editLabel ? (

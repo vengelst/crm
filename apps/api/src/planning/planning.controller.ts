@@ -360,10 +360,7 @@ export class PlanningController {
 
   @Get('import-jobs/:id/errors.csv')
   @Permissions('planning.import.logs.view')
-  async exportImportJobErrors(
-    @Param('id') id: string,
-    @Res() res: Response,
-  ) {
+  async exportImportJobErrors(@Param('id') id: string, @Res() res: Response) {
     const file = await this.importService.getJobErrorsCsv(id);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader(
@@ -375,10 +372,7 @@ export class PlanningController {
 }
 
 function normalizeStrategy(value: string | undefined): DuplicateStrategy {
-  if (
-    value &&
-    (DUPLICATE_STRATEGIES as readonly string[]).includes(value)
-  ) {
+  if (value && (DUPLICATE_STRATEGIES as readonly string[]).includes(value)) {
     return value as DuplicateStrategy;
   }
   return 'skip';
@@ -426,10 +420,7 @@ export class PlanningPhase6Controller {
 
   @Patch('alerts/rules/:id')
   @Permissions('planning.alerts.manage')
-  updateRule(
-    @Param('id') id: string,
-    @Body() dto: PatchPlanningAlertRuleDto,
-  ) {
+  updateRule(@Param('id') id: string, @Body() dto: PatchPlanningAlertRuleDto) {
     return this.alertsService.updateRule(id, dto);
   }
 
@@ -459,19 +450,13 @@ export class PlanningPhase6Controller {
 
   @Post('alerts/:id/ack')
   @Permissions('planning.alerts.manage')
-  ackAlert(
-    @Param('id') id: string,
-    @Req() request: RequestWithUser,
-  ) {
+  ackAlert(@Param('id') id: string, @Req() request: RequestWithUser) {
     return this.alertsService.acknowledge(id, request.user?.sub);
   }
 
   @Post('alerts/:id/resolve')
   @Permissions('planning.alerts.manage')
-  resolveAlert(
-    @Param('id') id: string,
-    @Req() request: RequestWithUser,
-  ) {
+  resolveAlert(@Param('id') id: string, @Req() request: RequestWithUser) {
     return this.alertsService.resolve(id, request.user?.sub);
   }
 
@@ -553,10 +538,7 @@ export class PlanningPhase7Controller {
 
   @Patch('scenarios/:id/org')
   @Permissions('planning.edit')
-  setOrg(
-    @Param('id') id: string,
-    @Body() dto: ScenarioOrgPatchDto,
-  ) {
+  setOrg(@Param('id') id: string, @Body() dto: ScenarioOrgPatchDto) {
     return this.workflowService.setOrgTags(id, dto);
   }
 
@@ -678,10 +660,7 @@ export class PlanningPhase8Controller {
 
   @Patch('budget-items/:id')
   @Permissions('planning.budget.edit')
-  updateBudgetItem(
-    @Param('id') id: string,
-    @Body() dto: PatchBudgetItemDto,
-  ) {
+  updateBudgetItem(@Param('id') id: string, @Body() dto: PatchBudgetItemDto) {
     return this.budgetService.update(id, dto);
   }
 
@@ -719,10 +698,7 @@ export class PlanningPhase8Controller {
 
   @Get('scenarios/:id/financial-kpis')
   @Permissions('planning.budget.view')
-  financialKpis(
-    @Param('id') id: string,
-    @Query('months') months?: string,
-  ) {
+  financialKpis(@Param('id') id: string, @Query('months') months?: string) {
     const horizon = months === '12' ? 12 : 6;
     return this.cashflowService.getFinancialKpis(id, horizon);
   }
@@ -743,19 +719,13 @@ export class PlanningPhase9Controller {
 
   @Patch('scenarios/:id/capacity')
   @Permissions('planning.capacity.edit')
-  patchCapacity(
-    @Param('id') id: string,
-    @Body() dto: PatchCapacityProfileDto,
-  ) {
+  patchCapacity(@Param('id') id: string, @Body() dto: PatchCapacityProfileDto) {
     return this.capacityService.patchProfile(id, dto);
   }
 
   @Get('scenarios/:id/utilization')
   @Permissions('planning.capacity.view')
-  getUtilization(
-    @Param('id') id: string,
-    @Query('weeks') weeks?: string,
-  ) {
+  getUtilization(@Param('id') id: string, @Query('weeks') weeks?: string) {
     const horizon = weeks ? Number.parseInt(weeks, 10) : 12;
     return this.capacityService.getUtilization(
       id,
@@ -800,11 +770,9 @@ export class PlanningPhase10Controller {
         stage && (PIPELINE_STAGES as readonly string[]).includes(stage)
           ? (stage as PipelineStage)
           : undefined,
-      ownerUserId:
-        ownerUserId === 'null' ? null : ownerUserId,
+      ownerUserId: ownerUserId === 'null' ? null : ownerUserId,
       locationId: locationId === 'null' ? null : locationId,
-      businessUnitId:
-        businessUnitId === 'null' ? null : businessUnitId,
+      businessUnitId: businessUnitId === 'null' ? null : businessUnitId,
     });
   }
 
@@ -816,10 +784,7 @@ export class PlanningPhase10Controller {
 
   @Patch('pipeline/:id')
   @Permissions('planning.pipeline.edit')
-  updatePipeline(
-    @Param('id') id: string,
-    @Body() dto: PatchPipelineItemDto,
-  ) {
+  updatePipeline(@Param('id') id: string, @Body() dto: PatchPipelineItemDto) {
     return this.pipelineService.update(id, dto);
   }
 
@@ -835,14 +800,16 @@ export class PlanningPhase10Controller {
     @Query('range') range?: string,
     @Query('scenario') scenario?: string,
   ) {
-    const safeRange: PipelineRange =
-      (PIPELINE_RANGES as readonly string[]).includes(range ?? '')
-        ? (range as PipelineRange)
-        : 'month';
-    const safeScenario: PipelineScenario =
-      (PIPELINE_SCENARIOS as readonly string[]).includes(scenario ?? '')
-        ? (scenario as PipelineScenario)
-        : 'base';
+    const safeRange: PipelineRange = (
+      PIPELINE_RANGES as readonly string[]
+    ).includes(range ?? '')
+      ? (range as PipelineRange)
+      : 'month';
+    const safeScenario: PipelineScenario = (
+      PIPELINE_SCENARIOS as readonly string[]
+    ).includes(scenario ?? '')
+      ? (scenario as PipelineScenario)
+      : 'base';
     return this.pipelineService.getForecast(safeRange, safeScenario);
   }
 }

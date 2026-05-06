@@ -142,8 +142,7 @@ export class PlanningImportService {
     if (!job) {
       throw new NotFoundException('Importprotokoll nicht gefunden.');
     }
-    const errorReport =
-      (job.errorReportJson as RawErrorReport)?.rows ?? [];
+    const errorReport = (job.errorReportJson as RawErrorReport)?.rows ?? [];
     return {
       ...job,
       errorReport,
@@ -310,8 +309,7 @@ export class PlanningImportService {
                 actualRevenue: row.candidate.actualRevenue,
                 actualCost: row.candidate.actualCost,
                 actualHours: row.candidate.actualHours ?? null,
-                actualOvertimeHours:
-                  row.candidate.actualOvertimeHours ?? null,
+                actualOvertimeHours: row.candidate.actualOvertimeHours ?? null,
                 source: row.candidate.source ?? 'import',
                 note: row.candidate.note ?? null,
                 createdByUserId: userId ?? null,
@@ -325,8 +323,7 @@ export class PlanningImportService {
                 actualRevenue: row.candidate.actualRevenue,
                 actualCost: row.candidate.actualCost,
                 actualHours: row.candidate.actualHours ?? null,
-                actualOvertimeHours:
-                  row.candidate.actualOvertimeHours ?? null,
+                actualOvertimeHours: row.candidate.actualOvertimeHours ?? null,
                 source: row.candidate.source ?? 'import',
                 note: row.candidate.note ?? null,
               },
@@ -358,7 +355,10 @@ export class PlanningImportService {
         duplicateStrategy,
         filename: file.originalname ?? null,
         totalRows: parseErrors.length + candidates.length,
-        successRows: mode === 'commit' ? actuallyCreated + actuallyOverwritten : finalSummary.toCreate + finalSummary.toOverwrite,
+        successRows:
+          mode === 'commit'
+            ? actuallyCreated + actuallyOverwritten
+            : finalSummary.toCreate + finalSummary.toOverwrite,
         skippedRows: mode === 'commit' ? actuallySkipped : finalSummary.toSkip,
         errorRows: parseErrors.length,
         errorReportJson:
@@ -382,9 +382,7 @@ export class PlanningImportService {
     };
   }
 
-  private async fetchExistingMap(
-    candidates: ParsedActualCandidate[],
-  ): Promise<
+  private async fetchExistingMap(candidates: ParsedActualCandidate[]): Promise<
     Map<
       string,
       {

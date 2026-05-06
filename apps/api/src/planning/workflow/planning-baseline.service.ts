@@ -56,11 +56,7 @@ export class PlanningBaselineService {
     });
   }
 
-  async setBaseline(
-    scenarioId: string,
-    dto: SetBaselineDto,
-    userId?: string,
-  ) {
+  async setBaseline(scenarioId: string, dto: SetBaselineDto, userId?: string) {
     const scenario = await this.prisma.planningScenario.findUnique({
       where: { id: scenarioId },
     });

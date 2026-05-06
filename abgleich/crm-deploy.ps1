@@ -1,6 +1,6 @@
 param(
     [string]$Command,
-    [ValidateSet("dev-pc1", "dev-pc2", "test")]
+    [ValidateSet("dev-pc1", "dev-pc2", "test", "staging", "prod")]
     [string]$Env = "dev-pc1"
 )
 
@@ -228,6 +228,213 @@ function Show-Status {
     & "$base\live-events.ps1" -Mode dashboard
 }
 
+function Run-DeployStaging {
+    Set-Location $repoRoot
+
+    Write-Host ""
+    Write-Host "=========================================" -ForegroundColor Yellow
+    Write-Host "   STAGING DEPLOY (kontrolliert)" -ForegroundColor Yellow
+    Write-Host "=========================================" -ForegroundColor Yellow
+    Write-Host "Dieses Menue startet ausschliesslich abgleich\deploy-staging.ps1." -ForegroundColor White
+    Write-Host "Hard-Block gegen TEST- und PROD-Pfade." -ForegroundColor White
+    Write-Host ""
+
+    $stagingServer = Read-Host "Staging-Server (z. B. root@staging.example.de)"
+    if ([string]::IsNullOrWhiteSpace($stagingServer)) { Warn "Kein Server angegeben. Abgebrochen."; Pause; return }
+
+    $stagingDomain = Read-Host "Staging-Domain (z. B. crm-staging.example.de)"
+    if ([string]::IsNullOrWhiteSpace($stagingDomain)) { Warn "Keine Domain angegeben. Abgebrochen."; Pause; return }
+
+    $stagingRemoteRepo = Read-Host "Staging-RemoteRepo (z. B. /opt/crm-staging)"
+    if ([string]::IsNullOrWhiteSpace($stagingRemoteRepo)) { Warn "Kein RemoteRepo angegeben. Abgebrochen."; Pause; return }
+
+    $envFile = Read-Host "Pfad zur .env.staging (Enter = .env.staging im Repo-Root)"
+    if ([string]::IsNullOrWhiteSpace($envFile)) { $envFile = Join-Path $repoRoot ".env.staging" }
+
+    Write-Host ""
+    Write-Host "Mode auswaehlen:"
+    Write-Host "1  app          - Code + Migration + Rebuild (Standard, sicher)"
+    Write-Host "2  migrate-only - Nur Prisma-Migration auf bestehendem Code"
+    Write-Host "3  full         - DESTRUKTIV: Lokale DB+Storage in STAGING ueberschreiben"
+    $modeChoice = Read-Host "Auswahl [1]"
+    $stagingMode = switch ($modeChoice) {
+        "2" { "migrate-only" }
+        "3" { "full" }
+        default { "app" }
+    }
+
+    $args = @(
+        '-Server',     $stagingServer,
+        '-Domain',     $stagingDomain,
+        '-RemoteRepo', $stagingRemoteRepo,
+        '-EnvFile',    $envFile,
+        '-Mode',       $stagingMode,
+        '-Branch',     'main'
+    )
+
+    & "$base\deploy-staging.ps1" @args
+    Pause
+}
+
+function Run-RollbackStaging {
+    Set-Location $repoRoot
+
+    Write-Host ""
+    Write-Host "=========================================" -ForegroundColor Yellow
+    Write-Host "   STAGING ROLLBACK" -ForegroundColor Yellow
+    Write-Host "=========================================" -ForegroundColor Yellow
+    Write-Host ""
+
+    $stagingServer = Read-Host "Staging-Server"
+    if ([string]::IsNullOrWhiteSpace($stagingServer)) { Warn "Kein Server angegeben."; Pause; return }
+    $stagingRemoteRepo = Read-Host "Staging-RemoteRepo (z. B. /opt/crm-staging)"
+    if ([string]::IsNullOrWhiteSpace($stagingRemoteRepo)) { Warn "Kein RemoteRepo angegeben."; Pause; return }
+    $stamp = Read-Host "Snapshot-Stamp (Enter = 'last')"
+    if ([string]::IsNullOrWhiteSpace($stamp)) { $stamp = "last" }
+
+    Write-Host ""
+    Write-Host "Mode auswaehlen:"
+    Write-Host "1  code     - nur Code-Stand"
+    Write-Host "2  db       - nur DB-Restore"
+    Write-Host "3  storage  - nur Storage-Restore"
+    Write-Host "4  full     - Code + DB + Storage"
+    $modeChoice = Read-Host "Auswahl [1]"
+    $rbMode = switch ($modeChoice) {
+        "2" { "db" }
+        "3" { "storage" }
+        "4" { "full" }
+        default { "code" }
+    }
+
+    $args = @(
+        '-Server',     $stagingServer,
+        '-RemoteRepo', $stagingRemoteRepo,
+        '-Stamp',      $stamp,
+        '-Mode',       $rbMode
+    )
+    & "$base\rollback-staging.ps1" @args
+    Pause
+}
+
+function Run-StagingToProdReadiness {
+    Set-Location $repoRoot
+    Write-Host ""
+    Write-Host "=========================================" -ForegroundColor Cyan
+    Write-Host "   STAGING -> PROD READINESS CHECK" -ForegroundColor Cyan
+    Write-Host "=========================================" -ForegroundColor Cyan
+    Write-Host "Nicht-destruktiv, prueft Konsistenz vor PROD-Deploy." -ForegroundColor White
+    Write-Host ""
+
+    $stagingServer = Read-Host "Staging-Server"
+    if ([string]::IsNullOrWhiteSpace($stagingServer)) { Warn "Kein Server angegeben."; Pause; return }
+    $stagingRemoteRepo = Read-Host "Staging-RemoteRepo (z. B. /opt/crm-staging)"
+    if ([string]::IsNullOrWhiteSpace($stagingRemoteRepo)) { Warn "Kein RemoteRepo angegeben."; Pause; return }
+    $stagingDomain = Read-Host "Staging-Domain (Enter = ueberspringen)"
+    $prodServer = Read-Host "Prod-Server (Enter = ueberspringen)"
+    $prodRemoteRepo = if ($prodServer) { Read-Host "Prod-RemoteRepo (Enter = ueberspringen)" } else { "" }
+    $prodDomain = Read-Host "Prod-Domain (Enter = ueberspringen)"
+
+    $args = @(
+        '-StagingServer',     $stagingServer,
+        '-StagingRemoteRepo', $stagingRemoteRepo
+    )
+    if ($stagingDomain)  { $args += @('-StagingDomain',  $stagingDomain) }
+    if ($prodServer)     { $args += @('-ProdServer',     $prodServer) }
+    if ($prodRemoteRepo) { $args += @('-ProdRemoteRepo', $prodRemoteRepo) }
+    if ($prodDomain)     { $args += @('-ProdDomain',     $prodDomain) }
+
+    & "$base\staging-to-prod-readiness.ps1" @args
+    Pause
+}
+
+function Run-DeployProd {
+    Set-Location $repoRoot
+
+    Write-Host ""
+    Write-Host "=========================================" -ForegroundColor Magenta
+    Write-Host "   PROD DEPLOY (kontrolliert, manuell)" -ForegroundColor Magenta
+    Write-Host "=========================================" -ForegroundColor Magenta
+    Write-Host "Dieses Menue startet ausschliesslich abgleich\deploy-prod.ps1." -ForegroundColor White
+    Write-Host "Es gibt keinen stillen Default auf TEST." -ForegroundColor White
+    Write-Host ""
+
+    $prodServer = Read-Host "Prod-Server (z. B. root@prod.example.de)"
+    if ([string]::IsNullOrWhiteSpace($prodServer)) { Warn "Kein Server angegeben. Abgebrochen."; Pause; return }
+
+    $prodDomain = Read-Host "Prod-Domain (z. B. crm.example.de)"
+    if ([string]::IsNullOrWhiteSpace($prodDomain)) { Warn "Keine Domain angegeben. Abgebrochen."; Pause; return }
+
+    $prodRemoteRepo = Read-Host "Prod-RemoteRepo (z. B. /opt/crm-prod)"
+    if ([string]::IsNullOrWhiteSpace($prodRemoteRepo)) { Warn "Kein RemoteRepo angegeben. Abgebrochen."; Pause; return }
+
+    $envFile = Read-Host "Pfad zur .env.prod (Enter = .env.prod im Repo-Root)"
+    if ([string]::IsNullOrWhiteSpace($envFile)) { $envFile = Join-Path $repoRoot ".env.prod" }
+
+    Write-Host ""
+    Write-Host "Mode auswaehlen:"
+    Write-Host "1  app          - Code + Migration + Rebuild (Standard, sicher)"
+    Write-Host "2  migrate-only - Nur Prisma-Migration auf bestehendem Code"
+    Write-Host "3  full         - DESTRUKTIV: Lokale DB+Storage in PROD ueberschreiben"
+    $modeChoice = Read-Host "Auswahl [1]"
+    $prodMode = switch ($modeChoice) {
+        "2" { "migrate-only" }
+        "3" { "full" }
+        default { "app" }
+    }
+
+    $args = @(
+        '-Server',     $prodServer,
+        '-Domain',     $prodDomain,
+        '-RemoteRepo', $prodRemoteRepo,
+        '-EnvFile',    $envFile,
+        '-Mode',       $prodMode,
+        '-Branch',     'main'
+    )
+
+    & "$base\deploy-prod.ps1" @args
+    Pause
+}
+
+function Run-RollbackProd {
+    Set-Location $repoRoot
+
+    Write-Host ""
+    Write-Host "=========================================" -ForegroundColor Magenta
+    Write-Host "   PROD ROLLBACK" -ForegroundColor Magenta
+    Write-Host "=========================================" -ForegroundColor Magenta
+    Write-Host ""
+
+    $prodServer = Read-Host "Prod-Server"
+    if ([string]::IsNullOrWhiteSpace($prodServer)) { Warn "Kein Server angegeben."; Pause; return }
+    $prodRemoteRepo = Read-Host "Prod-RemoteRepo (z. B. /opt/crm-prod)"
+    if ([string]::IsNullOrWhiteSpace($prodRemoteRepo)) { Warn "Kein RemoteRepo angegeben."; Pause; return }
+    $stamp = Read-Host "Snapshot-Stamp (Enter = 'last')"
+    if ([string]::IsNullOrWhiteSpace($stamp)) { $stamp = "last" }
+
+    Write-Host ""
+    Write-Host "Mode auswaehlen:"
+    Write-Host "1  code     - nur Code-Stand (App-Bug)"
+    Write-Host "2  db       - nur DB-Restore (kaputte Migration, Code laeuft)"
+    Write-Host "3  storage  - nur Storage-Restore"
+    Write-Host "4  full     - Code + DB + Storage"
+    $modeChoice = Read-Host "Auswahl [1]"
+    $rbMode = switch ($modeChoice) {
+        "2" { "db" }
+        "3" { "storage" }
+        "4" { "full" }
+        default { "code" }
+    }
+
+    $args = @(
+        '-Server',     $prodServer,
+        '-RemoteRepo', $prodRemoteRepo,
+        '-Stamp',      $stamp,
+        '-Mode',       $rbMode
+    )
+    & "$base\rollback-prod.ps1" @args
+    Pause
+}
+
 function Git-Workflow {
     Set-Location $repoRoot
     Write-Host ""
@@ -294,6 +501,11 @@ if ($Command) {
         "dump" { Run-Dump; exit 0 }
         "restore" { Run-Restore; exit 0 }
         "deploy" { Run-Deploy; exit 0 }
+        "deploy-staging"   { Run-DeployStaging; exit 0 }
+        "rollback-staging" { Run-RollbackStaging; exit 0 }
+        "readiness"        { Run-StagingToProdReadiness; exit 0 }
+        "deploy-prod"   { Run-DeployProd; exit 0 }
+        "rollback-prod" { Run-RollbackProd; exit 0 }
         "status" { Show-Status; exit 0 }
         default {
             Err "Unknown command: $Command"
@@ -323,6 +535,11 @@ while ($true) {
     Write-Host "11 Deploy to TEST Server        - APP (Build+Migration+Restart, ohne Seed) oder FULL (destruktiv)"
     Write-Host "12 Live Status Dashboard        - Laufende Statusansicht"
     Write-Host "13 Git Workflow                 - Status/Add/Commit/Push"
+    Write-Host "14 Deploy to PROD Server        - kontrolliert (deploy-prod.ps1, manuelle Eingaben, kein Default)" -ForegroundColor Magenta
+    Write-Host "15 PROD Rollback                - rollback-prod.ps1 (code/db/storage/full)" -ForegroundColor Magenta
+    Write-Host "16 Deploy to STAGING            - deploy-staging.ps1 (Hard-Block gegen TEST/PROD)" -ForegroundColor Yellow
+    Write-Host "17 STAGING Rollback             - rollback-staging.ps1" -ForegroundColor Yellow
+    Write-Host "18 STAGING -> PROD Readiness    - staging-to-prod-readiness.ps1 (nicht-destruktiv)" -ForegroundColor Cyan
     Write-Host "20 Exit"
     Write-Host ""
 
@@ -341,6 +558,11 @@ while ($true) {
         "11" { Run-Deploy }
         "12" { Show-Status }
         "13" { Git-Workflow }
+        "14" { Run-DeployProd }
+        "15" { Run-RollbackProd }
+        "16" { Run-DeployStaging }
+        "17" { Run-RollbackStaging }
+        "18" { Run-StagingToProdReadiness }
         "20" { exit 0 }
         default {
             Warn "Ungueltige Auswahl."

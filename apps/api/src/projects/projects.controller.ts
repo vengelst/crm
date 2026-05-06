@@ -188,6 +188,13 @@ export class ProjectsController {
     });
   }
 
+  @Delete('bulk')
+  @Roles(RoleCode.SUPERADMIN)
+  @Permissions('projects.delete')
+  removeMany(@Body() body: { ids: string[] }) {
+    return this.projectsService.removeMany(body.ids ?? []);
+  }
+
   @Delete(':id')
   @Permissions('projects.delete')
   remove(@Param('id') id: string) {

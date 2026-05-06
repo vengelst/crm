@@ -72,9 +72,7 @@ export type BackupTriggerOutcome =
   | { outcome: 'skipped'; reason: 'SKIPPED_ALREADY_RUNNING' };
 
 @Injectable()
-export class BackupSchedulerService
-  implements OnModuleInit, OnModuleDestroy
-{
+export class BackupSchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BackupSchedulerService.name);
   /**
    * In-Memory-Lock: garantiert, dass innerhalb eines Prozesses nur ein
@@ -179,7 +177,10 @@ export class BackupSchedulerService
           );
         });
       });
-      this.schedulerRegistry.addCronJob(JOB_NAME, job as unknown as Parameters<SchedulerRegistry['addCronJob']>[1]);
+      this.schedulerRegistry.addCronJob(
+        JOB_NAME,
+        job as unknown as Parameters<SchedulerRegistry['addCronJob']>[1],
+      );
       job.start();
       this.logger.log(
         `Backup-Scheduler registriert: cron="${cronExpression}", naechster Lauf=${job.nextDate().toISO()}`,
@@ -296,7 +297,7 @@ export class BackupSchedulerService
   private unregisterIfPresent() {
     try {
       const existing = this.schedulerRegistry.getCronJob(JOB_NAME);
-      existing.stop();
+      void existing.stop();
       this.schedulerRegistry.deleteCronJob(JOB_NAME);
     } catch {
       // SchedulerRegistry wirft, wenn der Job nicht existiert — harmlos.
@@ -380,9 +381,7 @@ function isBackupStatus(value: unknown): value is BackupRunStatus {
  */
 function serverTimezone(): string {
   try {
-    return (
-      Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-    );
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   } catch {
     return 'UTC';
   }

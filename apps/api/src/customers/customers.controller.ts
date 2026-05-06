@@ -48,6 +48,13 @@ export class CustomersController {
     return this.customersService.getFinancials(id);
   }
 
+  @Delete('bulk')
+  @Roles(RoleCode.SUPERADMIN)
+  @Permissions('customers.delete')
+  removeMany(@Body() body: { ids: string[] }) {
+    return this.customersService.removeMany(body.ids ?? []);
+  }
+
   @Delete(':id')
   @Permissions('customers.delete')
   remove(@Param('id') id: string) {

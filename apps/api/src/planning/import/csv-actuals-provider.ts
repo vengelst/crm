@@ -1,9 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  CsvFormatError,
-  CsvRow,
-  parseCsv,
-} from './csv-parser';
+import { CsvFormatError, CsvRow, parseCsv } from './csv-parser';
 import {
   ParseError,
   ParsedActualCandidate,
@@ -141,9 +137,7 @@ function validateHeaders(headers: string[]): ParseError[] {
   // (Hilft dabei, leichte Header-Abweichungen aus Excel zu ueberleben.)
 }
 
-type RowResult =
-  | { candidate: ParsedActualCandidate }
-  | { error: ParseError[] };
+type RowResult = { candidate: ParsedActualCandidate } | { error: ParseError[] };
 
 function parseRow(row: CsvRow): RowResult {
   const errors: ParseError[] = [];

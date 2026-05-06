@@ -19,6 +19,11 @@
 - **Alte oder produktionsnahe Containerstaende** duerfen **nicht** als Referenz fuer die lokale Entwicklung gelten. Nur der aktive Dev-Stack auf dem Rechner des Umsetzers zaehlt als gueltiger Nachweis, dass die Aenderung lokal sichtbar ist.
 - Nach **jeder Codeaenderung** an `apps/api/**` oder `apps/web/**` sind die Services `api` und `web` **immer aktiv neu zu laden** (kein Raten, kein Auslassen). Standardvorgehen: `docker compose up -d --build api web`; mindestens jedoch ein expliziter Neustart beider Services, sodass der laufende Stand sicher den letzten Code enthaelt.
 
+## Dev-Docker-Verifikation nach jeder Codex-Aenderung (verbindlich)
+
+- Wenn Codex selbst Code geaendert hat, gilt dieselbe Pflicht wie bei Claude: danach die App **neu bauen und neu starten**.
+- Mindeststandard nach Codex-Codeaenderungen an `apps/api/**` oder `apps/web/**`: `api` und `web` aktiv neu laden, bevorzugt mit `docker compose up -d --build api web` oder alternativ mit den Projekt-Skripten (`stopapp.ps1` + `startapp.ps1`), sofern damit garantiert der aktuelle Stand laeuft.
+
 ## Dokumentation
 
 - `workstatus.md` ist die laufende Status- und Verlaufsdatei fuer dieses Projekt.

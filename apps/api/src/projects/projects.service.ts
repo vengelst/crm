@@ -787,6 +787,41 @@ export class ProjectsService {
       },
     });
   }
+
+  async removeMany(ids: string[]) {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) {
+      throw new BadRequestException(
+        'Mindestens ein Projekt muss zum Loeschen ausgewaehlt sein.',
+      );
+    }
+
+    const existing = await this.prisma.project.findMany({
+      where: {
+        id: { in: uniqueIds },
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (existing.length !== uniqueIds.length) {
+      throw new NotFoundException(
+        'Mindestens ein ausgewaehltes Projekt wurde nicht gefunden.',
+      );
+    }
+
+    const result = await this.prisma.project.updateMany({
+      where: {
+        id: { in: uniqueIds },
+        deletedAt: null,
+      },
+      data: {
+        deletedAt: new Date(),
+        status: 'CANCELED',
+      },
+    });
+
+    return { deletedCount: result.count };
+  }
 }
 
 function isoWeekKey(date: Date): string {

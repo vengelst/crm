@@ -331,6 +331,84 @@ export class WorkersService {
     return { deleted: true };
   }
 
+  async removeMany(ids: string[], forceDelete = false) {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) {
+      throw new BadRequestException(
+        'Mindestens ein Monteur muss zum Loeschen ausgewaehlt sein.',
+      );
+    }
+
+    const targets = await this.prisma.worker.findMany({
+      where: { id: { in: uniqueIds } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        photoPath: true,
+      },
+    });
+    if (targets.length !== uniqueIds.length) {
+      throw new NotFoundException(
+        'Mindestens ein ausgewaehlter Monteur wurde nicht gefunden.',
+      );
+    }
+
+    if (!forceDelete) {
+      const usage = await this.prisma.timeEntry.groupBy({
+        by: ['workerId'],
+        where: { workerId: { in: uniqueIds } },
+        _count: { _all: true },
+      });
+      if (usage.length > 0) {
+        const nameById = new Map(
+          targets.map((worker) => [
+            worker.id,
+            `${worker.firstName} ${worker.lastName}`.trim(),
+          ]),
+        );
+        const blocked = usage
+          .map((entry) => {
+            const name = nameById.get(entry.workerId) ?? entry.workerId;
+            return `${name} (${entry._count._all})`;
+          })
+          .join(', ');
+        throw new BadRequestException(
+          `Monteur kann nicht geloescht werden: historische Zeitbuchung(en) vorhanden (${blocked}). Fuer erzwungenes Loeschen '?force=true' verwenden.`,
+        );
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.documentLink.deleteMany({
+        where: {
+          entityType: 'WORKER',
+          entityId: { in: uniqueIds },
+        },
+      });
+      await tx.workerTeamMember.deleteMany({
+        where: { workerId: { in: uniqueIds } },
+      });
+      await tx.projectAssignment.deleteMany({
+        where: { workerId: { in: uniqueIds } },
+      });
+      await tx.workerPin.deleteMany({
+        where: { workerId: { in: uniqueIds } },
+      });
+      await tx.worker.deleteMany({
+        where: { id: { in: uniqueIds } },
+      });
+    });
+
+    for (const worker of targets) {
+      if (worker.photoPath) {
+        await this.storage.deleteObjectWithFallback(worker.photoPath);
+      }
+    }
+
+    return { deletedCount: uniqueIds.length };
+  }
+
   private async ensureActivePinIsUnique(pin: string, excludeWorkerId?: string) {
     const workers = await this.prisma.worker.findMany({
       where: {

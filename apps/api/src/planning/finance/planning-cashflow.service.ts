@@ -151,8 +151,7 @@ export class PlanningCashflowService {
       const cashIn = idx - revenueShift >= 0 ? plan.revenue : 0;
 
       // Operative Standard-Kosten (aus Szenario) — ebenfalls verschiebbar.
-      const baseOpexPerMonth =
-        idx - expenseShift >= 0 ? plan.cost : 0;
+      const baseOpexPerMonth = idx - expenseShift >= 0 ? plan.cost : 0;
 
       // Budgetposten in diesem Monat aufsummieren (mit Frequency-Logik).
       let budgetOpex = 0;

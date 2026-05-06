@@ -196,9 +196,7 @@ export class SettingsController {
     }
     const record = await this.settingsService.getBackup(outcome.backupId);
     if (!record) {
-      throw new NotFoundException(
-        `Backup ${outcome.backupId} nicht gefunden.`,
-      );
+      throw new NotFoundException(`Backup ${outcome.backupId} nicht gefunden.`);
     }
     return record;
   }

@@ -198,13 +198,18 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showCreateWorker, setShowCreateWorker] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
 
+  const isSuperadmin = hasRole(auth, ["SUPERADMIN"]);
   const canManageSettings = hasRole(auth, ["SUPERADMIN", "OFFICE"]);
   const canManageUsers = hasRole(auth, ["SUPERADMIN"]);
   const canEditCustomer = hasPermission(auth, "customers.edit");
   const canCreateCustomer = hasPermission(auth, "customers.create");
   const canDeleteCustomer = hasPermission(auth, "customers.delete");
   const canEditProject = hasPermission(auth, "projects.edit");
+  const canDeleteProject = hasPermission(auth, "projects.delete");
   const canEditWorker = hasPermission(auth, "workers.edit");
   const canCreateWorker = hasPermission(auth, "workers.create");
   const canDeleteWorker = hasPermission(auth, "workers.delete");
@@ -226,6 +231,21 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     () => workers.find((item) => item.id === entityId) ?? null,
     [workers, entityId],
   );
+
+  useEffect(() => {
+    const ids = new Set(customers.map((item) => item.id));
+    setSelectedCustomerIds((current) => current.filter((id) => ids.has(id)));
+  }, [customers]);
+
+  useEffect(() => {
+    const ids = new Set(projects.map((item) => item.id));
+    setSelectedProjectIds((current) => current.filter((id) => ids.has(id)));
+  }, [projects]);
+
+  useEffect(() => {
+    const ids = new Set(workers.map((item) => item.id));
+    setSelectedWorkerIds((current) => current.filter((id) => ids.has(id)));
+  }, [workers]);
 
   const apiFetch = useCallback(
     async <T,>(path: string, init?: RequestInit): Promise<T> => {
@@ -877,6 +897,63 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
     });
   }
 
+  function toggleSelectedId(
+    id: string,
+    checked: boolean,
+    setter: Dispatch<SetStateAction<string[]>>,
+  ) {
+    setter((current) => {
+      if (checked) {
+        if (current.includes(id)) return current;
+        return [...current, id];
+      }
+      return current.filter((entry) => entry !== id);
+    });
+  }
+
+  function toggleAllSelected(
+    allIds: string[],
+    selectedIds: string[],
+    setter: Dispatch<SetStateAction<string[]>>,
+  ) {
+    if (allIds.length === 0) return;
+    const allSelected =
+      selectedIds.length > 0 && selectedIds.length === allIds.length;
+    setter(allSelected ? [] : allIds);
+  }
+
+  async function handleBulkDelete(
+    path: "/customers/bulk" | "/projects/bulk" | "/workers/bulk",
+    ids: string[],
+    label: string,
+    clearSelection: () => void,
+  ) {
+    if (!isSuperadmin) {
+      setError(l("bulk.superadminOnly"));
+      return;
+    }
+    if (ids.length === 0) return;
+
+    const ok = window.confirm(
+      l("bulk.confirmDelete").replace("{count}", String(ids.length)),
+    );
+    if (!ok) return;
+
+    await runMutation(async () => {
+      await apiFetch(path, {
+        method: "DELETE",
+        body: JSON.stringify({ ids }),
+      });
+      clearSelection();
+      await loadData();
+      setSuccess(
+        l("bulk.deletedSuccess")
+          .replace("{count}", String(ids.length))
+          .replace("{entity}", label),
+      );
+    });
+  }
+
   async function handleDocumentUpload(entityType: string, targetId: string) {
     if (!documentForm.file) {
       setError(l("common.error"));
@@ -1307,8 +1384,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
               ) : (
                 <>
                   <SectionCard title={l("cust.list")} subtitle={l("cust.listSub")} bordered={false}>
-                    {canCreateCustomer ? (
-                      <div className="mb-4">
+                    {canCreateCustomer || isSuperadmin ? (
+                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                        {canCreateCustomer ? (
                         <button
                           type="button"
                           onClick={() => setShowCreateCustomer(true)}
@@ -1319,6 +1397,44 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                           </svg>
                           {l("cust.newCustomer")}
                         </button>
+                        ) : (
+                          <span />
+                        )}
+                        {isSuperadmin ? (
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-slate-500">
+                              {l("bulk.selectedCount").replace("{count}", String(selectedCustomerIds.length))}
+                            </span>
+                            <SecondaryButton
+                              onClick={() =>
+                                toggleAllSelected(
+                                  customers.map((item) => item.id),
+                                  selectedCustomerIds,
+                                  setSelectedCustomerIds,
+                                )
+                              }
+                              disabled={customers.length === 0}
+                            >
+                              {selectedCustomerIds.length > 0 &&
+                              selectedCustomerIds.length === customers.length
+                                ? l("bulk.clearSelection")
+                                : l("bulk.selectAll")}
+                            </SecondaryButton>
+                            <SecondaryButton
+                              onClick={() =>
+                                void handleBulkDelete(
+                                  "/customers/bulk",
+                                  selectedCustomerIds,
+                                  l("nav.customers"),
+                                  () => setSelectedCustomerIds([]),
+                                )
+                              }
+                              disabled={selectedCustomerIds.length === 0}
+                            >
+                              {l("bulk.deleteSelected")}
+                            </SecondaryButton>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                     <EntityList
@@ -1331,6 +1447,11 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                       onOpen={(item) => router.push(`/customers/${item.id}`)}
                       onEdit={canEditCustomer ? (item) => router.push(`/customers/${item.id}`) : undefined}
                       onDelete={canDeleteCustomer ? (item) => void handleDelete(`/customers/${item.id}`, l("nav.customers"), true) : undefined}
+                      selectable={isSuperadmin}
+                      selectedIds={new Set(selectedCustomerIds)}
+                      onToggleSelect={(item, checked) =>
+                        toggleSelectedId(item.id, checked, setSelectedCustomerIds)
+                      }
                       badges={(item) => {
                         const count = reminderCounts.byCustomer[item.id] ?? 0;
                         if (count <= 0) return null;
@@ -1427,12 +1548,49 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                       </svg>
                       {l("proj.create")}
                     </button>
-                    {canPrintProject ? (
-                      <PrintButton onClick={() => {
-                        const rows = projects.map((p) => `<tr><td>${p.projectNumber}</td><td>${p.title}</td><td>${p.customer?.companyName ?? "-"}</td><td>${p.status ?? "-"}</td><td>${p.plannedStartDate?.slice(0, 10) ?? "-"} - ${p.plannedEndDate?.slice(0, 10) ?? l("worker.open")}</td></tr>`).join("");
-                        openPrintWindow(l("proj.list"), `<h1>${l("proj.list")}</h1><p class="meta">${projects.length} ${l("proj.title")}</p><table><thead><tr><th>${l("table.nr")}</th><th>${l("table.title")}</th><th>${l("table.customer")}</th><th>${l("table.status")}</th><th>${l("table.period")}</th></tr></thead><tbody>${rows}</tbody></table>`);
-                      }} label={l("doc.print")} />
-                    ) : null}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {isSuperadmin ? (
+                        <>
+                          <span className="text-sm text-slate-500">
+                            {l("bulk.selectedCount").replace("{count}", String(selectedProjectIds.length))}
+                          </span>
+                          <SecondaryButton
+                            onClick={() =>
+                              toggleAllSelected(
+                                projects.map((item) => item.id),
+                                selectedProjectIds,
+                                setSelectedProjectIds,
+                              )
+                            }
+                            disabled={projects.length === 0}
+                          >
+                            {selectedProjectIds.length > 0 &&
+                            selectedProjectIds.length === projects.length
+                              ? l("bulk.clearSelection")
+                              : l("bulk.selectAll")}
+                          </SecondaryButton>
+                          <SecondaryButton
+                            onClick={() =>
+                              void handleBulkDelete(
+                                "/projects/bulk",
+                                selectedProjectIds,
+                                l("nav.projects"),
+                                () => setSelectedProjectIds([]),
+                              )
+                            }
+                            disabled={selectedProjectIds.length === 0}
+                          >
+                            {l("bulk.deleteSelected")}
+                          </SecondaryButton>
+                        </>
+                      ) : null}
+                      {canPrintProject ? (
+                        <PrintButton onClick={() => {
+                          const rows = projects.map((p) => `<tr><td>${p.projectNumber}</td><td>${p.title}</td><td>${p.customer?.companyName ?? "-"}</td><td>${p.status ?? "-"}</td><td>${p.plannedStartDate?.slice(0, 10) ?? "-"} - ${p.plannedEndDate?.slice(0, 10) ?? l("worker.open")}</td></tr>`).join("");
+                          openPrintWindow(l("proj.list"), `<h1>${l("proj.list")}</h1><p class="meta">${projects.length} ${l("proj.title")}</p><table><thead><tr><th>${l("table.nr")}</th><th>${l("table.title")}</th><th>${l("table.customer")}</th><th>${l("table.status")}</th><th>${l("table.period")}</th></tr></thead><tbody>${rows}</tbody></table>`);
+                        }} label={l("doc.print")} />
+                      ) : null}
+                    </div>
                   </div>
                   <EntityList
                     items={projects}
@@ -1440,7 +1598,12 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     subtitle={(item) => item.projectNumber}
                     deleteLabel={l("common.delete")}
                     onOpen={(item) => router.push(`/projects/${item.id}`)}
-                    onDelete={(item) => void handleDelete(`/projects/${item.id}`, l("nav.projects"), true)}
+                    onDelete={canDeleteProject ? (item) => void handleDelete(`/projects/${item.id}`, l("nav.projects"), true) : undefined}
+                    selectable={isSuperadmin}
+                    selectedIds={new Set(selectedProjectIds)}
+                    onToggleSelect={(item, checked) =>
+                      toggleSelectedId(item.id, checked, setSelectedProjectIds)
+                    }
                     badges={(item) => {
                       const count = reminderCounts.byProject[item.id] ?? 0;
                       if (count <= 0) return null;
@@ -1528,8 +1691,9 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                 </>
               ) : (
                 <SectionCard title={l("work.list")} subtitle={l("work.listSub")}>
-                  {canCreateWorker ? (
-                    <div className="mb-4">
+                  {canCreateWorker || isSuperadmin ? (
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      {canCreateWorker ? (
                       <button
                         type="button"
                         onClick={() => {
@@ -1543,6 +1707,44 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                         </svg>
                         {l("work.create")}
                       </button>
+                      ) : (
+                        <span />
+                      )}
+                      {isSuperadmin ? (
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm text-slate-500">
+                            {l("bulk.selectedCount").replace("{count}", String(selectedWorkerIds.length))}
+                          </span>
+                          <SecondaryButton
+                            onClick={() =>
+                              toggleAllSelected(
+                                workers.map((item) => item.id),
+                                selectedWorkerIds,
+                                setSelectedWorkerIds,
+                              )
+                            }
+                            disabled={workers.length === 0}
+                          >
+                            {selectedWorkerIds.length > 0 &&
+                            selectedWorkerIds.length === workers.length
+                              ? l("bulk.clearSelection")
+                              : l("bulk.selectAll")}
+                          </SecondaryButton>
+                          <SecondaryButton
+                            onClick={() =>
+                              void handleBulkDelete(
+                                "/workers/bulk",
+                                selectedWorkerIds,
+                                l("nav.workers"),
+                                () => setSelectedWorkerIds([]),
+                              )
+                            }
+                            disabled={selectedWorkerIds.length === 0}
+                          >
+                            {l("bulk.deleteSelected")}
+                          </SecondaryButton>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   <EntityList
@@ -1552,6 +1754,11 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
                     deleteLabel={l("common.delete")}
                     onOpen={(item) => router.push(`/workers/${item.id}`)}
                     onDelete={canDeleteWorker ? (item) => void handleDelete(`/workers/${item.id}`, l("nav.workers"), true) : undefined}
+                    selectable={isSuperadmin}
+                    selectedIds={new Set(selectedWorkerIds)}
+                    onToggleSelect={(item, checked) =>
+                      toggleSelectedId(item.id, checked, setSelectedWorkerIds)
+                    }
                   />
                 </SectionCard>
               )}

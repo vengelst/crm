@@ -595,6 +595,69 @@ export class CustomersService {
 
     return { deleted: true };
   }
+
+  async removeMany(ids: string[]) {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) {
+      throw new BadRequestException(
+        'Mindestens ein Kunde muss zum Loeschen ausgewaehlt sein.',
+      );
+    }
+
+    const targets = await this.prisma.customer.findMany({
+      where: {
+        id: { in: uniqueIds },
+        deletedAt: null,
+      },
+      select: { id: true, companyName: true },
+    });
+    if (targets.length !== uniqueIds.length) {
+      throw new NotFoundException(
+        'Mindestens ein ausgewaehlter Kunde wurde nicht gefunden.',
+      );
+    }
+
+    const projectCounts = await this.prisma.project.groupBy({
+      by: ['customerId'],
+      where: {
+        customerId: { in: uniqueIds },
+        deletedAt: null,
+      },
+      _count: { _all: true },
+    });
+    if (projectCounts.length > 0) {
+      const nameById = new Map(targets.map((item) => [item.id, item.companyName]));
+      const blocked = projectCounts
+        .map((entry) => {
+          const name = nameById.get(entry.customerId) ?? entry.customerId;
+          return `${name} (${entry._count._all})`;
+        })
+        .join(', ');
+      throw new BadRequestException(
+        `Kunden mit aktiven Projekten koennen nicht geloescht werden: ${blocked}.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.documentLink.deleteMany({
+        where: {
+          entityType: 'CUSTOMER',
+          entityId: { in: uniqueIds },
+        },
+      });
+      await tx.customerContact.deleteMany({
+        where: { customerId: { in: uniqueIds } },
+      });
+      await tx.customerBranch.deleteMany({
+        where: { customerId: { in: uniqueIds } },
+      });
+      await tx.customer.deleteMany({
+        where: { id: { in: uniqueIds } },
+      });
+    });
+
+    return { deletedCount: uniqueIds.length };
+  }
 }
 
 function isoWeekKey(date: Date): string {

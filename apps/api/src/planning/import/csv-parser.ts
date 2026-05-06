@@ -57,10 +57,7 @@ export function parseCsv(input: string): CsvParseResult {
   const dedup = new Set<string>();
   for (const h of headers) {
     if (dedup.has(h)) {
-      throw new CsvFormatError(
-        1,
-        `Doppelter Spaltenname im Header: "${h}".`,
-      );
+      throw new CsvFormatError(1, `Doppelter Spaltenname im Header: "${h}".`);
     }
     dedup.add(h);
   }

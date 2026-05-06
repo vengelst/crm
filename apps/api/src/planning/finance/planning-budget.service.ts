@@ -1,9 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import {
-  CreateBudgetItemDto,
-  PatchBudgetItemDto,
-} from './dto';
+import { CreateBudgetItemDto, PatchBudgetItemDto } from './dto';
 
 /**
  * Budgetposten-CRUD je Szenario.
@@ -27,11 +24,7 @@ export class PlanningBudgetService {
     });
   }
 
-  async create(
-    scenarioId: string,
-    dto: CreateBudgetItemDto,
-    userId?: string,
-  ) {
+  async create(scenarioId: string, dto: CreateBudgetItemDto, userId?: string) {
     await this.assertScenario(scenarioId);
     return this.prisma.planningBudgetItem.create({
       data: {

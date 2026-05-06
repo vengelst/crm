@@ -81,7 +81,9 @@ export class PlanningKpiService {
 
     // Juengster Ist-Monat in der Historie ermitteln (nicht der aktuelle
     // Kalendermonat, sondern der letzte mit echten Zahlen).
-    const latestActual = [...trend].reverse().find((r) => r.actualMargin != null);
+    const latestActual = [...trend]
+      .reverse()
+      .find((r) => r.actualMargin != null);
 
     const currentMonth = latestActual
       ? {
@@ -151,8 +153,7 @@ export class PlanningKpiService {
     return {
       year: a.year,
       month: a.month,
-      marginPercent:
-        ((a.actualRevenue - a.actualCost) / a.actualRevenue) * 100,
+      marginPercent: ((a.actualRevenue - a.actualCost) / a.actualRevenue) * 100,
     };
   }
 
@@ -182,9 +183,7 @@ export class PlanningKpiService {
         ? ((a.actualRevenue - plan.revenue) / plan.revenue) * 100
         : null;
     const deltaCost =
-      plan.cost !== 0
-        ? ((a.actualCost - plan.cost) / plan.cost) * 100
-        : null;
+      plan.cost !== 0 ? ((a.actualCost - plan.cost) / plan.cost) * 100 : null;
     return {
       year: a.year,
       month: a.month,
@@ -219,7 +218,11 @@ export class PlanningKpiService {
       else break;
     }
     if (streak === 0) {
-      return { streak: 0, lastYear: recent[0].year, lastMonth: recent[0].month };
+      return {
+        streak: 0,
+        lastYear: recent[0].year,
+        lastMonth: recent[0].month,
+      };
     }
     return {
       streak,

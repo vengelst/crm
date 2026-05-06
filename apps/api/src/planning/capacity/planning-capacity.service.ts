@@ -245,10 +245,7 @@ export class PlanningCapacityService {
         (a, b) => (b.length > a.length ? b : a),
         groups[0],
       );
-      const teamsNeeded = Math.max(
-        ...biggest.map((b) => b.additionalTeams),
-        0,
-      );
+      const teamsNeeded = Math.max(...biggest.map((b) => b.additionalTeams), 0);
       const fromIso = `${biggest[0].isoYear}-W${String(biggest[0].isoWeek).padStart(2, '0')}`;
       const toIso = `${biggest[biggest.length - 1].isoYear}-W${String(
         biggest[biggest.length - 1].isoWeek,
@@ -299,8 +296,7 @@ function summarize(
   const demand =
     scenario.teamsPerWeek *
     scenario.workersPerTeam *
-    (scenario.regularHoursPerWorkerWeek +
-      scenario.overtimeHoursPerWorkerWeek);
+    (scenario.regularHoursPerWorkerWeek + scenario.overtimeHoursPerWorkerWeek);
   const delta = availTotal - demand;
   const util = availTotal > 0 ? (demand / availTotal) * 100 : 0;
   return {
@@ -359,10 +355,7 @@ function isoWeekParts(d: Date) {
   tmp.setUTCDate(tmp.getUTCDate() - dayNum + 3);
   const firstThursday = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 4));
   const week =
-    1 +
-    Math.round(
-      (tmp.getTime() - firstThursday.getTime()) / 86400000 / 7,
-    );
+    1 + Math.round((tmp.getTime() - firstThursday.getTime()) / 86400000 / 7);
   return { year: tmp.getUTCFullYear(), week };
 }
 
@@ -371,18 +364,14 @@ function groupConsecutive(weeks: Bottleneck[]): Bottleneck[][] {
   // einen Engpass-Block. Beispiel: 2026-W23, 2026-W24, 2026-W25 = 1 Block.
   if (weeks.length === 0) return [];
   const sorted = [...weeks].sort(
-    (a, b) =>
-      a.isoYear * 100 + a.isoWeek - (b.isoYear * 100 + b.isoWeek),
+    (a, b) => a.isoYear * 100 + a.isoWeek - (b.isoYear * 100 + b.isoWeek),
   );
   const out: Bottleneck[][] = [];
   let cur: Bottleneck[] = [sorted[0]];
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];
     const next = sorted[i];
-    if (
-      next.isoYear === prev.isoYear &&
-      next.isoWeek === prev.isoWeek + 1
-    ) {
+    if (next.isoYear === prev.isoYear && next.isoWeek === prev.isoWeek + 1) {
       cur.push(next);
     } else {
       out.push(cur);

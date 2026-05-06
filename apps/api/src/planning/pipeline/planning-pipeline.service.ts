@@ -237,7 +237,7 @@ export class PlanningPipelineService {
   private normalizePayload<
     T extends CreatePipelineItemDto | PatchPipelineItemDto,
   >(dto: T, isCreate: boolean): Record<string, unknown> {
-    const stage = dto.stage as PipelineStage | undefined;
+    const stage = dto.stage;
     // WON/LOST zwingen die Wahrscheinlichkeit auf 100/0, damit Reports
     // konsistent bleiben — manuell gesetzte Werte werden ueberschrieben.
     let winProbability = dto.winProbability;
@@ -248,9 +248,11 @@ export class PlanningPipelineService {
     if (isCreate || dto.title !== undefined) {
       payload.title = (dto.title ?? '').trim();
     }
-    if (dto.customerId !== undefined) payload.customerId = dto.customerId ?? null;
+    if (dto.customerId !== undefined)
+      payload.customerId = dto.customerId ?? null;
     if (dto.projectId !== undefined) payload.projectId = dto.projectId ?? null;
-    if (dto.ownerUserId !== undefined) payload.ownerUserId = dto.ownerUserId ?? null;
+    if (dto.ownerUserId !== undefined)
+      payload.ownerUserId = dto.ownerUserId ?? null;
     if (stage !== undefined) payload.stage = stage;
     if (dto.amountTotal !== undefined) payload.amountTotal = dto.amountTotal;
     if (winProbability !== undefined) payload.winProbability = winProbability;
@@ -262,10 +264,12 @@ export class PlanningPipelineService {
         : null;
     if (dto.expectedWeeklyHours !== undefined)
       payload.expectedWeeklyHours = dto.expectedWeeklyHours ?? null;
-    if (dto.locationId !== undefined) payload.locationId = dto.locationId ?? null;
+    if (dto.locationId !== undefined)
+      payload.locationId = dto.locationId ?? null;
     if (dto.businessUnitId !== undefined)
       payload.businessUnitId = dto.businessUnitId ?? null;
-    if (dto.notes !== undefined) payload.notes = dto.notes ? dto.notes.trim() : null;
+    if (dto.notes !== undefined)
+      payload.notes = dto.notes ? dto.notes.trim() : null;
     return payload;
   }
 }
