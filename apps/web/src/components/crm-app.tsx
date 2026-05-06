@@ -198,6 +198,10 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showCreateWorker, setShowCreateWorker] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
+  const [showImpressum, setShowImpressum] = useState(false);
+  const versionLabel = "v1.1.0";
+  const [impressumContent, setImpressumContent] = useState("");
+  const [impressumLoading, setImpressumLoading] = useState(false);
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
@@ -952,6 +956,36 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
           .replace("{entity}", label),
       );
     });
+  }
+
+  async function openImpressumPopup() {
+    setShowImpressum(true);
+    if (impressumContent || impressumLoading) return;
+    setImpressumLoading(true);
+    try {
+      const response = await fetch("/api/legal/impressum", { cache: "no-store" });
+      const body = (await response.json()) as { content?: string };
+      setImpressumContent(body.content?.trim() || l("footer.impressumFallback"));
+    } catch {
+      setImpressumContent(l("footer.impressumFallback"));
+    } finally {
+      setImpressumLoading(false);
+    }
+  }
+
+  function renderImpressumLine(line: string) {
+    const splitAt = line.indexOf(":");
+    if (splitAt > 0) {
+      const label = line.slice(0, splitAt + 1);
+      const value = line.slice(splitAt + 1).trim();
+      return (
+        <p className="text-sm leading-relaxed">
+          <span className="font-semibold">{label}</span>{" "}
+          <span>{value}</span>
+        </p>
+      );
+    }
+    return <p className="text-sm leading-relaxed">{line}</p>;
   }
 
   async function handleDocumentUpload(entityType: string, targetId: string) {
@@ -2228,6 +2262,20 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
         ) : null}
 
         {section === "users" ? null : null}
+
+        <footer className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-black/10 bg-white/70 px-4 py-3 text-xs text-slate-600 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-300">
+          <span>Copyright Viva Home GmbH 2026</span>
+          <span>
+            {l("footer.version")}: {versionLabel}
+          </span>
+          <button
+            type="button"
+            onClick={() => void openImpressumPopup()}
+            className="underline hover:no-underline"
+          >
+            {l("footer.impressum")}
+          </button>
+        </footer>
       </div>
       {documentPreview ? (
         <DocumentPreviewModal
@@ -2242,6 +2290,51 @@ export function CrmApp({ section, entityId }: CrmAppProps) {
             setDocumentPreview(null);
           }}
         />
+      ) : null}
+      {showImpressum ? (
+        <PopupFrame onClose={() => setShowImpressum(false)}>
+          <SectionCard title={l("footer.impressum")} subtitle={l("footer.impressumSource")}>
+            {impressumLoading ? (
+              <p className="text-sm text-slate-500">{l("common.loading")}</p>
+            ) : (
+              <div className="max-h-[65vh] space-y-4 overflow-auto rounded-xl border border-black/10 bg-slate-50 p-4 dark:border-white/10 dark:bg-slate-900">
+                {impressumContent.split("\n\n").map((block, index) => {
+                  const lines = block
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter(Boolean);
+                  if (lines.length === 0) return null;
+                  const first = lines[0];
+                  const rest = lines.slice(1);
+                  const isHeadingBlock =
+                    index === 0 ||
+                    first === "Verbraucherstreitbeilegung" ||
+                    first === "Vertreten durch den Geschäftsführer:" ||
+                    first.startsWith("Umsatzsteuer-Identifikationsnummer");
+
+                  if (isHeadingBlock) {
+                    return (
+                      <div key={`${first}-${index}`} className="space-y-2">
+                        <h3 className="text-base font-semibold">{first}</h3>
+                        {rest.map((line) => (
+                          <div key={line}>{renderImpressumLine(line)}</div>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={`${first}-${index}`} className="space-y-1">
+                      {lines.map((line) => (
+                        <div key={line}>{renderImpressumLine(line)}</div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </SectionCard>
+        </PopupFrame>
       ) : null}
     </div>
     </I18nProvider>
