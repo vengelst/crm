@@ -439,38 +439,99 @@ function Git-Workflow {
     Set-Location $repoRoot
     Write-Host ""
     Write-Host "================================="
-    Write-Host "          GIT WORKFLOW"
+    Write-Host "       GIT DEV1/DEV2 WORKFLOW"
     Write-Host "================================="
-    Write-Host "1  Git Status"
-    Write-Host "2  Git Add ."
-    Write-Host "3  Git Commit"
-    Write-Host "4  Git Push"
-    Write-Host "5  Version erstellen"
-    Write-Host "6  Back"
+    $currentBranch = (git rev-parse --abbrev-ref HEAD 2>$null)
+    if ([string]::IsNullOrWhiteSpace($currentBranch)) { $currentBranch = "unknown" }
+    Write-Host ("Aktueller Branch: {0}" -f $currentBranch) -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "1  Daily Update: Pull + pnpm install (vor Arbeitsbeginn)"
+    Write-Host "2  Dev1/Dev2 Ende: Add + Commit + Push (fuer anderen Rechner)"
+    Write-Host "3  Git Status"
+    Write-Host "4  Git Add ."
+    Write-Host "5  Git Commit"
+    Write-Host "6  Git Pull"
+    Write-Host "7  Git Push"
+    Write-Host "8  Version erstellen (Tag + Push)"
+    Write-Host "9  Back"
     Write-Host ""
 
     $choice = Read-Host "Select option"
     switch ($choice) {
         "1" {
-            git status
+            Info "Daily Update: git pull + pnpm install ..."
+            git pull
+            if ($LASTEXITCODE -ne 0) {
+                Err "Pull fehlgeschlagen."
+                Pause
+                return
+            }
+            Ok "Pull erfolgreich."
+
+            pnpm install
+            if ($LASTEXITCODE -ne 0) {
+                Err "pnpm install fehlgeschlagen."
+                Pause
+                return
+            }
+            Ok "pnpm install erfolgreich."
             Pause
         }
         "2" {
+            $statusOutput = git status --porcelain
+            $hasChanges = -not [string]::IsNullOrWhiteSpace($statusOutput)
+            if (-not $hasChanges) {
+                Warn "Keine lokalen Aenderungen vorhanden. Es wird nur Push versucht."
+                git push
+                if ($LASTEXITCODE -eq 0) { Ok "Push erfolgreich." } else { Err "Push fehlgeschlagen." }
+                Pause
+                return
+            }
+
+            Write-Host ""
+            Info "Lokale Aenderungen:"
+            git status --short
+            Write-Host ""
+            $msg = Read-Host "Commit-Message fuer Sync (Dev1 <-> Dev2)"
+            if ([string]::IsNullOrWhiteSpace($msg)) {
+                Warn "Keine Commit-Message angegeben. Abbruch."
+                Pause
+                return
+            }
+
             git add .
+            if ($LASTEXITCODE -ne 0) { Err "git add fehlgeschlagen."; Pause; return }
+            git commit -m "$msg"
+            if ($LASTEXITCODE -ne 0) { Err "git commit fehlgeschlagen."; Pause; return }
+            git push
+            if ($LASTEXITCODE -ne 0) { Err "git push fehlgeschlagen."; Pause; return }
+            Ok "Sync-Commit + Push erfolgreich. Auf dem anderen Rechner jetzt 'Pull latest' ausfuehren."
             Pause
         }
         "3" {
+            git status
+            Pause
+        }
+        "4" {
+            git add .
+            Pause
+        }
+        "5" {
             $msg = Read-Host "Commit message"
             if ($msg) {
                 git commit -m "$msg"
             }
             Pause
         }
-        "4" {
+        "6" {
+            git pull
+            Pause
+        }
+        "7" {
             git push
             Pause
         }
-        "5" {
+        "8" {
             $tag = Read-Host "Versions-Tag (z. B. v0.1.0)"
             if (-not [string]::IsNullOrWhiteSpace($tag)) {
                 git tag $tag
@@ -480,7 +541,7 @@ function Git-Workflow {
             }
             Pause
         }
-        "6" { return }
+        "9" { return }
         default {
             Warn "Ungueltige Auswahl."
             Pause
@@ -506,6 +567,7 @@ if ($Command) {
         "readiness"        { Run-StagingToProdReadiness; exit 0 }
         "deploy-prod"   { Run-DeployProd; exit 0 }
         "rollback-prod" { Run-RollbackProd; exit 0 }
+        "git-workflow" { Git-Workflow; exit 0 }
         "status" { Show-Status; exit 0 }
         default {
             Err "Unknown command: $Command"
@@ -534,7 +596,7 @@ while ($true) {
     Write-Host "10 Restore DB Dump              - Dump in crm_monteur einspielen"
     Write-Host "11 Deploy to TEST Server        - APP (Build+Migration+Restart, ohne Seed) oder FULL (destruktiv)"
     Write-Host "12 Live Status Dashboard        - Laufende Statusansicht"
-    Write-Host "13 Git Workflow                 - Status/Add/Commit/Push"
+    Write-Host "13 Git Dev1/Dev2 Workflow       - Pull + Add/Commit/Push fuer Rechner-Sync"
     Write-Host "14 Deploy to PROD Server        - kontrolliert (deploy-prod.ps1, manuelle Eingaben, kein Default)" -ForegroundColor Magenta
     Write-Host "15 PROD Rollback                - rollback-prod.ps1 (code/db/storage/full)" -ForegroundColor Magenta
     Write-Host "16 Deploy to STAGING            - deploy-staging.ps1 (Hard-Block gegen TEST/PROD)" -ForegroundColor Yellow

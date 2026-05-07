@@ -270,6 +270,48 @@ else
     echo "[db] FEHLER: DATABASE_URL ist in .env nicht gesetzt." >&2
     exit 1
   fi
+  # Dauerhafte Entschaerfung gegen Credential-Drift:
+  # DB-Role-Passwort wird vor Migration immer an DATABASE_URL angeglichen.
+  # So brechen Push/Pull + APP-Deploy nicht mehr wegen P1000 durch altes
+  # Volume-Passwort.
+  if command -v python3 >/dev/null 2>&1; then
+    DB_SYNC_INFO="$(python3 - <<'PY'
+import os, sys, urllib.parse
+
+db_url = os.environ.get("DATABASE_URL", "").strip()
+if not db_url:
+    sys.exit(2)
+
+parsed = urllib.parse.urlparse(db_url)
+db_user = urllib.parse.unquote(parsed.username or "").strip()
+db_pass = urllib.parse.unquote(parsed.password or "")
+if not db_user or not db_pass:
+    sys.exit(3)
+
+# Single quotes fuer SQL escapen.
+db_pass_sql = db_pass.replace("'", "''")
+print(db_user)
+print(db_pass_sql)
+PY
+    )" || {
+      echo "[db] FEHLER: DATABASE_URL konnte nicht fuer Passwort-Sync ausgewertet werden." >&2
+      exit 1
+    }
+
+    DB_USER="$(printf '%s\n' "$DB_SYNC_INFO" | sed -n '1p')"
+    DB_PASS_SQL="$(printf '%s\n' "$DB_SYNC_INFO" | sed -n '2p')"
+    if [ -z "$DB_USER" ] || [ -z "$DB_PASS_SQL" ]; then
+      echo "[db] FEHLER: DB-User/Passwort aus DATABASE_URL unvollstaendig." >&2
+      exit 1
+    fi
+
+    # Rolle angleichen, damit Prisma dieselben Zugangsdaten wie .env nutzt.
+    docker exec -i crm-postgres psql -U postgres -d crm_monteur -v ON_ERROR_STOP=1 \
+      -c "ALTER USER \"$DB_USER\" WITH PASSWORD '$DB_PASS_SQL';" >/dev/null
+    echo "[db] PASSWD-SYNC: DB-Role '$DB_USER' auf DATABASE_URL angeglichen."
+  else
+    echo "[db] WARN: python3 fehlt; Passwort-Sync aus DATABASE_URL nicht moeglich." >&2
+  fi
   if ! docker compose -f docker-compose.yml run --rm --build -e DATABASE_URL="$DATABASE_URL" api sh -c "npx prisma migrate deploy --config prisma/prisma.config.ts"; then
     echo "" >&2
     echo "========================================" >&2
