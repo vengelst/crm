@@ -7,7 +7,8 @@
       "Bash(pnpm --filter api lint)",
       "Bash(pnpm --filter web lint)",
       "Bash(docker exec *)",
-      "Read(//c/Users/Ve/.claude/projects/c--coding-CRM/memory//**)"
+      "Read(//c/Users/Ve/.claude/projects/c--coding-CRM/memory//**)",
+      "mcp__03d1e52d-f43f-486a-a0da-37822264e628__label_thread"
     ]
   }
 }
