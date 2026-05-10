@@ -33,7 +33,8 @@ type ProjectInfo = {
 
 type LoginResponse = {
   accessToken: string;
-  worker: WorkerInfo;
+  loginType?: 'worker' | 'user' | 'kiosk-user';
+  worker: WorkerInfo | null;
   currentProjects: ProjectInfo[];
   futureProjects: ProjectInfo[];
   pastProjects: ProjectInfo[];
@@ -73,7 +74,6 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
-  const [workerNumber, setWorkerNumber] = useState('');
   const [pin, setPin] = useState('');
   const [session, setSession] = useState<LoginResponse | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -141,6 +141,10 @@ export default function App() {
       if (savedApiUrl) setApiUrl(savedApiUrl);
       if (savedSession) {
         const parsed = JSON.parse(savedSession) as LoginResponse;
+        if (!parsed.worker) {
+          await AsyncStorage.removeItem(STORAGE_KEYS.session);
+          return;
+        }
         setSession(parsed);
         setSignerName(parsed.worker.name);
         setSelectedProjectId(parsed.currentProjects[0]?.id ?? '');
@@ -156,7 +160,7 @@ export default function App() {
   }, [bootstrap]);
 
   const refreshTimeData = useCallback(async () => {
-    if (!session?.accessToken || !session.worker.id) return;
+    if (!session?.accessToken || !session.worker?.id) return;
     const [status, weekly] = await Promise.all([
       request<{
         hasOpenWork?: boolean;
@@ -180,25 +184,36 @@ export default function App() {
     if (!selectedTimesheetId && Array.isArray(weekly) && weekly.length > 0) {
       setSelectedTimesheetId(String(weekly[0].id ?? ''));
     }
-  }, [request, selectedTimesheetId, session?.accessToken, session?.worker.id]);
+  }, [request, selectedTimesheetId, session?.accessToken, session?.worker?.id]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || !session.worker) return;
     void refreshTimeData();
   }, [refreshTimeData, session]);
 
   const handleLogin = useCallback(async () => {
-    if (!workerNumber || !pin) {
-      Alert.alert('Eingabe fehlt', 'Bitte Personalnummer und PIN eingeben.');
+    if (!pin) {
+      Alert.alert('Eingabe fehlt', 'Bitte Kiosk-PIN eingeben.');
       return;
     }
     setBusy(true);
     try {
-      const login = await request<LoginResponse>('/auth/pin-login', {
+      const login = await request<LoginResponse>('/auth/kiosk-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workerNumber, pin }),
+        body: JSON.stringify({
+          pin,
+          deviceUuid: 'mobile-android',
+          platform: 'android',
+        }),
       });
+      if (!login.worker) {
+        Alert.alert(
+          'Nicht unterstuetzt',
+          'Kiosk-Login mit Benutzerrolle wird in dieser Mobile-App aktuell nicht unterstuetzt. Bitte Worker-PIN nutzen.',
+        );
+        return;
+      }
       setSession(login);
       setSignerName(login.worker.name);
       setSelectedProjectId(login.currentProjects[0]?.id ?? '');
@@ -212,7 +227,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [apiUrl, pin, request, workerNumber]);
+  }, [apiUrl, pin, request]);
 
   const handleLogout = useCallback(async () => {
     await AsyncStorage.removeItem(STORAGE_KEYS.session);
@@ -250,7 +265,7 @@ export default function App() {
 
   const postClockAction = useCallback(
     async (action: 'clock-in' | 'clock-out') => {
-      if (!session || !selectedProjectId) {
+      if (!session?.worker || !selectedProjectId) {
         Alert.alert('Projekt fehlt', 'Bitte zuerst ein Projekt auswaehlen.');
         return;
       }
@@ -486,11 +501,11 @@ export default function App() {
     );
   }
 
-  if (!session) {
+  if (!session || !session.worker) {
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
         <Text style={styles.title}>CRM Monteur App (Android MVP)</Text>
-        <Text style={styles.caption}>Login mit Personalnummer + PIN</Text>
+        <Text style={styles.caption}>Kiosk-Login mit PIN</Text>
         <TextInput
           style={styles.input}
           placeholder="API URL (z. B. http://10.0.2.2:3000)"
@@ -500,14 +515,7 @@ export default function App() {
         />
         <TextInput
           style={styles.input}
-          placeholder="Personalnummer"
-          value={workerNumber}
-          onChangeText={setWorkerNumber}
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="PIN"
+          placeholder="Kiosk-PIN"
           value={pin}
           secureTextEntry
           onChangeText={setPin}
